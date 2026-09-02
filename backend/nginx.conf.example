@@ -1,0 +1,31 @@
+# Example Nginx config: reverse proxy to FastAPI + serve the built React app.
+# Copy to /etc/nginx/sites-available/vimj-attendance and symlink into sites-enabled.
+
+server {
+    listen 80;
+    server_name your-domain.example.com;
+
+    # React admin dashboard (built with `npm run build`)
+    root /opt/vimj-attendance/frontend/dist;
+    index index.html;
+
+    location / {
+        try_files $uri /index.html;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Selfies are served only via the authenticated API, never as static files.
+    location /uploads/ {
+        deny all;
+        return 404;
+    }
+
+    client_max_body_size 5M;
+}

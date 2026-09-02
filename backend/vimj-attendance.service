@@ -1,0 +1,17 @@
+[Unit]
+Description=VIMJ Studio Attendance System - FastAPI backend
+After=network.target postgresql.service
+
+[Service]
+Type=notify
+User=vimj
+Group=vimj
+WorkingDirectory=/opt/vimj-attendance/backend
+Environment="PATH=/opt/vimj-attendance/backend/venv/bin"
+EnvironmentFile=/opt/vimj-attendance/backend/.env
+ExecStart=/opt/vimj-attendance/backend/venv/bin/gunicorn -c gunicorn_conf.py app.main:app
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
