@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { ICONS_BY_KEY, IconMore, IconLogout, IconClose } from "./icons";
+import { useTheme } from "../context/ThemeContext";
+import { ICONS_BY_KEY, IconMore, IconLogout, IconClose, IconSun, IconMoon } from "./icons";
+import NotificationBell from "./NotificationBell";
 
 const MAX_TABS = 4;
 
 export default function Layout({ links }) {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -36,7 +39,7 @@ export default function Layout({ links }) {
       <header className="topbar">
         <div className="topbar-brand">
           <img
-            src="/logo.png"
+            src="/logo.jpeg"
             alt="VIMJ Studio"
             className="topbar-logo"
             onError={(e) => {
@@ -56,6 +59,14 @@ export default function Layout({ links }) {
               <span className="user-role">{user?.role}</span>
             </span>
           </div>
+          <NotificationBell />
+          <button
+            className="icon-btn"
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            onClick={toggleTheme}
+          >
+            {theme === "dark" ? <IconSun /> : <IconMoon />}
+          </button>
           <button className="icon-btn" title="Log out" onClick={handleLogout}>
             <IconLogout />
           </button>

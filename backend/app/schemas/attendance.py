@@ -14,6 +14,7 @@ class MarkStudentAttendanceRequest(BaseModel):
     location_lat: Decimal
     location_lng: Decimal
     selfie_base64: Optional[str] = None
+    late_reason: Optional[str] = None
 
 
 class ManualAttendanceRequest(BaseModel):

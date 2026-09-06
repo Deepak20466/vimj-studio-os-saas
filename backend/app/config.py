@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     GEOFENCE_RADIUS_METERS: float = 50
 
     UPLOAD_DIR: str = "uploads/selfies"
+    STUDENT_PHOTO_DIR: str = "uploads/students"
+    CLASS_PHOTO_DIR: str = "uploads/class_photos"
     MAX_SELFIE_SIZE_KB: int = 500
 
     TWILIO_ACCOUNT_SID: str = ""

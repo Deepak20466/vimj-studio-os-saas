@@ -2,16 +2,18 @@
 
 Production-ready attendance system for a coaching studio: geofenced + selfie-verified
 attendance, fee/salary reminders, leave & swap workflows, role-based data isolation, and
-business analytics — across a FastAPI backend, a React admin dashboard, and a React
-Native (Expo) mobile app for coaches and students.
+business analytics — across a FastAPI backend, a React admin/coach dashboard, and a
+Flutter mobile app for coaches. Students never get a login (see CLAUDE.md) — they exist
+only as records admins and coaches manage.
 
 ## Structure
 
 ```
 backend/    FastAPI + PostgreSQL API — all 15 core requirements, RBAC enforced server-side
-frontend/   React admin dashboard (students, coaches, activities, attendance, leave, fees, reports)
-mobile/     React Native (Expo) app for coaches (mark attendance, leave, swaps, salary) and
-            students (attendance history, fees, profile)
+frontend/   React admin dashboard (students, coaches, activities, batches, attendance,
+            compliance, leave, fees, salary, reports, about) plus a coach web dashboard
+mobile/     Flutter app for coaches only (mark attendance, leave, swaps, salary,
+            receipts, fee reminders) — see mobile/README.md
 ```
 
 Each has its own README with setup steps: [backend/README.md](backend/README.md),
@@ -34,24 +36,25 @@ cd frontend
 npm install
 npm run dev   # http://localhost:5173, proxies /api to the backend
 
-# 3. Mobile (new terminal)
+# 3. Mobile (new terminal, requires the Flutter SDK — see mobile/README.md for
+#    one-time native project setup, since android/ and ios/ aren't checked in)
 cd mobile
-npm install
-npm start   # press 'a' for Android, 'i' for iOS, or scan the QR code with Expo Go
+flutter create --org com.vimjstudio --project-name vimj_attendance .
+flutter pub get
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
 ```
 
 ## What's been verified in this environment
 
-- **Backend**: imports cleanly, and an end-to-end smoke test (auth, RBAC/data-isolation,
-  geofencing, selfie upload + compression, fee/leave workflows, PDF/CSV export) passes
-  against SQLite. See `backend/README.md` for how to point it at real PostgreSQL.
-- **Frontend**: builds cleanly (`npm run build`) and was driven with a real login against
-  the live backend — dashboard, students, and reports pages render with no console errors.
-- **Mobile**: TypeScript compiles cleanly (`npx tsc --noEmit`), the Metro bundle builds
-  successfully end-to-end (`npx expo export`), and `npx expo-doctor` reports no issues.
-  No physical device/emulator was available to run it here, so every API call was
-  cross-checked by hand against the actual backend route signatures. See
-  `mobile/README.md` for setup and the backend URL configuration.
+This environment has no Python, Node, or Flutter SDK installed, so nothing below has been
+executed — every change is a manual, careful read-through against the existing code and
+conventions. Before trusting this in production, actually run:
+
+- **Backend**: `alembic upgrade head` against a real Postgres DB, then `uvicorn app.main:app --reload`
+  and exercise the endpoints via `/docs`.
+- **Frontend**: `npm install && npm run dev`, then click through every admin and coach page
+  with real admin/coach accounts.
+- **Mobile**: generate the native projects per `mobile/README.md` and run on a device/emulator.
 
 ## Production deployment
 

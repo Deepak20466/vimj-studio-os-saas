@@ -25,7 +25,9 @@ export function AuthProvider({ children }) {
     } catch {
       // ignore network errors on logout
     }
+    const theme = localStorage.getItem("theme");
     localStorage.clear();
+    if (theme) localStorage.setItem("theme", theme);
     setUser(null);
   }, []);
 

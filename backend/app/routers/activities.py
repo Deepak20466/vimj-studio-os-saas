@@ -3,11 +3,15 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from datetime import date
+
 from app.database import get_db
 from app.models.user import User, UserRole
 from app.models.activity import Activity
 from app.models.class_session import ClassSession
 from app.models.enrollment import StudentEnrollment
+from app.models.attendance import StudentAttendance
+from app.models.fee import StudentFee, FeeStatus
 from app.schemas.activity import (
     ActivityCreate,
     ActivityUpdate,
@@ -163,6 +167,53 @@ def my_classes(
     return query.order_by(ClassSession.date.desc(), ClassSession.start_time).all()
 
 
+@router.get("/classes/{class_id}/summary")
+def class_summary(
+    class_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Enrolled/marked/fee counts for one class occurrence — shown on the coach dashboard so a
+    coach can see how many students are expected, how many are marked, and paid/unpaid, at a glance."""
+    cls = db.query(ClassSession).filter(ClassSession.id == class_id).first()
+    if not cls:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+    if current_user.role == UserRole.COACH and cls.coach_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your class")
+
+    student_ids = [
+        row[0]
+        for row in db.query(StudentEnrollment.student_id).filter(StudentEnrollment.activity_id == cls.activity_id).all()
+    ]
+    enrolled_count = len(student_ids)
+    marked_count = db.query(StudentAttendance).filter(StudentAttendance.class_id == class_id).count()
+
+    today = date.today()
+    fee_paid_count = 0
+    fee_unpaid_count = enrolled_count
+    if student_ids:
+        paid_count = (
+            db.query(StudentFee)
+            .filter(
+                StudentFee.student_id.in_(student_ids),
+                StudentFee.month == today.month,
+                StudentFee.year == today.year,
+                StudentFee.status == FeeStatus.PAID,
+            )
+            .count()
+        )
+        fee_paid_count = paid_count
+        fee_unpaid_count = enrolled_count - paid_count
+
+    return {
+        "class_id": class_id,
+        "enrolled_count": enrolled_count,
+        "marked_count": marked_count,
+        "fee_paid_count": fee_paid_count,
+        "fee_unpaid_count": fee_unpaid_count,
+    }
+
+
 @router.post("/enroll", status_code=status.HTTP_201_CREATED)
 def enroll_student(
     payload: EnrollmentCreate,
@@ -223,4 +274,21 @@ def activity_roster(
         .filter(StudentEnrollment.activity_id == activity_id)
         .all()
     )
-    return [{"id": s.id, "name": s.name, "email": s.email, "enrollment_id": enrollment_id} for s, enrollment_id in rows]
+    today = date.today()
+    student_ids = [s.id for s, _ in rows]
+    fees_by_student = {
+        f.student_id: f.status.value
+        for f in db.query(StudentFee)
+        .filter(StudentFee.student_id.in_(student_ids), StudentFee.month == today.month, StudentFee.year == today.year)
+        .all()
+    } if student_ids else {}
+    return [
+        {
+            "id": s.id,
+            "name": s.name,
+            "email": s.email,
+            "enrollment_id": enrollment_id,
+            "fee_status": fees_by_student.get(s.id, "UNPAID"),
+        }
+        for s, enrollment_id in rows
+    ]

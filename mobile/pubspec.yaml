@@ -1,5 +1,5 @@
 name: vimj_attendance
-description: VIMJ Studio Attendance System - Coach & Student mobile app
+description: VIMJ Studio Attendance System - Coach mobile app
 publish_to: "none"
 version: 1.0.0+1
 
@@ -29,8 +29,17 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  # Run `dart run flutter_launcher_icons` after the native android/ios projects
+  # are generated (`flutter create .`) to bake the Academy logo in as the real
+  # app icon; until then the app uses Flutter's default launcher icon.
+  flutter_launcher_icons: ^0.14.1
+
+flutter_launcher_icons:
+  image_path: "assets/images/logo.jpeg"
+  android: true
+  ios: true
 
 flutter:
   uses-material-design: true
   assets:
-    - assets/images/logo.png
+    - assets/images/logo.jpeg

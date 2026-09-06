@@ -63,7 +63,7 @@ export default function Login() {
     <div className="login-page">
       <div className="login-card">
         <img
-          src="/logo.png"
+          src="/logo.jpeg"
           alt="VIMJ Studio"
           className="login-logo"
           onError={(e) => {

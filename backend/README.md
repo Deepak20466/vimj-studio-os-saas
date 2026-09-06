@@ -52,6 +52,7 @@ without a Twilio account during development.
 - Salary acknowledgment notifications: 10th of each month, 09:05
 - Mark unpaid fees overdue: daily at 00:30
 - Coach attendance reminder: every minute, fires 15 min after a class ends if unmarked
+- Missed-attendance admin alert: every minute, fires 10 min after a class ends if attendance still isn't submitted (see FEATURES_ADDED.md 1.8/1.9)
 - End-of-day missing-attendance report to admins: daily at 21:00
 
 ## Tests

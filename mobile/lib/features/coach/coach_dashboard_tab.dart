@@ -119,7 +119,7 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
           padding: const EdgeInsets.all(8.0),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(8),
-            child: Image.asset('assets/images/logo.png', fit: BoxFit.cover),
+            child: Image.asset('assets/images/logo.jpeg', fit: BoxFit.cover),
           ),
         ),
         title: Text('Hi, $_coachName'),

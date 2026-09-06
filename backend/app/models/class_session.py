@@ -11,6 +11,7 @@ class ClassSession(Base):
     id = Column(Integer, primary_key=True, index=True)
     activity_id = Column(Integer, ForeignKey("activities.id", ondelete="CASCADE"), nullable=False, index=True)
     coach_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    batch_id = Column(Integer, ForeignKey("batches.id", ondelete="SET NULL"), nullable=True, index=True)
     date = Column(Date, nullable=False, index=True)
     start_time = Column(Time, nullable=False)
     end_time = Column(Time, nullable=False)
@@ -18,4 +19,5 @@ class ClassSession(Base):
 
     activity = relationship("Activity", back_populates="classes")
     coach = relationship("User", foreign_keys=[coach_id])
+    batch = relationship("Batch")
     student_attendance = relationship("StudentAttendance", back_populates="class_session")

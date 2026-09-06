@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { ReportsAPI } from "../api/endpoints";
+import Modal from "../components/Modal";
+import ActivityReportPanel from "../components/ActivityReportPanel";
 
 const MONTH_NAMES = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -12,6 +14,7 @@ export default function Reports() {
   const [analysis, setAnalysis] = useState(null);
   const [hundredPct, setHundredPct] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [viewingActivity, setViewingActivity] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -101,22 +104,40 @@ export default function Reports() {
               <thead>
                 <tr>
                   <th>Activity</th>
+                  <th>Students</th>
                   <th>Total Classes</th>
+                  <th>Present</th>
+                  <th>Absent</th>
                   <th>Avg Attendance %</th>
-                  <th>Revenue</th>
+                  <th>Revenue (Projected)</th>
+                  <th>Revenue Collected</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
                 {analysis.activity_breakdown.map((a) => (
-                  <tr key={a.activity_name}>
+                  <tr key={a.activity_id}>
                     <td>{a.activity_name}</td>
+                    <td>{a.student_count}</td>
                     <td>{a.total_classes}</td>
+                    <td>{a.total_present}</td>
+                    <td>{a.total_absent}</td>
                     <td>{a.avg_attendance_pct}%</td>
                     <td>₹{a.revenue.toLocaleString()}</td>
+                    <td>₹{a.revenue_collected.toLocaleString()}</td>
+                    <td>
+                      <button className="btn btn-secondary" onClick={() => setViewingActivity(a)}>
+                        View
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: 8 }}>
+              "Revenue (Projected)" is monthly fee × enrolled students. "Revenue Collected" attributes each student's
+              actual paid fee proportionally across their enrolled activities, since fees aren't tracked per-activity.
+            </p>
           </div>
 
           <div className="card">
@@ -143,6 +164,12 @@ export default function Reports() {
             )}
           </div>
         </>
+      )}
+
+      {viewingActivity && (
+        <Modal title={`Report: ${viewingActivity.activity_name}`} onClose={() => setViewingActivity(null)}>
+          <ActivityReportPanel activityId={viewingActivity.activity_id} />
+        </Modal>
       )}
     </div>
   );

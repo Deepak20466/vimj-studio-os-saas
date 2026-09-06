@@ -1,15 +1,16 @@
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.salary import CoachSalary
-from app.schemas.salary import SalaryCreate, SalaryAcknowledge, SalaryOut
+from app.schemas.salary import SalaryCreate, SalaryAcknowledge, SalaryOut, SalaryAdminOut
 from app.security import require_admin, require_coach
 from app.services.audit import log_action
+from app.services.notifications import notify
 
 router = APIRouter(prefix="/salary", tags=["salary"])
 
@@ -59,6 +60,11 @@ def acknowledge_salary(
     log_action(db, current_user.id, "ACKNOWLEDGE_SALARY", "CoachSalary", salary.id)
     db.commit()
     db.refresh(salary)
+
+    admins = db.query(User).filter(User.role == UserRole.ADMIN, User.is_active.is_(True)).all()
+    for admin in admins:
+        if admin.phone:
+            notify(admin.phone, f"{current_user.name} acknowledged their salary for {salary.month}/{salary.year}.")
     return salary
 
 
@@ -76,3 +82,37 @@ def coach_salary_history(
         .order_by(CoachSalary.year.desc(), CoachSalary.month.desc())
         .all()
     )
+
+
+@router.get("", response_model=List[SalaryAdminOut])
+def list_salaries(
+    coach_id: Optional[int] = None,
+    month: Optional[int] = None,
+    year: Optional[int] = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    query = db.query(CoachSalary)
+    if coach_id:
+        query = query.filter(CoachSalary.coach_id == coach_id)
+    if month:
+        query = query.filter(CoachSalary.month == month)
+    if year:
+        query = query.filter(CoachSalary.year == year)
+
+    salaries = query.order_by(CoachSalary.year.desc(), CoachSalary.month.desc()).limit(500).all()
+    coaches = {u.id: u.name for u in db.query(User).filter(User.id.in_([s.coach_id for s in salaries])).all()}
+    return [
+        SalaryAdminOut(
+            id=s.id,
+            coach_id=s.coach_id,
+            coach_name=coaches.get(s.coach_id, "Unknown"),
+            month=s.month,
+            year=s.year,
+            amount=s.amount,
+            notified_at=s.notified_at,
+            acknowledged_date=s.acknowledged_date,
+            created_at=s.created_at,
+        )
+        for s in salaries
+    ]

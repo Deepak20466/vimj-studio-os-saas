@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import Modal from "./Modal";
 
-export default function SelfieCapture({ onCapture, onClose }) {
+export default function SelfieCapture({ onCapture, onClose, title = "Take a selfie to mark present" }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
@@ -37,7 +37,7 @@ export default function SelfieCapture({ onCapture, onClose }) {
   };
 
   return (
-    <Modal title="Take a selfie to mark present" onClose={onClose}>
+    <Modal title={title} onClose={onClose}>
       {error ? (
         <div className="empty-state">{error}</div>
       ) : (

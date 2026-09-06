@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { CoachesAPI } from "../api/endpoints";
+import { CoachesAPI, ActivitiesAPI } from "../api/endpoints";
 import Modal from "../components/Modal";
 import CoachReportPanel from "../components/CoachReportPanel";
 
@@ -12,6 +12,10 @@ export default function Coaches() {
   const [editing, setEditing] = useState(null);
   const [viewingId, setViewingId] = useState(null);
   const [form, setForm] = useState({ name: "", email: "", phone: "", password: "" });
+  const [managingActivitiesFor, setManagingActivitiesFor] = useState(null);
+  const [allActivities, setAllActivities] = useState([]);
+  const [selectedActivityIds, setSelectedActivityIds] = useState([]);
+  const [activitiesSaving, setActivitiesSaving] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -44,6 +48,7 @@ export default function Coaches() {
     try {
       if (editing) {
         const payload = { name: form.name, phone: form.phone };
+        if (form.email && form.email !== editing.email) payload.email = form.email;
         if (form.password) payload.password = form.password;
         await CoachesAPI.update(editing.id, payload);
         toast.success("Coach updated");
@@ -75,6 +80,34 @@ export default function Coaches() {
       load();
     } catch (err) {
       toast.error(err.response?.data?.detail || "Delete failed");
+    }
+  };
+
+  const openActivities = async (c) => {
+    setManagingActivitiesFor(c);
+    try {
+      const [all, mine] = await Promise.all([ActivitiesAPI.list(), CoachesAPI.getActivities(c.id)]);
+      setAllActivities(all.data);
+      setSelectedActivityIds(mine.data.map((a) => a.activity_id));
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to load activities");
+    }
+  };
+
+  const toggleActivity = (id) => {
+    setSelectedActivityIds((ids) => (ids.includes(id) ? ids.filter((i) => i !== id) : [...ids, id]));
+  };
+
+  const saveActivities = async () => {
+    setActivitiesSaving(true);
+    try {
+      await CoachesAPI.setActivities(managingActivitiesFor.id, selectedActivityIds);
+      toast.success("Activities updated");
+      setManagingActivitiesFor(null);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to save activities");
+    } finally {
+      setActivitiesSaving(false);
     }
   };
 
@@ -121,6 +154,9 @@ export default function Coaches() {
                     <span className={`badge ${c.is_active ? "badge-present" : "badge-absent"}`}>{c.is_active ? "Active" : "Inactive"}</span>
                   </td>
                   <td>
+                    <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => openActivities(c)}>
+                      Activities
+                    </button>
                     <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => openEdit(c)}>
                       Edit
                     </button>
@@ -147,7 +183,7 @@ export default function Coaches() {
             </div>
             <div className="field">
               <label>Email</label>
-              <input type="email" disabled={!!editing} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+              <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
             </div>
             <div className="field">
               <label>Phone</label>
@@ -170,6 +206,35 @@ export default function Coaches() {
       {viewingId && (
         <Modal title="Coach Report" onClose={() => setViewingId(null)}>
           <CoachReportPanel coachId={viewingId} />
+        </Modal>
+      )}
+
+      {managingActivitiesFor && (
+        <Modal title={`Assigned Activities — ${managingActivitiesFor.name}`} onClose={() => setManagingActivitiesFor(null)}>
+          <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: -8 }}>
+            Controls which activities this coach can be assigned to batches for, and which activities they may add
+            students under.
+          </p>
+          {allActivities.length === 0 ? (
+            <div className="empty-state">No activities exist yet.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+              {allActivities.map((a) => (
+                <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.88rem" }}>
+                  <input type="checkbox" checked={selectedActivityIds.includes(a.id)} onChange={() => toggleActivity(a.id)} />
+                  {a.name}
+                </label>
+              ))}
+            </div>
+          )}
+          <div className="modal-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setManagingActivitiesFor(null)}>
+              Cancel
+            </button>
+            <button className="btn btn-primary" disabled={activitiesSaving} onClick={saveActivities}>
+              {activitiesSaving ? "Saving..." : "Save"}
+            </button>
+          </div>
         </Modal>
       )}
     </div>

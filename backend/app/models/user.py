@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Enum, ForeignKey, Date
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Enum, ForeignKey, Date
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -21,6 +21,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     name = Column(String(255), nullable=False)
     phone = Column(String(32), nullable=True)
+    phone_secondary = Column(String(32), nullable=True)  # secondary/emergency contact (mandatory for students)
     role = Column(Enum(UserRole), nullable=False, index=True)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -36,6 +37,7 @@ class UserDetails(Base):
     address = Column(String(500), nullable=True)
     dob = Column(Date, nullable=True)
     profile_photo = Column(String(500), nullable=True)
+    additional_details = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="details")

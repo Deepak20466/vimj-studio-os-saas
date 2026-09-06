@@ -5,11 +5,14 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User, UserRole
+from app.models.activity import Activity
 from app.models.attendance import CoachAttendance
+from app.models.coach_activity import CoachActivity
 from app.models.salary import CoachSalary
 from app.schemas.user import UserCreate, UserOut, UserUpdate
 from app.schemas.attendance import CoachAttendanceOut
 from app.schemas.salary import SalaryOut
+from app.schemas.coach_activity import CoachActivitiesSet, CoachActivityOut
 from app.security import get_current_user, require_admin, require_coach, hash_password
 from app.services.audit import log_action
 
@@ -90,7 +93,12 @@ def update_coach(
     if not coach:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Coach not found")
 
-    for field in ("name", "phone", "is_active"):
+    if payload.email and payload.email != coach.email:
+        if db.query(User).filter(User.email == payload.email, User.id != coach_id).first():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+        coach.email = payload.email
+
+    for field in ("name", "phone", "phone_secondary", "is_active"):
         value = getattr(payload, field)
         if value is not None:
             setattr(coach, field, value)
@@ -145,3 +153,52 @@ def coach_salary(
         .order_by(CoachSalary.year.desc(), CoachSalary.month.desc())
         .all()
     )
+
+
+@router.get("/{coach_id}/activities", response_model=List[CoachActivityOut])
+def get_coach_activities(
+    coach_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _assert_self_or_admin(current_user, coach_id)
+    rows = (
+        db.query(Activity)
+        .join(CoachActivity, CoachActivity.activity_id == Activity.id)
+        .filter(CoachActivity.coach_id == coach_id)
+        .all()
+    )
+    return [CoachActivityOut(activity_id=a.id, activity_name=a.name) for a in rows]
+
+
+@router.put("/{coach_id}/activities", response_model=List[CoachActivityOut])
+def set_coach_activities(
+    coach_id: int,
+    payload: CoachActivitiesSet,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    coach = db.query(User).filter(User.id == coach_id, User.role == UserRole.COACH).first()
+    if not coach:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Coach not found")
+
+    valid_ids = {
+        row[0] for row in db.query(Activity.id).filter(Activity.id.in_(payload.activity_ids)).all()
+    }
+    if len(valid_ids) != len(set(payload.activity_ids)):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="One or more activities not found")
+
+    db.query(CoachActivity).filter(CoachActivity.coach_id == coach_id).delete()
+    for activity_id in valid_ids:
+        db.add(CoachActivity(coach_id=coach_id, activity_id=activity_id))
+
+    log_action(db, current_user.id, "SET_ACTIVITIES", "Coach", coach_id)
+    db.commit()
+
+    rows = (
+        db.query(Activity)
+        .join(CoachActivity, CoachActivity.activity_id == Activity.id)
+        .filter(CoachActivity.coach_id == coach_id)
+        .all()
+    )
+    return [CoachActivityOut(activity_id=a.id, activity_name=a.name) for a in rows]

@@ -17,6 +17,7 @@ from app.models.attendance import (
 )
 from app.models.leave import CoachLeave, LeaveStatus
 from app.models.swap import CoachSwap, SwapStatus
+from app.models.compliance import AttendanceSubmission, LateStatus
 from app.schemas.attendance import (
     MarkStudentAttendanceRequest,
     ManualAttendanceRequest,
@@ -36,6 +37,37 @@ router = APIRouter(prefix="/attendance", tags=["attendance"])
 
 # How long after a class ends a coach is still allowed to mark attendance for it.
 MARK_DEADLINE_MINUTES = 60
+# Beyond this, a mark is considered "late" and needs a reason + admin approval.
+LATE_MARK_MINUTES = 10
+
+
+def _get_or_create_submission(db: Session, class_session: ClassSession, coach_id: int, late_reason: Optional[str]) -> AttendanceSubmission:
+    """First attendance mark for a class records the submission.
+
+    Marking itself is never blocked by lateness (that would break the existing mark
+    flow, including the mobile app, for marks made within the existing 60-minute
+    MARK_DEADLINE_MINUTES window). If the mark is late, it's flagged for admin
+    review; the coach can supply/confirm the reason immediately via late_reason on
+    this request, or afterwards via POST /compliance/late-reason.
+    """
+    submission = db.query(AttendanceSubmission).filter(AttendanceSubmission.class_id == class_session.id).first()
+    if submission:
+        return submission
+
+    class_end_dt = datetime.combine(class_session.date, class_session.end_time)
+    is_late = datetime.now() > class_end_dt + timedelta(minutes=LATE_MARK_MINUTES)
+
+    submission = AttendanceSubmission(
+        class_id=class_session.id,
+        coach_id=coach_id,
+        submitted_at=datetime.now(),
+        is_late=is_late,
+        late_reason=late_reason if is_late else None,
+        late_status=LateStatus.PENDING if (is_late and late_reason) else LateStatus.NONE,
+    )
+    db.add(submission)
+    db.flush()
+    return submission
 
 
 def _coach_is_on_leave(db: Session, coach_id: int, on_date) -> bool:
@@ -123,6 +155,8 @@ def mark_student_attendance(
     )
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Attendance already marked for this student")
+
+    _get_or_create_submission(db, class_session, coach_id, payload.late_reason)
 
     selfie_path = None
     if payload.status == AttendanceStatus.PRESENT:
@@ -254,6 +288,7 @@ def coach_exit(
 @router.get("/students", response_model=List[StudentAttendanceAdminOut])
 def list_student_attendance(
     activity_id: Optional[int] = None,
+    class_id: Optional[int] = None,
     coach_id: Optional[int] = None,
     student_id: Optional[int] = None,
     status_filter: Optional[AttendanceStatus] = None,
@@ -268,6 +303,8 @@ def list_student_attendance(
     )
     if activity_id:
         query = query.filter(ClassSession.activity_id == activity_id)
+    if class_id:
+        query = query.filter(StudentAttendance.class_id == class_id)
     if current_user.role == UserRole.COACH:
         query = query.filter(StudentAttendance.coach_id == current_user.id)
     elif coach_id:

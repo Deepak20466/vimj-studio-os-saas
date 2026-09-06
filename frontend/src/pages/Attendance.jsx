@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { AttendanceAPI, ActivitiesAPI, StudentsAPI } from "../api/endpoints";
+import { AttendanceAPI, ActivitiesAPI, StudentsAPI, CoachesAPI, SwapAPI } from "../api/endpoints";
 import StatusBadge from "../components/StatusBadge";
 import Modal from "../components/Modal";
 
@@ -19,6 +19,10 @@ export default function Attendance() {
 
   const [editing, setEditing] = useState(null); // record being edited
   const [editStatus, setEditStatus] = useState("PRESENT");
+
+  const [coaches, setCoaches] = useState([]);
+  const [reassigning, setReassigning] = useState(null); // missing-row being reassigned
+  const [reassignForm, setReassignForm] = useState({ covering_coach_id: "", reason: "" });
 
   const loadMissing = () => {
     setMissingLoading(true);
@@ -44,6 +48,7 @@ export default function Attendance() {
   useEffect(() => {
     loadMissing();
     ActivitiesAPI.list().then((r) => setActivities(r.data));
+    CoachesAPI.list().then((r) => setCoaches(r.data));
   }, []);
 
   useEffect(() => {
@@ -109,6 +114,29 @@ export default function Attendance() {
     }
   };
 
+  const openReassign = (m) => {
+    setReassigning(m);
+    setReassignForm({ covering_coach_id: "", reason: "" });
+  };
+
+  const submitReassign = async (e) => {
+    e.preventDefault();
+    try {
+      await SwapAPI.adminAssign({
+        original_coach_id: reassigning.coach_id,
+        covering_coach_id: Number(reassignForm.covering_coach_id),
+        class_id: reassigning.class_id,
+        date: reassigning.date,
+        reason: reassignForm.reason,
+      });
+      toast.success("Class reassigned to substitute coach");
+      setReassigning(null);
+      loadMissing();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Reassignment failed");
+    }
+  };
+
   return (
     <div>
       <div className="page-header">
@@ -129,6 +157,7 @@ export default function Attendance() {
                 <th>Activity</th>
                 <th>Date</th>
                 <th>End Time</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -138,6 +167,11 @@ export default function Attendance() {
                   <td>{m.activity_name}</td>
                   <td>{m.date}</td>
                   <td>{m.end_time}</td>
+                  <td>
+                    <button className="btn btn-secondary" onClick={() => openReassign(m)}>
+                      Reassign
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -278,6 +312,46 @@ export default function Attendance() {
                 Cancel
               </button>
               <button className="btn btn-primary">Save</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {reassigning && (
+        <Modal title={`Reassign — ${reassigning.activity_name} (${reassigning.date})`} onClose={() => setReassigning(null)}>
+          <form onSubmit={submitReassign}>
+            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: -8 }}>
+              {reassigning.coach_name} is marked absent for this class; pick a substitute coach to cover it.
+            </p>
+            <div className="field">
+              <label>Substitute Coach</label>
+              <select
+                value={reassignForm.covering_coach_id}
+                onChange={(e) => setReassignForm({ ...reassignForm, covering_coach_id: e.target.value })}
+                required
+              >
+                <option value="">Select coach</option>
+                {coaches.filter((c) => c.id !== reassigning.coach_id).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>Reason for substitution</label>
+              <textarea
+                rows={3}
+                value={reassignForm.reason}
+                onChange={(e) => setReassignForm({ ...reassignForm, reason: e.target.value })}
+                required
+              />
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => setReassigning(null)}>
+                Cancel
+              </button>
+              <button className="btn btn-primary">Reassign</button>
             </div>
           </form>
         </Modal>

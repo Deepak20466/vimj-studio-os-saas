@@ -15,23 +15,23 @@ down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
+# Each of these enum types is used by exactly one column below. op.create_table() creates
+# a PostgreSQL enum type automatically the first time it encounters one (SQLite has no
+# native enum/CREATE TYPE, so it's a no-op there). Do NOT also call .create(bind, ...) here
+# — alembic's op.create_table() issues its own CREATE TYPE without checking pg_catalog
+# first, so a type created ahead of time by a separate explicit call collides with it and
+# raises "type already exists".
 user_role_enum = sa.Enum("ADMIN", "COACH", "STUDENT", name="userrole")
 attendance_status_enum = sa.Enum("PRESENT", "ABSENT", "LEAVE", name="attendancestatus")
-coach_attendance_status_enum = sa.Enum("PRESENT", "ABSENT", "LEAVE", "INCOMPLETE", name="coachattendancestatus")
+coach_attendance_status_enum = sa.Enum(
+    "PRESENT", "ABSENT", "LEAVE", "INCOMPLETE", name="coachattendancestatus"
+)
 leave_status_enum = sa.Enum("PENDING", "APPROVED", "REJECTED", name="leavestatus")
 swap_status_enum = sa.Enum("PENDING", "APPROVED", "REJECTED", name="swapstatus")
 fee_status_enum = sa.Enum("PAID", "UNPAID", "OVERDUE", name="feestatus")
 
 
 def upgrade() -> None:
-    bind = op.get_bind()
-    user_role_enum.create(bind, checkfirst=True)
-    attendance_status_enum.create(bind, checkfirst=True)
-    coach_attendance_status_enum.create(bind, checkfirst=True)
-    leave_status_enum.create(bind, checkfirst=True)
-    swap_status_enum.create(bind, checkfirst=True)
-    fee_status_enum.create(bind, checkfirst=True)
-
     op.create_table(
         "users",
         sa.Column("id", sa.Integer, primary_key=True),

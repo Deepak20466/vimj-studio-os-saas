@@ -5,5 +5,7 @@ __pycache__/
 *.db
 uploads/selfies/*
 !uploads/selfies/.gitkeep
+uploads/students/*
+!uploads/students/.gitkeep
 .pytest_cache/
 *.log

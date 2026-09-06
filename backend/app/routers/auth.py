@@ -14,6 +14,7 @@ from app.schemas.auth import (
     ForgotPasswordRequest,
     ResetPasswordRequest,
 )
+from app.schemas.user import UserOut, SelfAccountUpdate
 from app.security import (
     verify_password,
     hash_password,
@@ -65,6 +66,30 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
     access_token = create_access_token(user.id, user.role.value)
     return AccessTokenResponse(access_token=access_token)
+
+
+@router.get("/me", response_model=UserOut)
+def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
+@router.put("/me", response_model=UserOut)
+def update_me(payload: SelfAccountUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+
+    if payload.email and payload.email != current_user.email:
+        if db.query(User).filter(User.email == payload.email, User.id != current_user.id).first():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+        current_user.email = payload.email
+
+    if payload.new_password:
+        current_user.password_hash = hash_password(payload.new_password)
+
+    log_action(db, current_user.id, "UPDATE_SELF", "User", current_user.id)
+    db.commit()
+    db.refresh(current_user)
+    return current_user
 
 
 @router.post("/logout")

@@ -28,3 +28,7 @@ class SalaryOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class SalaryAdminOut(SalaryOut):
+    coach_name: str

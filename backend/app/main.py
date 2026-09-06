@@ -21,6 +21,13 @@ from app.routers import (
     salary,
     swap,
     reports,
+    batches,
+    receipts,
+    compliance,
+    academy,
+    fee_reminders,
+    notifications,
+    chat,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -70,6 +77,13 @@ app.include_router(fees.router)
 app.include_router(salary.router)
 app.include_router(swap.router)
 app.include_router(reports.router)
+app.include_router(batches.router)
+app.include_router(receipts.router)
+app.include_router(compliance.router)
+app.include_router(academy.router)
+app.include_router(fee_reminders.router)
+app.include_router(notifications.router)
+app.include_router(chat.router)
 
 
 @app.get("/health")

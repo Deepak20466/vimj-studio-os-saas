@@ -1,17 +1,22 @@
+import io
 from datetime import date
 from decimal import Decimal
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models.activity import Activity
+from app.models.enrollment import StudentEnrollment
 from app.models.user import User
 from app.models.fee import StudentFee, FeeStatus
 from app.schemas.fee import FeeCreate, FeeMarkPaid, FeeUpdate, FeeOut, FeeAdminOut
 from app.security import require_admin
 from app.services.audit import log_action
-from app.services.notifications import notify
+from app.services.notifications import notify, fee_reminder_message
+from app.services.receipt_pdf import build_fee_receipt_pdf
 
 router = APIRouter(prefix="/fees", tags=["fees"])
 
@@ -82,6 +87,7 @@ def list_fees(
             month=f.month,
             year=f.year,
             amount=f.amount,
+            balance_amount=f.balance_amount,
             status=f.status,
             due_date=f.due_date,
             paid_date=f.paid_date,
@@ -107,6 +113,10 @@ def mark_paid(
     log_action(db, current_user.id, "MARK_PAID", "StudentFee", fee.id)
     db.commit()
     db.refresh(fee)
+
+    student = db.query(User).filter(User.id == fee.student_id).first()
+    if student and student.phone:
+        notify(student.phone, f"Your fee payment of Rs {fee.amount} for {fee.month}/{fee.year} has been confirmed. Thank you!")
     return fee
 
 
@@ -172,10 +182,53 @@ def send_reminder(
 
     student = db.query(User).filter(User.id == fee.student_id).first()
     if student and student.phone:
-        notify(
-            student.phone,
-            f"Reminder: your VIMJ Studio fee of {fee.amount} for {fee.month}/{fee.year} is {fee.status.value.lower()}.",
-        )
+        notify(student.phone, fee_reminder_message(student.name, fee.month, fee.year, fee.amount, fee.due_date))
     log_action(db, current_user.id, "SEND_REMINDER", "StudentFee", fee.id)
     db.commit()
     return {"detail": "Reminder sent"}
+
+
+@router.get("/{fee_id}/receipt")
+def fee_receipt_pdf(
+    fee_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    fee = db.query(StudentFee).filter(StudentFee.id == fee_id).first()
+    if not fee:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fee record not found")
+    if fee.status != FeeStatus.PAID:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Fee must be marked paid by admin before a receipt can be issued",
+        )
+
+    student = db.query(User).filter(User.id == fee.student_id).first()
+    activity_names = [
+        name
+        for (name,) in (
+            db.query(Activity.name)
+            .join(StudentEnrollment, StudentEnrollment.activity_id == Activity.id)
+            .filter(StudentEnrollment.student_id == fee.student_id)
+            .all()
+        )
+    ]
+    pdf_bytes = build_fee_receipt_pdf(
+        receipt_no=f"FEE-{fee.id:06d}",
+        student_name=student.name if student else "Unknown",
+        activity_names=activity_names,
+        month=fee.month,
+        year=fee.year,
+        amount_paid=fee.amount,
+        balance_amount=fee.balance_amount,
+        payment_mode="N/A",
+        paid_date=fee.paid_date or date.today(),
+        approved_by=current_user.name,
+    )
+    log_action(db, current_user.id, "DOWNLOAD_RECEIPT_PDF", "StudentFee", fee.id)
+    db.commit()
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=receipt_fee_{fee.id}.pdf"},
+    )

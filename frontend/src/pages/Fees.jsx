@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { FeesAPI, StudentsAPI } from "../api/endpoints";
+import { FeesAPI, StudentsAPI, ReceiptsAPI, FeeRemindersAPI } from "../api/endpoints";
 import Modal from "../components/Modal";
 import StatusBadge from "../components/StatusBadge";
+import { downloadBlob } from "../utils/download";
 
 export default function Fees() {
   const [fees, setFees] = useState([]);
@@ -13,6 +14,95 @@ export default function Fees() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ student_id: "", month: new Date().getMonth() + 1, year: new Date().getFullYear(), amount: "", due_date: "" });
   const [editForm, setEditForm] = useState({ amount: "", balance_amount: "", due_date: "", status: "UNPAID" });
+
+  const [receipts, setReceipts] = useState([]);
+  const [approvedReceipts, setApprovedReceipts] = useState([]);
+  const [receiptsLoading, setReceiptsLoading] = useState(true);
+  const [receiptBusyId, setReceiptBusyId] = useState(null);
+
+  const loadReceipts = () => {
+    setReceiptsLoading(true);
+    Promise.all([ReceiptsAPI.pending(), ReceiptsAPI.list()])
+      .then(([pendingRes, allRes]) => {
+        setReceipts(pendingRes.data);
+        setApprovedReceipts(allRes.data.filter((r) => r.status === "APPROVED"));
+      })
+      .catch((err) => toast.error(err.response?.data?.detail || "Failed to load receipts"))
+      .finally(() => setReceiptsLoading(false));
+  };
+
+  useEffect(loadReceipts, []);
+
+  const downloadReceiptPdf = async (receipt) => {
+    try {
+      const res = await ReceiptsAPI.pdf(receipt.id);
+      downloadBlob(res.data, `receipt_${receipt.id}.pdf`);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to download receipt");
+    }
+  };
+
+  const [reminderDrafts, setReminderDrafts] = useState([]);
+  const [remindersLoading, setRemindersLoading] = useState(true);
+  const [reminderBusyId, setReminderBusyId] = useState(null);
+
+  const loadReminderDrafts = () => {
+    setRemindersLoading(true);
+    FeeRemindersAPI.pending()
+      .then((r) => setReminderDrafts(r.data))
+      .catch((err) => toast.error(err.response?.data?.detail || "Failed to load pending fee reminders"))
+      .finally(() => setRemindersLoading(false));
+  };
+
+  useEffect(loadReminderDrafts, []);
+
+  const decideReminder = async (draft, approve) => {
+    setReminderBusyId(draft.id);
+    try {
+      if (approve) {
+        await FeeRemindersAPI.approve(draft.id);
+        toast.success("Reminder approved and sent to the student");
+      } else {
+        const note = prompt("Reason for rejecting (optional):") || "";
+        await FeeRemindersAPI.reject(draft.id, note);
+        toast.success("Reminder rejected");
+      }
+      loadReminderDrafts();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Action failed");
+    } finally {
+      setReminderBusyId(null);
+    }
+  };
+
+  const copyMessage = async (message) => {
+    try {
+      await navigator.clipboard.writeText(message);
+      toast.success("Message copied — paste it into WhatsApp");
+    } catch {
+      toast.error("Couldn't copy automatically — select and copy the text manually");
+    }
+  };
+
+  const decideReceipt = async (receipt, approve) => {
+    setReceiptBusyId(receipt.id);
+    try {
+      if (approve) {
+        await ReceiptsAPI.approve(receipt.id);
+        toast.success("Receipt approved — fee marked paid");
+      } else {
+        const note = prompt("Reason for rejecting (optional):") || "";
+        await ReceiptsAPI.reject(receipt.id, note);
+        toast.success("Receipt rejected");
+      }
+      loadReceipts();
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Action failed");
+    } finally {
+      setReceiptBusyId(null);
+    }
+  };
 
   const load = () => {
     setLoading(true);
@@ -48,6 +138,15 @@ export default function Fees() {
       toast.success("Reminder sent");
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to send reminder");
+    }
+  };
+
+  const downloadReceipt = async (fee) => {
+    try {
+      const res = await FeesAPI.receiptPdf(fee.id);
+      downloadBlob(res.data, `receipt_${fee.id}.pdf`);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to download receipt");
     }
   };
 
@@ -107,6 +206,144 @@ export default function Fees() {
         </button>
       </div>
 
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h3 style={{ marginTop: 0 }}>Pending Fee Receipts (from Coaches)</h3>
+        <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: -8 }}>
+          A coach recorded a fee as collected — approve to mark it paid and notify the student, or reject with a reason.
+        </p>
+        {receiptsLoading ? (
+          <div className="empty-state">Loading...</div>
+        ) : receipts.length === 0 ? (
+          <div className="empty-state">No receipts awaiting approval.</div>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Coach</th>
+                <th>Period</th>
+                <th>Amount</th>
+                <th>Mode</th>
+                <th>Note</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {receipts.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.student_name}</td>
+                  <td>{r.coach_name}</td>
+                  <td>
+                    {r.month}/{r.year}
+                  </td>
+                  <td>₹{r.amount}</td>
+                  <td>{r.payment_mode}</td>
+                  <td>{r.note || "-"}</td>
+                  <td>
+                    <button className="btn btn-primary" style={{ marginRight: 6 }} disabled={receiptBusyId === r.id} onClick={() => decideReceipt(r, true)}>
+                      Approve
+                    </button>
+                    <button className="btn btn-danger" disabled={receiptBusyId === r.id} onClick={() => decideReceipt(r, false)}>
+                      Reject
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h3 style={{ marginTop: 0 }}>Approved Fee Receipts</h3>
+        <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: -8 }}>
+          Download the PDF receipt once a coach's fee collection has been approved. Share it with the student
+          manually (WhatsApp, email, or print).
+        </p>
+        {receiptsLoading ? (
+          <div className="empty-state">Loading...</div>
+        ) : approvedReceipts.length === 0 ? (
+          <div className="empty-state">No approved receipts yet.</div>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Coach</th>
+                <th>Period</th>
+                <th>Amount</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {approvedReceipts.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.student_name}</td>
+                  <td>{r.coach_name}</td>
+                  <td>
+                    {r.month}/{r.year}
+                  </td>
+                  <td>₹{r.amount}</td>
+                  <td>
+                    <button className="btn btn-primary" onClick={() => downloadReceiptPdf(r)}>
+                      Receipt (PDF)
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h3 style={{ marginTop: 0 }}>Pending Fee Reminder Drafts (from Coaches)</h3>
+        <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: -8 }}>
+          A coach drafted a fee reminder message — approve to send it automatically, or reject with a reason. Once
+          approved, the text can also be copied to paste into WhatsApp manually.
+        </p>
+        {remindersLoading ? (
+          <div className="empty-state">Loading...</div>
+        ) : reminderDrafts.length === 0 ? (
+          <div className="empty-state">No fee reminders awaiting approval.</div>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Coach</th>
+                <th>Period</th>
+                <th>Message</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reminderDrafts.map((d) => (
+                <tr key={d.id}>
+                  <td>{d.student_name}</td>
+                  <td>{d.coach_name}</td>
+                  <td>
+                    {d.month}/{d.year}
+                  </td>
+                  <td style={{ maxWidth: 320, whiteSpace: "pre-wrap", fontSize: "0.8rem" }}>{d.message}</td>
+                  <td>
+                    <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => copyMessage(d.message)}>
+                      Copy
+                    </button>
+                    <button className="btn btn-primary" style={{ marginRight: 6 }} disabled={reminderBusyId === d.id} onClick={() => decideReminder(d, true)}>
+                      Approve &amp; Send
+                    </button>
+                    <button className="btn btn-danger" disabled={reminderBusyId === d.id} onClick={() => decideReminder(d, false)}>
+                      Reject
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
       <div className="card">
         <div className="toolbar" style={{ marginBottom: 12 }}>
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem" }}>
@@ -151,7 +388,7 @@ export default function Fees() {
                     <StatusBadge status={f.status} />
                   </td>
                   <td>
-                    {f.status !== "PAID" && (
+                    {f.status !== "PAID" ? (
                       <>
                         <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => remind(f)}>
                           Remind
@@ -160,6 +397,10 @@ export default function Fees() {
                           Mark Paid
                         </button>
                       </>
+                    ) : (
+                      <button className="btn btn-primary" style={{ marginRight: 6 }} onClick={() => downloadReceipt(f)}>
+                        Receipt (PDF)
+                      </button>
                     )}
                     <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => openEdit(f)}>
                       Edit
