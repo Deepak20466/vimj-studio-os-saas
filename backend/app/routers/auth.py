@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.user import User, PasswordResetToken
+from app.models.user import User, UserRole, PasswordResetToken
 from app.schemas.auth import (
     LoginRequest,
     TokenResponse,
@@ -38,6 +38,8 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is deactivated")
+    if user.role == UserRole.STUDENT:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Student accounts cannot log in to this system")
 
     access_token = create_access_token(user.id, user.role.value)
     refresh_token = create_refresh_token(user.id, user.role.value)

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/auth_api.dart';
+import '../../core/auth_storage.dart';
 import '../coach/coach_home.dart';
-import '../student/student_home.dart';
 import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -31,12 +31,12 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       if (session.role == 'ADMIN') {
+        await AuthStorage.clear();
         setState(() => _error = 'Admin accounts should use the web dashboard, not this app.');
         return;
       }
 
-      final page = session.role == 'COACH' ? const CoachHome() : const StudentHome();
-      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => page));
+      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const CoachHome()));
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } catch (_) {
@@ -66,7 +66,17 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 12),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      width: 76,
+                      height: 76,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   Text(
                     'VIMJ Studio',
                     textAlign: TextAlign.center,
@@ -77,7 +87,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Coach & Student sign in',
+                    'Coach sign in',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),

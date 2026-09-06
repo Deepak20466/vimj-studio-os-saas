@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -35,6 +35,25 @@ class StudentAttendanceOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class StudentAttendanceUpdate(BaseModel):
+    status: AttendanceStatus
+
+
+class StudentAttendanceAdminOut(BaseModel):
+    id: int
+    student_id: int
+    student_name: str
+    class_id: int
+    activity_id: int
+    activity_name: str
+    coach_id: Optional[int]
+    coach_name: Optional[str]
+    status: AttendanceStatus
+    class_date: date
+    timestamp: datetime
+    marked_manually: bool
 
 
 class CoachEntryExitRequest(BaseModel):

@@ -18,8 +18,8 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     try {
-      await login(email, password);
-      navigate("/");
+      const userData = await login(email, password);
+      navigate(userData.role === "COACH" ? "/coach" : "/");
     } catch (err) {
       toast.error(err.response?.data?.detail || "Login failed");
     } finally {
@@ -62,6 +62,14 @@ export default function Login() {
   return (
     <div className="login-page">
       <div className="login-card">
+        <img
+          src="/logo.png"
+          alt="VIMJ Studio"
+          className="login-logo"
+          onError={(e) => {
+            e.currentTarget.style.display = "none";
+          }}
+        />
         <h1>VIMJ Studio</h1>
         <p className="subtitle">Attendance Management System</p>
 

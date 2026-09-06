@@ -24,6 +24,6 @@ Outputs static files to `dist/`, served by Nginx alongside the FastAPI reverse p
 
 ## Notes
 
-- Coaches and students are not granted access to this dashboard — they use the Flutter
-  mobile app. Logging in here with a non-admin account shows a redirect message.
+- Coaches and students are not granted access to this dashboard — they use the React
+  Native mobile app. Logging in here with a non-admin account shows a redirect message.
 - Brand colors: `#0000FF` (primary) / `#F0F8FF` (light accent), defined in `src/theme/theme.css`.

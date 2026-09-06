@@ -3,7 +3,6 @@ import '../../core/app_theme.dart';
 import '../../core/auth_storage.dart';
 import '../../core/biometric_service.dart';
 import '../coach/coach_home.dart';
-import '../student/student_home.dart';
 import 'login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -49,8 +48,16 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   void _goToHome(String role) {
-    final page = role == 'COACH' ? const CoachHome() : const StudentHome();
-    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => page));
+    if (role != 'COACH') {
+      // Only coach sessions are ever meant to persist — the backend rejects
+      // student logins outright, and the login screen clears an admin
+      // session immediately after login. A stored session with any other
+      // role means stale/corrupt local state, so drop it and start over.
+      AuthStorage.clear();
+      _goToLogin();
+      return;
+    }
+    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const CoachHome()));
   }
 
   @override

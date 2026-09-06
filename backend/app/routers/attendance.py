@@ -1,11 +1,12 @@
-from datetime import datetime, timedelta
-from typing import List
+from datetime import date as date_type, datetime, timedelta
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User, UserRole
+from app.models.activity import Activity
 from app.models.class_session import ClassSession
 from app.models.enrollment import StudentEnrollment
 from app.models.attendance import (
@@ -20,11 +21,13 @@ from app.schemas.attendance import (
     MarkStudentAttendanceRequest,
     ManualAttendanceRequest,
     StudentAttendanceOut,
+    StudentAttendanceUpdate,
+    StudentAttendanceAdminOut,
     CoachEntryExitRequest,
     CoachAttendanceOut,
     MissingCoachOut,
 )
-from app.security import get_current_user, require_admin, require_coach
+from app.security import get_current_user, require_admin, require_coach, require_admin_or_coach
 from app.services.geofence import is_within_geofence
 from app.services.storage import save_selfie, read_selfie
 from app.services.audit import log_action
@@ -246,6 +249,108 @@ def coach_exit(
     db.commit()
     db.refresh(record)
     return record
+
+
+@router.get("/students", response_model=List[StudentAttendanceAdminOut])
+def list_student_attendance(
+    activity_id: Optional[int] = None,
+    coach_id: Optional[int] = None,
+    student_id: Optional[int] = None,
+    status_filter: Optional[AttendanceStatus] = None,
+    date_from: Optional[date_type] = None,
+    date_to: Optional[date_type] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_coach),
+):
+    query = (
+        db.query(StudentAttendance)
+        .join(ClassSession, ClassSession.id == StudentAttendance.class_id)
+    )
+    if activity_id:
+        query = query.filter(ClassSession.activity_id == activity_id)
+    if current_user.role == UserRole.COACH:
+        query = query.filter(StudentAttendance.coach_id == current_user.id)
+    elif coach_id:
+        query = query.filter(StudentAttendance.coach_id == coach_id)
+    if student_id:
+        query = query.filter(StudentAttendance.student_id == student_id)
+    if status_filter:
+        query = query.filter(StudentAttendance.status == status_filter)
+    if date_from:
+        query = query.filter(ClassSession.date >= date_from)
+    if date_to:
+        query = query.filter(ClassSession.date <= date_to)
+
+    records = query.order_by(ClassSession.date.desc(), StudentAttendance.timestamp.desc()).limit(500).all()
+
+    result = []
+    for r in records:
+        result.append(
+            StudentAttendanceAdminOut(
+                id=r.id,
+                student_id=r.student_id,
+                student_name=r.student.name if r.student else "Unknown",
+                class_id=r.class_id,
+                activity_id=r.class_session.activity_id,
+                activity_name=r.class_session.activity.name if r.class_session.activity else "Unknown",
+                coach_id=r.coach_id,
+                coach_name=r.coach.name if r.coach else None,
+                status=r.status,
+                class_date=r.class_session.date,
+                timestamp=r.timestamp,
+                marked_manually=bool(r.marked_manually),
+            )
+        )
+    return result
+
+
+def _authorize_own_attendance_edit(db: Session, current_user: User, record: StudentAttendance) -> None:
+    """Coaches may only correct records they marked themselves, on the same day the class was held."""
+    if current_user.role == UserRole.COACH:
+        if record.coach_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+        if record.class_session.date != datetime.now().date():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only today's attendance records can be corrected",
+            )
+    elif current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+
+@router.put("/students/{attendance_id}", response_model=StudentAttendanceOut)
+def update_student_attendance(
+    attendance_id: int,
+    payload: StudentAttendanceUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_coach),
+):
+    record = db.query(StudentAttendance).filter(StudentAttendance.id == attendance_id).first()
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attendance record not found")
+    _authorize_own_attendance_edit(db, current_user, record)
+
+    record.status = payload.status
+    log_action(db, current_user.id, "UPDATE", "StudentAttendance", record.id)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+@router.delete("/students/{attendance_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_student_attendance(
+    attendance_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_coach),
+):
+    record = db.query(StudentAttendance).filter(StudentAttendance.id == attendance_id).first()
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attendance record not found")
+    _authorize_own_attendance_edit(db, current_user, record)
+
+    log_action(db, current_user.id, "DELETE", "StudentAttendance", record.id)
+    db.delete(record)
+    db.commit()
 
 
 @router.get("/daily-missing", response_model=List[MissingCoachOut])

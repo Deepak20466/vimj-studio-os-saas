@@ -16,6 +16,12 @@ class LeaveDecision(BaseModel):
     note: Optional[str] = None
 
 
+class LeaveUpdate(BaseModel):
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    reason: Optional[str] = None
+
+
 class LeaveOut(BaseModel):
     id: int
     coach_id: int
@@ -29,3 +35,7 @@ class LeaveOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class LeaveAdminOut(LeaveOut):
+    coach_name: str

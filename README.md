@@ -2,16 +2,16 @@
 
 Production-ready attendance system for a coaching studio: geofenced + selfie-verified
 attendance, fee/salary reminders, leave & swap workflows, role-based data isolation, and
-business analytics — across a FastAPI backend, a React admin dashboard, and a Flutter
-mobile app for coaches and students.
+business analytics — across a FastAPI backend, a React admin dashboard, and a React
+Native (Expo) mobile app for coaches and students.
 
 ## Structure
 
 ```
 backend/    FastAPI + PostgreSQL API — all 15 core requirements, RBAC enforced server-side
 frontend/   React admin dashboard (students, coaches, activities, attendance, leave, fees, reports)
-mobile/     Flutter app for coaches (mark attendance, leave, swaps, salary) and students
-            (attendance history, fees, profile)
+mobile/     React Native (Expo) app for coaches (mark attendance, leave, swaps, salary) and
+            students (attendance history, fees, profile)
 ```
 
 Each has its own README with setup steps: [backend/README.md](backend/README.md),
@@ -34,11 +34,10 @@ cd frontend
 npm install
 npm run dev   # http://localhost:5173, proxies /api to the backend
 
-# 3. Mobile (new terminal, after installing the Flutter SDK)
+# 3. Mobile (new terminal)
 cd mobile
-flutter create --org com.vimjstudio --project-name vimj_attendance .
-flutter pub get
-flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
+npm install
+npm start   # press 'a' for Android, 'i' for iOS, or scan the QR code with Expo Go
 ```
 
 ## What's been verified in this environment
@@ -48,10 +47,11 @@ flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
   against SQLite. See `backend/README.md` for how to point it at real PostgreSQL.
 - **Frontend**: builds cleanly (`npm run build`) and was driven with a real login against
   the live backend — dashboard, students, and reports pages render with no console errors.
-- **Mobile**: Flutter isn't installed on this machine, so `lib/` couldn't be compiled or
-  run here. Every API call in the Dart code was cross-checked by hand against the actual
-  backend route signatures. See `mobile/README.md` before your first run — it documents
-  the one-time `flutter create` scaffolding step and required platform permissions.
+- **Mobile**: TypeScript compiles cleanly (`npx tsc --noEmit`), the Metro bundle builds
+  successfully end-to-end (`npx expo export`), and `npx expo-doctor` reports no issues.
+  No physical device/emulator was available to run it here, so every API call was
+  cross-checked by hand against the actual backend route signatures. See
+  `mobile/README.md` for setup and the backend URL configuration.
 
 ## Production deployment
 

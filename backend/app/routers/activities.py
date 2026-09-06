@@ -13,6 +13,7 @@ from app.schemas.activity import (
     ActivityUpdate,
     ActivityOut,
     ClassCreate,
+    ClassUpdate,
     ClassOut,
     EnrollmentCreate,
 )
@@ -108,6 +109,46 @@ def create_class(
     return class_session
 
 
+@router.put("/classes/{class_id}", response_model=ClassOut)
+def update_class(
+    class_id: int,
+    payload: ClassUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    class_session = db.query(ClassSession).filter(ClassSession.id == class_id).first()
+    if not class_session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+
+    updates = payload.model_dump(exclude_unset=True)
+    if "coach_id" in updates:
+        coach = db.query(User).filter(User.id == updates["coach_id"], User.role == UserRole.COACH).first()
+        if not coach:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Coach not found")
+    for field, value in updates.items():
+        setattr(class_session, field, value)
+
+    log_action(db, current_user.id, "UPDATE", "Class", class_session.id)
+    db.commit()
+    db.refresh(class_session)
+    return class_session
+
+
+@router.delete("/classes/{class_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_class(
+    class_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    class_session = db.query(ClassSession).filter(ClassSession.id == class_id).first()
+    if not class_session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+
+    log_action(db, current_user.id, "DELETE", "Class", class_session.id)
+    db.delete(class_session)
+    db.commit()
+
+
 @router.get("/classes/my", response_model=List[ClassOut])
 def my_classes(
     class_date: Optional[str] = None,
@@ -153,6 +194,21 @@ def enroll_student(
     return {"detail": "Student enrolled"}
 
 
+@router.delete("/enroll/{enrollment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def unenroll_student(
+    enrollment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    enrollment = db.query(StudentEnrollment).filter(StudentEnrollment.id == enrollment_id).first()
+    if not enrollment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Enrollment not found")
+
+    log_action(db, current_user.id, "DELETE", "Enrollment", enrollment.id)
+    db.delete(enrollment)
+    db.commit()
+
+
 @router.get("/{activity_id}/roster")
 def activity_roster(
     activity_id: int,
@@ -161,10 +217,10 @@ def activity_roster(
 ):
     if current_user.role == UserRole.STUDENT:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-    students = (
-        db.query(User)
+    rows = (
+        db.query(User, StudentEnrollment.id)
         .join(StudentEnrollment, StudentEnrollment.student_id == User.id)
         .filter(StudentEnrollment.activity_id == activity_id)
         .all()
     )
-    return [{"id": s.id, "name": s.name, "email": s.email} for s in students]
+    return [{"id": s.id, "name": s.name, "email": s.email, "enrollment_id": enrollment_id} for s, enrollment_id in rows]

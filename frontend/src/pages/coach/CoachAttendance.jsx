@@ -1,0 +1,129 @@
+import { useEffect, useState } from "react";
+import toast from "react-hot-toast";
+import { CoachSelfAPI } from "../../api/endpoints";
+import StatusBadge from "../../components/StatusBadge";
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export default function CoachAttendance() {
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [dateFrom, setDateFrom] = useState(todayStr());
+  const [dateTo, setDateTo] = useState(todayStr());
+  const [busyId, setBusyId] = useState(null);
+
+  const load = () => {
+    setLoading(true);
+    CoachSelfAPI.myStudentAttendance({ date_from: dateFrom, date_to: dateTo })
+      .then((r) => setRecords(r.data))
+      .catch((err) => toast.error(err.response?.data?.detail || "Failed to load attendance"))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(load, [dateFrom, dateTo]);
+
+  const canEdit = (r) => String(r.class_date).slice(0, 10) === todayStr();
+
+  const changeStatus = async (record, status) => {
+    setBusyId(record.id);
+    try {
+      await CoachSelfAPI.updateStudentAttendance(record.id, { status });
+      toast.success("Attendance updated");
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Update failed");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const remove = async (record) => {
+    if (!confirm(`Remove the attendance record for ${record.student_name}?`)) return;
+    setBusyId(record.id);
+    try {
+      await CoachSelfAPI.deleteStudentAttendance(record.id);
+      toast.success("Attendance record deleted");
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Delete failed");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div>
+      <div className="page-header">
+        <h1>Student Attendance</h1>
+      </div>
+
+      <div className="card">
+        <div className="toolbar" style={{ marginBottom: 12, display: "flex", gap: 12, alignItems: "center" }}>
+          <div className="field" style={{ margin: 0 }}>
+            <label>From</label>
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          </div>
+          <div className="field" style={{ margin: 0 }}>
+            <label>To</label>
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="empty-state">Loading...</div>
+        ) : records.length === 0 ? (
+          <div className="empty-state">No attendance records marked in this range.</div>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Activity</th>
+                <th>Class Date</th>
+                <th>Status</th>
+                <th>Marked At</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {records.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.student_name}</td>
+                  <td>{r.activity_name}</td>
+                  <td>{r.class_date}</td>
+                  <td>
+                    <StatusBadge status={r.status} />
+                  </td>
+                  <td>{new Date(r.timestamp).toLocaleString()}</td>
+                  <td>
+                    {canEdit(r) ? (
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {["PRESENT", "ABSENT", "LEAVE"].filter((s) => s !== r.status).map((s) => (
+                          <button
+                            key={s}
+                            className="btn btn-secondary"
+                            disabled={busyId === r.id}
+                            onClick={() => changeStatus(r, s)}
+                          >
+                            Mark {s.charAt(0) + s.slice(1).toLowerCase()}
+                          </button>
+                        ))}
+                        <button className="btn btn-danger" disabled={busyId === r.id} onClick={() => remove(r)}>
+                          Delete
+                        </button>
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Locked (past class)</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}

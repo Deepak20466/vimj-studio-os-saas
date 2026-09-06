@@ -3,17 +3,22 @@ Act as a senior developer and build a complete Production-ready Attendance Manag
 # VIMJ Studio Attendance System -
 
 **Tech Stack:**  Frontend web - react js, dashboard ui, analytics charts, React ui.
-Frontend app - Flutter or dart, location, Camera selfie, Notifications (Sms, Whatsup).
+Frontend app - Flutter (Dart), location, Camera selfie, Notifications (Sms, Whatsup).
 Backend - Python, FastApi.
 Database - PostgreSQL.
 Sms and whatsup - Python.
-UI color - #0000FF, #F0F8FF.
+UI color - #FFA500, #FFF500, #F0F8FF.
 ---
 
 ## ROLES & PERMISSIONS
 - **Admin:** View all data, approve leaves, generate reports, manage users with CRUD options in every section
 - **Coach:** Mark only own class attendance, can't see other coaches' data, request leave, view own salary/attendance
-- **Student:** View only own attendance/fees, can't see other students' data
+
+Students do NOT get login access to any app. They exist only as records
+(attendance subjects, fee accounts) that admins and coaches manage — the
+backend rejects any login attempt from a Student-role account. Do not
+reintroduce a student-facing login/app without an explicit decision to do so.
+
 
 ---
 
@@ -208,6 +213,9 @@ UserDetails (id, user_id, address, phone, dob, profile_photo, created_at)
 
 ## MOBILE (Flutter)
 
+A single coach-only app. Admin logs in through the web dashboard instead;
+students never log in anywhere (see ROLES & PERMISSIONS).
+
 ### Coach App
 - **Dashboard:** Today's classes, mark attendance button
 - **Mark Attendance:** GPS validation (50m), camera for selfie, confirmation with timestamp
@@ -217,18 +225,9 @@ UserDetails (id, user_id, address, phone, dob, profile_photo, created_at)
 - **Leave:** Submit request, view status, view approved/rejected history
 - **Swaps:** View swap requests, accept/reject
 - **Offline:** Queue marking offline, sync when online
-
-### Student App
-- **Attendance:** Personal record, graph, filter by activity/date
-- **Fees:** Outstanding fees, payment history, due alerts (with sms, whatsup)
-- **Profile:** View personal details
-- **Notifications:** Fee reminders, updates
-
-### Both Apps
 - Biometric login (fingerprint)
 - Dark/light theme
 - Push notifications (with sms)
-- Offline support
 
 ---
 

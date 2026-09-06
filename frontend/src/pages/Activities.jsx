@@ -148,6 +148,8 @@ function ActivityManageModal({ activity, onClose }) {
   const [students, setStudents] = useState([]);
   const [classForm, setClassForm] = useState({ coach_id: "", date: "", start_time: "", end_time: "" });
   const [enrollStudentId, setEnrollStudentId] = useState("");
+  const [editingClass, setEditingClass] = useState(null);
+  const [editClassForm, setEditClassForm] = useState({ coach_id: "", date: "", start_time: "", end_time: "" });
 
   const loadAll = () => {
     ActivitiesAPI.classes(activity.id).then((r) => setClasses(r.data));
@@ -182,7 +184,47 @@ function ActivityManageModal({ activity, onClose }) {
     }
   };
 
+  const unenroll = async (student) => {
+    if (!confirm(`Remove ${student.name} from ${activity.name}?`)) return;
+    try {
+      await ActivitiesAPI.unenroll(student.enrollment_id);
+      toast.success("Student removed from activity");
+      loadAll();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to remove student");
+    }
+  };
+
+  const openEditClass = (c) => {
+    setEditingClass(c);
+    setEditClassForm({ coach_id: c.coach_id, date: c.date, start_time: c.start_time, end_time: c.end_time });
+  };
+
+  const submitEditClass = async (e) => {
+    e.preventDefault();
+    try {
+      await ActivitiesAPI.updateClass(editingClass.id, { ...editClassForm, coach_id: Number(editClassForm.coach_id) });
+      toast.success("Class updated");
+      setEditingClass(null);
+      loadAll();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Update failed");
+    }
+  };
+
+  const removeClass = async (c) => {
+    if (!confirm(`Delete the class on ${c.date}? This also removes its attendance records.`)) return;
+    try {
+      await ActivitiesAPI.removeClass(c.id);
+      toast.success("Class deleted");
+      loadAll();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Delete failed");
+    }
+  };
+
   return (
+    <>
     <Modal title={`Manage: ${activity.name}`} onClose={onClose}>
       <div className="tab-bar">
         <button className={tab === "classes" ? "active" : ""} onClick={() => setTab("classes")}>
@@ -229,6 +271,7 @@ function ActivityManageModal({ activity, onClose }) {
               <tr>
                 <th>Date</th>
                 <th>Time</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -237,6 +280,14 @@ function ActivityManageModal({ activity, onClose }) {
                   <td>{c.date}</td>
                   <td>
                     {c.start_time} - {c.end_time}
+                  </td>
+                  <td>
+                    <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => openEditClass(c)}>
+                      Edit
+                    </button>
+                    <button className="btn btn-danger" onClick={() => removeClass(c)}>
+                      Delete
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -263,6 +314,7 @@ function ActivityManageModal({ activity, onClose }) {
               <tr>
                 <th>Name</th>
                 <th>Email</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -270,6 +322,11 @@ function ActivityManageModal({ activity, onClose }) {
                 <tr key={s.id}>
                   <td>{s.name}</td>
                   <td>{s.email}</td>
+                  <td>
+                    <button className="btn btn-danger" onClick={() => unenroll(s)}>
+                      Remove
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -277,5 +334,44 @@ function ActivityManageModal({ activity, onClose }) {
         </div>
       )}
     </Modal>
+
+    {editingClass && (
+      <Modal title="Edit Class" onClose={() => setEditingClass(null)}>
+        <form onSubmit={submitEditClass}>
+          <div className="field">
+            <label>Coach</label>
+            <select value={editClassForm.coach_id} onChange={(e) => setEditClassForm({ ...editClassForm, coach_id: e.target.value })} required>
+              <option value="">Select coach</option>
+              {coaches.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>Date</label>
+            <input type="date" value={editClassForm.date} onChange={(e) => setEditClassForm({ ...editClassForm, date: e.target.value })} required />
+          </div>
+          <div className="form-grid">
+            <div>
+              <label>Start Time</label>
+              <input type="time" value={editClassForm.start_time} onChange={(e) => setEditClassForm({ ...editClassForm, start_time: e.target.value })} required />
+            </div>
+            <div>
+              <label>End Time</label>
+              <input type="time" value={editClassForm.end_time} onChange={(e) => setEditClassForm({ ...editClassForm, end_time: e.target.value })} required />
+            </div>
+          </div>
+          <div className="modal-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setEditingClass(null)}>
+              Cancel
+            </button>
+            <button className="btn btn-primary">Save</button>
+          </div>
+        </form>
+      </Modal>
+    )}
+    </>
   );
 }

@@ -20,12 +20,21 @@ class FeeMarkPaid(BaseModel):
     paid_date: Optional[date] = None
 
 
+class FeeUpdate(BaseModel):
+    amount: Optional[Decimal] = None
+    balance_amount: Optional[Decimal] = None
+    due_date: Optional[date] = None
+    status: Optional[FeeStatus] = None
+    paid_date: Optional[date] = None
+
+
 class FeeOut(BaseModel):
     id: int
     student_id: int
     month: int
     year: int
     amount: Decimal
+    balance_amount: Decimal
     status: FeeStatus
     due_date: date
     paid_date: Optional[date]
@@ -33,3 +42,7 @@ class FeeOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class FeeAdminOut(FeeOut):
+    student_name: str

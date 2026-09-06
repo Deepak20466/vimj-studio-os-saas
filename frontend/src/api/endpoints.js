@@ -32,7 +32,10 @@ export const ActivitiesAPI = {
   remove: (id) => client.delete(`/activities/${id}`),
   classes: (activityId) => client.get(`/activities/${activityId}/classes`),
   createClass: (payload) => client.post("/activities/classes", payload),
+  updateClass: (classId, payload) => client.put(`/activities/classes/${classId}`, payload),
+  removeClass: (classId) => client.delete(`/activities/classes/${classId}`),
   enroll: (payload) => client.post("/activities/enroll", payload),
+  unenroll: (enrollmentId) => client.delete(`/activities/enroll/${enrollmentId}`),
   roster: (activityId) => client.get(`/activities/${activityId}/roster`),
 };
 
@@ -40,17 +43,26 @@ export const AttendanceAPI = {
   markManual: (payload) => client.post("/attendance/mark-student/manual", payload),
   dailyMissing: () => client.get("/attendance/daily-missing"),
   selfieUrl: (id) => `/api/attendance/selfie/${id}`,
+  list: (params) => client.get("/attendance/students", { params }),
+  update: (id, payload) => client.put(`/attendance/students/${id}`, payload),
+  remove: (id) => client.delete(`/attendance/students/${id}`),
 };
 
 export const LeaveAPI = {
   pending: () => client.get("/leave/pending"),
+  list: (params) => client.get("/leave", { params }),
   approve: (id, note) => client.put(`/leave/${id}/approve`, { note }),
   reject: (id, note) => client.put(`/leave/${id}/reject`, { note }),
+  update: (id, payload) => client.put(`/leave/${id}`, payload),
+  remove: (id) => client.delete(`/leave/${id}`),
 };
 
 export const FeesAPI = {
   unpaid: () => client.get("/fees/unpaid"),
+  list: (params) => client.get("/fees", { params }),
   create: (payload) => client.post("/fees", payload),
+  update: (id, payload) => client.put(`/fees/${id}`, payload),
+  remove: (id) => client.delete(`/fees/${id}`),
   markPaid: (fee_id) => client.post("/fees/mark-paid", { fee_id }),
   remind: (feeId) => client.post(`/fees/${feeId}/remind`),
 };
@@ -64,6 +76,25 @@ export const SwapAPI = {
   pending: () => client.get("/swap/pending"),
   approve: (id) => client.put(`/swap/${id}/approve`),
   reject: (id) => client.put(`/swap/${id}/reject`),
+};
+
+export const CoachSelfAPI = {
+  myClasses: (classDate) => client.get("/activities/classes/my", { params: classDate ? { class_date: classDate } : {} }),
+  roster: (activityId) => client.get(`/activities/${activityId}/roster`),
+  markAttendance: (payload) => client.post("/attendance/mark-student", payload),
+  coachEntry: (payload) => client.post("/attendance/coach-entry", payload),
+  coachExit: (payload) => client.post("/attendance/coach-exit", payload),
+  myAttendance: (coachId) => client.get(`/coaches/${coachId}/attendance`),
+  requestLeave: (payload) => client.post("/leave/request", payload),
+  myLeaves: () => client.get("/leave/my"),
+  updateLeave: (id, payload) => client.put(`/leave/${id}`, payload),
+  cancelLeave: (id) => client.delete(`/leave/${id}`),
+  leaveBalance: (coachId, year) => client.get(`/leave/balance/${coachId}`, { params: { year } }),
+  salaryHistory: (coachId) => client.get(`/coaches/${coachId}/salary`),
+  acknowledgeSalary: (salaryId) => client.post("/salary/acknowledge", { salary_id: salaryId }),
+  myStudentAttendance: (params) => client.get("/attendance/students", { params }),
+  updateStudentAttendance: (id, payload) => client.put(`/attendance/students/${id}`, payload),
+  deleteStudentAttendance: (id) => client.delete(`/attendance/students/${id}`),
 };
 
 export const ReportsAPI = {

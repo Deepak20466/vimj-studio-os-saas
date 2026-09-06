@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     FRONTEND_ORIGIN: str = "http://localhost:5173"
+    # Expo's web dev server (`expo start --web`) picks 8081/8082/8083 depending
+    # on what's free, so the mobile app in a browser needs its own allowed origin.
+    MOBILE_WEB_ORIGIN: str = "http://localhost:8082"
 
     FACILITY_LAT: float = 12.9716
     FACILITY_LNG: float = 77.5946

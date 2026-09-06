@@ -92,8 +92,8 @@ export default function Reports() {
                 <YAxis yAxisId="right" orientation="right" fontSize={12} />
                 <Tooltip />
                 <Legend />
-                <Bar yAxisId="left" dataKey="avg_attendance_pct" name="Attendance %" fill="#0000ff" radius={[4, 4, 0, 0]} />
-                <Bar yAxisId="right" dataKey="revenue" name="Revenue (₹)" fill="#87ceeb" radius={[4, 4, 0, 0]} />
+                <Bar yAxisId="left" dataKey="avg_attendance_pct" name="Attendance %" fill="#CC7000" radius={[4, 4, 0, 0]} />
+                <Bar yAxisId="right" dataKey="revenue" name="Revenue (₹)" fill="#E6D200" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
 

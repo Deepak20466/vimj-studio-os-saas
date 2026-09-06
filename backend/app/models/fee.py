@@ -22,6 +22,7 @@ class StudentFee(Base):
     month = Column(Integer, nullable=False)
     year = Column(Integer, nullable=False)
     amount = Column(Numeric(10, 2), nullable=False)
+    balance_amount = Column(Numeric(10, 2), nullable=False, default=0)
     status = Column(Enum(FeeStatus), nullable=False, default=FeeStatus.UNPAID, index=True)
     due_date = Column(Date, nullable=False)
     paid_date = Column(Date, nullable=True)

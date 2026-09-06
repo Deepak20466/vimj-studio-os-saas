@@ -41,6 +41,13 @@ class ClassCreate(BaseModel):
     end_time: time
 
 
+class ClassUpdate(BaseModel):
+    coach_id: Optional[int] = None
+    date: Optional[date] = None
+    start_time: Optional[time] = None
+    end_time: Optional[time] = None
+
+
 class ClassOut(BaseModel):
     id: int
     activity_id: int

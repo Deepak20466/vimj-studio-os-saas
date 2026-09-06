@@ -1,9 +1,9 @@
 # VIMJ Studio Mobile App (Flutter)
 
-A single Flutter app serving both roles from the CLAUDE.md spec's "Coach App" and
-"Student App": login determines the role, then the user lands on `CoachHome` or
-`StudentHome`. Admins are directed to the web dashboard instead (see
-`lib/features/auth/login_screen.dart`).
+A Flutter app for coaches only. Students are records the admin/coach manage
+(attendance subjects, fee accounts) but do not get their own login — the
+backend rejects Student-role logins outright. Admins are directed to the web
+dashboard instead (see `lib/features/auth/login_screen.dart`).
 
 ## One-time setup (this repo ships `lib/` and `pubspec.yaml` only)
 
@@ -80,8 +80,6 @@ flutter run \
 - **Coach**: today's classes, geofenced facility check-in/out, per-student
   attendance marking with camera selfie + GPS (`lib/features/coach/`), leave
   requests, class swap requests, salary history + acknowledgment.
-- **Student**: attendance history + monthly graph (fl_chart), fee status and
-  outstanding balance, profile (`lib/features/student/`).
 - **Offline queue**: if marking attendance fails due to no connectivity, it's
   queued in a local SQLite table (`lib/core/offline_queue.dart`) and flushed
   automatically the next time connectivity is detected

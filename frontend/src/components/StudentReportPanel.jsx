@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { LineChart, Line, PieChart, Pie, Cell, Legend, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import toast from "react-hot-toast";
 import { ReportsAPI } from "../api/endpoints";
+import useResizeAfterLoad from "../hooks/useResizeAfterLoad";
+
+const FEE_PIE_COLORS = ["#16a34a", "#d97706"];
 
 export default function StudentReportPanel({ studentId }) {
   const [report, setReport] = useState(null);
@@ -32,8 +35,16 @@ export default function StudentReportPanel({ studentId }) {
     }
   };
 
+  useResizeAfterLoad(!loading && !!report);
+
   if (loading) return <div className="empty-state">Loading report...</div>;
   if (!report) return null;
+
+  const feeData = [
+    { name: "Paid", value: report.fees_paid },
+    { name: "Unpaid", value: report.fees_unpaid },
+  ];
+  const hasFeeData = report.fees_paid + report.fees_unpaid > 0;
 
   return (
     <div>
@@ -75,6 +86,23 @@ export default function StudentReportPanel({ studentId }) {
         </tbody>
       </table>
 
+      {hasFeeData && (
+        <div style={{ marginBottom: 16 }}>
+          <h4 style={{ marginBottom: 4 }}>Fee Status</h4>
+          <ResponsiveContainer width="100%" height={180}>
+            <PieChart>
+              <Pie data={feeData} dataKey="value" nameKey="name" outerRadius={60} label>
+                {feeData.map((_, i) => (
+                  <Cell key={i} fill={FEE_PIE_COLORS[i % FEE_PIE_COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
       {graph.length > 0 && (
         <ResponsiveContainer width="100%" height={200}>
           <LineChart data={graph}>
@@ -82,7 +110,7 @@ export default function StudentReportPanel({ studentId }) {
             <XAxis dataKey="label" fontSize={11} />
             <YAxis fontSize={11} />
             <Tooltip />
-            <Line type="monotone" dataKey="value" stroke="#0000ff" strokeWidth={2} name="Attendance %" />
+            <Line type="monotone" dataKey="value" stroke="#CC7000" strokeWidth={2} name="Attendance %" />
           </LineChart>
         </ResponsiveContainer>
       )}

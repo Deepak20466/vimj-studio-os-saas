@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import { ReportsAPI, AttendanceAPI } from "../api/endpoints";
 import toast from "react-hot-toast";
+import useResizeAfterLoad from "../hooks/useResizeAfterLoad";
 
 const PIE_COLORS = ["#16a34a", "#d97706", "#dc2626"];
 
@@ -29,6 +30,8 @@ export default function Dashboard() {
       .catch((err) => toast.error(err.response?.data?.detail || "Failed to load dashboard"))
       .finally(() => setLoading(false));
   }, []);
+
+  useResizeAfterLoad(!loading);
 
   if (loading) return <div className="empty-state">Loading dashboard...</div>;
 
@@ -71,7 +74,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div className="chart-grid">
         <div className="card">
           <h3 style={{ marginTop: 0 }}>Fee Status</h3>
           <ResponsiveContainer width="100%" height={260}>
@@ -95,7 +98,7 @@ export default function Dashboard() {
               <XAxis dataKey="name" fontSize={12} />
               <YAxis fontSize={12} />
               <Tooltip />
-              <Bar dataKey="attendance" fill="#0000ff" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="attendance" fill="#CC7000" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
@@ -62,6 +63,12 @@ class QueuedAttendance {
 class OfflineQueue {
   static Database? _db;
 
+  // sqflite has no web implementation, and this queue only exists to bridge
+  // real connectivity gaps on a physical device — on web there's no offline
+  // mode to bridge, so fall back to an in-memory list instead of crashing.
+  static final List<QueuedAttendance> _webQueue = [];
+  static int _webNextId = 1;
+
   static Future<Database> _database() async {
     if (_db != null) return _db!;
     final dir = await getApplicationDocumentsDirectory();
@@ -88,22 +95,45 @@ class OfflineQueue {
   }
 
   static Future<int> enqueue(QueuedAttendance item) async {
+    if (kIsWeb) {
+      final id = _webNextId++;
+      _webQueue.add(QueuedAttendance(
+        id: id,
+        studentId: item.studentId,
+        classId: item.classId,
+        status: item.status,
+        lat: item.lat,
+        lng: item.lng,
+        selfieBase64: item.selfieBase64,
+        createdAt: item.createdAt,
+      ));
+      return id;
+    }
     final db = await _database();
     return db.insert('queued_attendance', item.toMap()..remove('id'));
   }
 
   static Future<List<QueuedAttendance>> pending() async {
+    if (kIsWeb) {
+      final sorted = [..._webQueue]..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      return sorted;
+    }
     final db = await _database();
     final rows = await db.query('queued_attendance', orderBy: 'created_at ASC');
     return rows.map(QueuedAttendance.fromMap).toList();
   }
 
   static Future<void> remove(int id) async {
+    if (kIsWeb) {
+      _webQueue.removeWhere((e) => e.id == id);
+      return;
+    }
     final db = await _database();
     await db.delete('queued_attendance', where: 'id = ?', whereArgs: [id]);
   }
 
   static Future<int> pendingCount() async {
+    if (kIsWeb) return _webQueue.length;
     final db = await _database();
     final result = await db.rawQuery('SELECT COUNT(*) as c FROM queued_attendance');
     return Sqflite.firstIntValue(result) ?? 0;

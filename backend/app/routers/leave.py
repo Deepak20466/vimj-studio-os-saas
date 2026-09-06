@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
 from app.models.leave import CoachLeave, LeaveStatus
-from app.schemas.leave import LeaveRequestCreate, LeaveDecision, LeaveOut
+from app.schemas.leave import LeaveRequestCreate, LeaveDecision, LeaveUpdate, LeaveOut, LeaveAdminOut
 from app.security import get_current_user, require_admin, require_coach
 from app.services.audit import log_action
 from app.services.notifications import notify
@@ -50,6 +50,94 @@ def pending_leaves(db: Session = Depends(get_db), _: User = Depends(require_admi
         .order_by(CoachLeave.created_at)
         .all()
     )
+
+
+@router.get("", response_model=List[LeaveAdminOut])
+def list_leaves(
+    coach_id: Optional[int] = None,
+    status_filter: Optional[LeaveStatus] = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    query = db.query(CoachLeave)
+    if coach_id:
+        query = query.filter(CoachLeave.coach_id == coach_id)
+    if status_filter:
+        query = query.filter(CoachLeave.status == status_filter)
+
+    leaves = query.order_by(CoachLeave.created_at.desc()).limit(500).all()
+    coaches = {u.id: u.name for u in db.query(User).filter(User.id.in_([l.coach_id for l in leaves])).all()}
+    return [
+        LeaveAdminOut(
+            id=l.id,
+            coach_id=l.coach_id,
+            coach_name=coaches.get(l.coach_id, "Unknown"),
+            start_date=l.start_date,
+            end_date=l.end_date,
+            reason=l.reason,
+            status=l.status,
+            approved_by_admin_id=l.approved_by_admin_id,
+            decision_note=l.decision_note,
+            created_at=l.created_at,
+        )
+        for l in leaves
+    ]
+
+
+@router.put("/{leave_id}", response_model=LeaveOut)
+def update_leave(
+    leave_id: int,
+    payload: LeaveUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    leave = db.query(CoachLeave).filter(CoachLeave.id == leave_id).first()
+    if not leave:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Leave request not found")
+
+    if current_user.role == "COACH":
+        if leave.coach_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+        if leave.status != LeaveStatus.PENDING:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only pending requests can be edited")
+    elif current_user.role != "ADMIN":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+    updates = payload.model_dump(exclude_unset=True)
+    new_start = updates.get("start_date", leave.start_date)
+    new_end = updates.get("end_date", leave.end_date)
+    if new_end < new_start:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="end_date must be on/after start_date")
+
+    for field, value in updates.items():
+        setattr(leave, field, value)
+    log_action(db, current_user.id, "UPDATE", "CoachLeave", leave.id)
+    db.commit()
+    db.refresh(leave)
+    return leave
+
+
+@router.delete("/{leave_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_leave(
+    leave_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    leave = db.query(CoachLeave).filter(CoachLeave.id == leave_id).first()
+    if not leave:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Leave request not found")
+
+    if current_user.role == "COACH":
+        if leave.coach_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+        if leave.status != LeaveStatus.PENDING:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only pending requests can be cancelled")
+    elif current_user.role != "ADMIN":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+    log_action(db, current_user.id, "DELETE", "CoachLeave", leave.id)
+    db.delete(leave)
+    db.commit()
 
 
 def _balance_check(db: Session, coach_id: int, year: int) -> int:

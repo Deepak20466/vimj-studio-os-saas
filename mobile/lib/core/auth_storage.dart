@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class AuthSession {
   final int userId;
   final String name;
-  final String role; // ADMIN, COACH, STUDENT
+  final String role; // COACH (ADMIN sessions are cleared right after login; the app is coach-only)
   final String accessToken;
   final String refreshToken;
 
