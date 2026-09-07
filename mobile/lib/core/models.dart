@@ -1,3 +1,45 @@
+class ChatThreadSummary {
+  final int coachId;
+  final String coachName;
+  final int unreadCount;
+  final String? lastMessage;
+  final String? lastMessageAt;
+
+  ChatThreadSummary({
+    required this.coachId,
+    required this.coachName,
+    required this.unreadCount,
+    this.lastMessage,
+    this.lastMessageAt,
+  });
+
+  factory ChatThreadSummary.fromJson(Map<String, dynamic> json) => ChatThreadSummary(
+        coachId: json['coach_id'] as int,
+        coachName: json['coach_name'] as String,
+        unreadCount: json['unread_count'] as int? ?? 0,
+        lastMessage: json['last_message'] as String?,
+        lastMessageAt: json['last_message_at'] as String?,
+      );
+}
+
+class ChatMessage {
+  final int id;
+  final int senderId;
+  final String senderName;
+  final String message;
+  final String createdAt;
+
+  ChatMessage({required this.id, required this.senderId, required this.senderName, required this.message, required this.createdAt});
+
+  factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
+        id: json['id'] as int,
+        senderId: json['sender_id'] as int,
+        senderName: json['sender_name'] as String,
+        message: json['message'] as String,
+        createdAt: json['created_at'] as String,
+      );
+}
+
 class ClassSession {
   final int id;
   final int activityId;

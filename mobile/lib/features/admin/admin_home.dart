@@ -10,6 +10,9 @@ import 'admin_attendance_tab.dart';
 import 'admin_leave_tab.dart';
 import 'admin_fees_tab.dart';
 import 'admin_salary_tab.dart';
+import 'admin_reports_tab.dart';
+import 'admin_chat_tab.dart';
+import 'admin_settings_tab.dart';
 
 class AdminHome extends StatefulWidget {
   const AdminHome({super.key});
@@ -37,6 +40,9 @@ class _AdminHomeState extends State<AdminHome> {
     _NavItem('Leave', Icons.beach_access_outlined, AdminLeaveTab()),
     _NavItem('Fees', Icons.payments_outlined, AdminFeesTab()),
     _NavItem('Salary', Icons.account_balance_wallet_outlined, AdminSalaryTab()),
+    _NavItem('Reports', Icons.bar_chart_outlined, AdminReportsTab()),
+    _NavItem('Chat', Icons.chat_bubble_outline, AdminChatTab()),
+    _NavItem('Settings', Icons.settings_outlined, AdminSettingsTab()),
   ];
 
   Future<void> _logout() async {
