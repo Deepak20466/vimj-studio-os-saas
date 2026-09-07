@@ -162,11 +162,11 @@ export default function CoachLeave() {
                   <td>{l.decision_note || "—"}</td>
                   <td>
                     {l.status === "PENDING" ? (
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <button className="btn btn-secondary" onClick={() => openEdit(l)}>
+                      <div className="table-actions">
+                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(l)}>
                           Edit
                         </button>
-                        <button className="btn btn-danger" disabled={busyId === l.id} onClick={() => cancelLeave(l)}>
+                        <button className="btn btn-danger btn-sm" disabled={busyId === l.id} onClick={() => cancelLeave(l)}>
                           Cancel
                         </button>
                       </div>

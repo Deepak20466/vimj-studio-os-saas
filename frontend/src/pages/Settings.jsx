@@ -202,8 +202,8 @@ export default function Settings() {
                   <td>
                     <span className={`badge ${c.is_active ? "badge-present" : "badge-absent"}`}>{c.is_active ? "Active" : "Inactive"}</span>
                   </td>
-                  <td>
-                    <button className="btn btn-secondary" onClick={() => openCred(c)}>
+                  <td className="table-actions">
+                    <button className="btn btn-secondary btn-sm" onClick={() => openCred(c)}>
                       Change User ID / Password
                     </button>
                   </td>

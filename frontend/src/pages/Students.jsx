@@ -174,20 +174,20 @@ export default function Students() {
                   <td>
                     <span className={`badge ${s.is_active ? "badge-present" : "badge-absent"}`}>{s.is_active ? "Active" : "Inactive"}</span>
                   </td>
-                  <td>
-                    <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => openProfile(s)}>
+                  <td className="table-actions">
+                    <button className="btn btn-secondary btn-sm" onClick={() => openProfile(s)}>
                       Profile
                     </button>
-                    <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => openEdit(s)}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => openEdit(s)}>
                       Edit
                     </button>
-                    <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => toggleActive(s)}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => toggleActive(s)}>
                       {s.is_active ? "Deactivate" : "Activate"}
                     </button>
-                    <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => copyFeeReminder(s)} title="Copy fee reminder message">
+                    <button className="btn btn-secondary btn-sm" onClick={() => copyFeeReminder(s)} title="Copy fee reminder message">
                       Copy Fee Reminder
                     </button>
-                    <button className="btn btn-danger" onClick={() => remove(s)}>
+                    <button className="btn btn-danger btn-sm" onClick={() => remove(s)}>
                       Delete
                     </button>
                   </td>

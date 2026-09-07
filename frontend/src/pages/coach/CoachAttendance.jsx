@@ -204,18 +204,18 @@ export default function CoachAttendance() {
                   <td>{new Date(r.timestamp).toLocaleString()}</td>
                   <td>
                     {canEdit(r) ? (
-                      <div style={{ display: "flex", gap: 6 }}>
+                      <div className="table-actions">
                         {["PRESENT", "ABSENT", "LEAVE"].filter((s) => s !== r.status).map((s) => (
                           <button
                             key={s}
-                            className="btn btn-secondary"
+                            className="btn btn-secondary btn-sm"
                             disabled={busyId === r.id}
                             onClick={() => changeStatus(r, s)}
                           >
                             Mark {s.charAt(0) + s.slice(1).toLowerCase()}
                           </button>
                         ))}
-                        <button className="btn btn-danger" disabled={busyId === r.id} onClick={() => remove(r)}>
+                        <button className="btn btn-danger btn-sm" disabled={busyId === r.id} onClick={() => remove(r)}>
                           Delete
                         </button>
                       </div>

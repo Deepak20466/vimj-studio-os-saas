@@ -19,6 +19,7 @@ from app.models.attendance import (
     StudentAttendance,
 )
 from app.models.class_session import ClassSession
+from app.models.coach_activity import CoachActivity
 from app.models.enrollment import StudentEnrollment
 from app.models.fee import FeeStatus, StudentFee
 from app.models.leave import CoachLeave, LeaveStatus
@@ -93,6 +94,19 @@ def main():
                 db.add(act)
                 db.flush()
             activities.append(act)
+        db.commit()
+
+        # Assign each activity's round-robin coach (same pairing the classes loop below
+        # uses) so coaches actually see their roster/classes in the dashboard.
+        for idx, activity in enumerate(activities):
+            coach = coaches[idx % len(coaches)]
+            exists = (
+                db.query(CoachActivity)
+                .filter(CoachActivity.coach_id == coach.id, CoachActivity.activity_id == activity.id)
+                .first()
+            )
+            if not exists:
+                db.add(CoachActivity(coach_id=coach.id, activity_id=activity.id))
         db.commit()
 
         # Enroll students round-robin across activities

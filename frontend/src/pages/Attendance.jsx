@@ -167,8 +167,8 @@ export default function Attendance() {
                   <td>{m.activity_name}</td>
                   <td>{m.date}</td>
                   <td>{m.end_time}</td>
-                  <td>
-                    <button className="btn btn-secondary" onClick={() => openReassign(m)}>
+                  <td className="table-actions">
+                    <button className="btn btn-secondary btn-sm" onClick={() => openReassign(m)}>
                       Reassign
                     </button>
                   </td>
@@ -281,11 +281,11 @@ export default function Attendance() {
                     <StatusBadge status={r.status} />
                   </td>
                   <td>{r.marked_manually ? "Manual" : "Coach"}</td>
-                  <td>
-                    <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => openEdit(r)}>
+                  <td className="table-actions">
+                    <button className="btn btn-secondary btn-sm" onClick={() => openEdit(r)}>
                       Edit
                     </button>
-                    <button className="btn btn-danger" onClick={() => remove(r)}>
+                    <button className="btn btn-danger btn-sm" onClick={() => remove(r)}>
                       Delete
                     </button>
                   </td>

@@ -23,7 +23,8 @@ def upgrade() -> None:
         "batches",
         sa.Column("active_months", sa.String(60), nullable=False, server_default=ALL_MONTHS),
     )
-    op.alter_column("batches", "active_months", server_default=None)
+    with op.batch_alter_table("batches") as batch_op:
+        batch_op.alter_column("active_months", server_default=None)
 
 
 def downgrade() -> None:

@@ -153,17 +153,17 @@ export default function Coaches() {
                   <td>
                     <span className={`badge ${c.is_active ? "badge-present" : "badge-absent"}`}>{c.is_active ? "Active" : "Inactive"}</span>
                   </td>
-                  <td>
-                    <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => openActivities(c)}>
+                  <td className="table-actions">
+                    <button className="btn btn-secondary btn-sm" onClick={() => openActivities(c)}>
                       Activities
                     </button>
-                    <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => openEdit(c)}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)}>
                       Edit
                     </button>
-                    <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => toggleActive(c)}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => toggleActive(c)}>
                       {c.is_active ? "Deactivate" : "Activate"}
                     </button>
-                    <button className="btn btn-danger" onClick={() => remove(c)}>
+                    <button className="btn btn-danger btn-sm" onClick={() => remove(c)}>
                       Delete
                     </button>
                   </td>

@@ -124,20 +124,20 @@ export default function Activities() {
                   <td>{a.name}</td>
                   <td>{a.capacity}</td>
                   <td>₹{a.monthly_fee}</td>
-                  <td>
-                    <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => setManaging(a)}>
+                  <td className="table-actions">
+                    <button className="btn btn-secondary btn-sm" onClick={() => setManaging(a)}>
                       Manage
                     </button>
-                    <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => setReporting(a)}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => setReporting(a)}>
                       Report
                     </button>
-                    <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => openEdit(a)}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => openEdit(a)}>
                       Edit
                     </button>
-                    <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => setViewingSessions(a)}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => setViewingSessions(a)}>
                       Sessions
                     </button>
-                    <button className="btn btn-danger" onClick={() => remove(a)}>
+                    <button className="btn btn-danger btn-sm" onClick={() => remove(a)}>
                       Delete
                     </button>
                   </td>
@@ -269,14 +269,14 @@ function SessionsModal({ activity, onClose }) {
                   <td>{b.days_of_week.join(", ")}</td>
                   <td>{b.location}</td>
                   <td>{coachName(b.coach_id)}</td>
-                  <td>
-                    <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => setViewingBatch(b)}>
+                  <td className="table-actions">
+                    <button className="btn btn-secondary btn-sm" onClick={() => setViewingBatch(b)}>
                       Roster
                     </button>
-                    <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => openEdit(b)}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => openEdit(b)}>
                       Edit
                     </button>
-                    <button className="btn btn-danger" onClick={() => removeBatch(b)}>
+                    <button className="btn btn-danger btn-sm" onClick={() => removeBatch(b)}>
                       Delete
                     </button>
                   </td>
@@ -409,12 +409,12 @@ function SessionFormModal({ activity, coaches, editing, onClose, onSaved }) {
         </div>
         <div className="field">
           <label>Days</label>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <div className="btn-group">
             {DAYS.map((d) => (
               <button
                 type="button"
                 key={d}
-                className={form.days_of_week.includes(d) ? "btn btn-primary" : "btn btn-secondary"}
+                className={`btn btn-sm btn-toggle ${form.days_of_week.includes(d) ? "btn-primary" : "btn-secondary"}`}
                 onClick={() => toggleDay(d)}
               >
                 {d}
@@ -424,12 +424,12 @@ function SessionFormModal({ activity, coaches, editing, onClose, onSaved }) {
         </div>
         <div className="field">
           <label>Months</label>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <div className="btn-group">
             {MONTHS.map((m) => (
               <button
                 type="button"
                 key={m.value}
-                className={form.active_months.includes(m.value) ? "btn btn-primary" : "btn btn-secondary"}
+                className={`btn btn-sm btn-toggle ${form.active_months.includes(m.value) ? "btn-primary" : "btn-secondary"}`}
                 onClick={() => toggleMonth(m.value)}
               >
                 {m.label}
@@ -715,11 +715,11 @@ function ActivityManageModal({ activity, onClose }) {
                   <td>
                     {c.start_time} - {c.end_time}
                   </td>
-                  <td>
-                    <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => openEditClass(c)}>
+                  <td className="table-actions">
+                    <button className="btn btn-secondary btn-sm" onClick={() => openEditClass(c)}>
                       Edit
                     </button>
-                    <button className="btn btn-danger" onClick={() => removeClass(c)}>
+                    <button className="btn btn-danger btn-sm" onClick={() => removeClass(c)}>
                       Delete
                     </button>
                   </td>
@@ -756,8 +756,8 @@ function ActivityManageModal({ activity, onClose }) {
                 <tr key={s.id}>
                   <td>{s.name}</td>
                   <td>{s.email}</td>
-                  <td>
-                    <button className="btn btn-danger" onClick={() => unenroll(s)}>
+                  <td className="table-actions">
+                    <button className="btn btn-danger btn-sm" onClick={() => unenroll(s)}>
                       Remove
                     </button>
                   </td>

@@ -125,8 +125,8 @@ export default function Reports() {
                     <td>{a.avg_attendance_pct}%</td>
                     <td>₹{a.revenue.toLocaleString()}</td>
                     <td>₹{a.revenue_collected.toLocaleString()}</td>
-                    <td>
-                      <button className="btn btn-secondary" onClick={() => setViewingActivity(a)}>
+                    <td className="table-actions">
+                      <button className="btn btn-secondary btn-sm" onClick={() => setViewingActivity(a)}>
                         View
                       </button>
                     </td>

@@ -186,16 +186,16 @@ export default function CoachClasses() {
                   <td>{activityNames[c.activity_id] || c.activity_id}</td>
                   <td>{c.start_time}</td>
                   <td>{c.end_time}</td>
-                  <td style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    <button className="btn btn-primary" onClick={() => openRoster(c)}>
+                  <td className="table-actions">
+                    <button className="btn btn-primary btn-sm" onClick={() => openRoster(c)}>
                       Mark Attendance
                     </button>
                     {classHasEnded(c) && (
                       <>
-                        <button className="btn btn-secondary" onClick={() => setPhotoFor(c)}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => setPhotoFor(c)}>
                           Batch Photo
                         </button>
-                        <button className="btn btn-danger" onClick={() => openSkipReason(c)}>
+                        <button className="btn btn-danger btn-sm" onClick={() => openSkipReason(c)}>
                           Not Conducted
                         </button>
                       </>
@@ -240,7 +240,7 @@ export default function CoachClasses() {
                     </td>
                     <td>
                       {done[s.id] ? (
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        <div className="table-actions">
                           <span className={`badge badge-${done[s.id].status.toLowerCase()}`}>{done[s.id].status}</span>
                           <select
                             value={done[s.id].status}
@@ -252,28 +252,28 @@ export default function CoachClasses() {
                             <option value="ABSENT">Absent</option>
                             <option value="LEAVE">Leave</option>
                           </select>
-                          <button className="btn btn-danger" disabled={markingId === s.id} onClick={() => deleteAttendance(s.id)}>
+                          <button className="btn btn-danger btn-sm" disabled={markingId === s.id} onClick={() => deleteAttendance(s.id)}>
                             Delete
                           </button>
                         </div>
                       ) : (
-                        <div style={{ display: "flex", gap: 6 }}>
+                        <div className="table-actions">
                           <button
-                            className="btn btn-primary"
+                            className="btn btn-primary btn-sm"
                             disabled={markingId === s.id}
                             onClick={() => handleMark(s, "PRESENT")}
                           >
                             Present
                           </button>
                           <button
-                            className="btn btn-secondary"
+                            className="btn btn-secondary btn-sm"
                             disabled={markingId === s.id}
                             onClick={() => handleMark(s, "ABSENT")}
                           >
                             Absent
                           </button>
                           <button
-                            className="btn btn-secondary"
+                            className="btn btn-secondary btn-sm"
                             disabled={markingId === s.id}
                             onClick={() => handleMark(s, "LEAVE")}
                           >

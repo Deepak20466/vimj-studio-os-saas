@@ -141,11 +141,11 @@ export default function Compliance() {
                   <td>{p.activity_name}</td>
                   <td>{p.class_date}</td>
                   <td>{p.late_reason || "-"}</td>
-                  <td>
-                    <button className="btn btn-primary" style={{ marginRight: 6 }} disabled={busyId === p.id} onClick={() => decide(p, true)}>
+                  <td className="table-actions">
+                    <button className="btn btn-primary btn-sm" disabled={busyId === p.id} onClick={() => decide(p, true)}>
                       Approve
                     </button>
-                    <button className="btn btn-danger" disabled={busyId === p.id} onClick={() => decide(p, false)}>
+                    <button className="btn btn-danger btn-sm" disabled={busyId === p.id} onClick={() => decide(p, false)}>
                       Reject
                     </button>
                   </td>
@@ -220,8 +220,8 @@ export default function Compliance() {
                         <span className={`badge badge-${STATE_BADGE[r.state] || "pending"}`}>{STATE_LABELS[r.state] || r.state}</span>
                       </td>
                       <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{r.skip_reason || r.late_reason || "-"}</td>
-                      <td>
-                        <button className="btn btn-secondary" onClick={() => viewPhotos(r.class_id)}>
+                      <td className="table-actions">
+                        <button className="btn btn-secondary btn-sm" onClick={() => viewPhotos(r.class_id)}>
                           Photos
                         </button>
                       </td>

@@ -113,21 +113,21 @@ export default function Leave() {
                   <td>
                     <StatusBadge status={l.status} />
                   </td>
-                  <td>
+                  <td className="table-actions">
                     {l.status === "PENDING" && (
                       <>
-                        <button className="btn btn-primary" style={{ marginRight: 6 }} onClick={() => openDecision(l, "approve")}>
+                        <button className="btn btn-primary btn-sm" onClick={() => openDecision(l, "approve")}>
                           Approve
                         </button>
-                        <button className="btn btn-danger" style={{ marginRight: 6 }} onClick={() => openDecision(l, "reject")}>
+                        <button className="btn btn-danger btn-sm" onClick={() => openDecision(l, "reject")}>
                           Reject
                         </button>
                       </>
                     )}
-                    <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => openEdit(l)}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => openEdit(l)}>
                       Edit
                     </button>
-                    <button className="btn btn-danger" onClick={() => remove(l)}>
+                    <button className="btn btn-danger btn-sm" onClick={() => remove(l)}>
                       Delete
                     </button>
                   </td>

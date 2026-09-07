@@ -451,6 +451,24 @@ thead th {
 tbody td {
   padding: 10px 12px;
   border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.table-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-toggle {
+  min-width: 56px;
 }
 
 tbody tr:hover {
@@ -489,13 +507,23 @@ tbody tr:hover {
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 9px 18px;
+  height: 38px;
+  padding: 0 18px;
   border-radius: 999px;
   border: none;
   font-size: 0.85rem;
   font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
   transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+}
+
+.btn-sm {
+  height: 32px;
+  padding: 0 14px;
+  font-size: 0.78rem;
 }
 
 .btn:active {

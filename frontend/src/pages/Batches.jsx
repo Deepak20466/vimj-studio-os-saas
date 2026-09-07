@@ -374,14 +374,14 @@ export default function Batches() {
                   <td>{b.days_of_week.join(", ")}</td>
                   <td>{monthsLabel(b.active_months)}</td>
                   <td>{coachName(b.coach_id)}</td>
-                  <td>
-                    <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => openGenerate(b)}>
+                  <td className="table-actions">
+                    <button className="btn btn-secondary btn-sm" onClick={() => openGenerate(b)}>
                       Generate Sessions
                     </button>
-                    <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => openEdit(b)}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => openEdit(b)}>
                       Edit
                     </button>
-                    <button className="btn btn-danger" onClick={() => remove(b)}>
+                    <button className="btn btn-danger btn-sm" onClick={() => remove(b)}>
                       Delete
                     </button>
                   </td>
@@ -445,12 +445,12 @@ export default function Batches() {
             </div>
             <div className="field">
               <label>Days</label>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <div className="btn-group">
                 {DAYS.map((d) => (
                   <button
                     type="button"
                     key={d}
-                    className={form.days_of_week.includes(d) ? "btn btn-primary" : "btn btn-secondary"}
+                    className={`btn btn-sm btn-toggle ${form.days_of_week.includes(d) ? "btn-primary" : "btn-secondary"}`}
                     onClick={() => toggleDay(d)}
                   >
                     {d}
@@ -464,12 +464,12 @@ export default function Batches() {
                 Choose which months this schedule is active in (e.g. pick just September onward). Sessions keep
                 auto-generating in those months every year until you change this.
               </p>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <div className="btn-group">
                 {MONTHS.map((m) => (
                   <button
                     type="button"
                     key={m.value}
-                    className={form.active_months.includes(m.value) ? "btn btn-primary" : "btn btn-secondary"}
+                    className={`btn btn-sm btn-toggle ${form.active_months.includes(m.value) ? "btn-primary" : "btn-secondary"}`}
                     onClick={() => toggleMonth(m.value)}
                   >
                     {m.label}

@@ -140,17 +140,17 @@ export default function CoachStudents() {
                     <tr key={s.id}>
                       <td>{s.name}</td>
                       <td>{displayEmail(s.email)}</td>
-                      <td>
-                        <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={copyFeeReminder} title="Copy fee reminder message">
+                      <td className="table-actions">
+                        <button className="btn btn-secondary btn-sm" onClick={copyFeeReminder} title="Copy fee reminder message">
                           Copy
                         </button>
-                        <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => setPhotoFor(s)}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => setPhotoFor(s)}>
                           Capture Photo
                         </button>
-                        <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => openEdit(s)}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(s)}>
                           Edit
                         </button>
-                        <button className="btn btn-danger" onClick={() => removeStudent(s)}>
+                        <button className="btn btn-danger btn-sm" onClick={() => removeStudent(s)}>
                           Delete
                         </button>
                       </td>

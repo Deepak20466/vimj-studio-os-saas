@@ -239,11 +239,11 @@ export default function Fees() {
                   <td>₹{r.amount}</td>
                   <td>{r.payment_mode}</td>
                   <td>{r.note || "-"}</td>
-                  <td>
-                    <button className="btn btn-primary" style={{ marginRight: 6 }} disabled={receiptBusyId === r.id} onClick={() => decideReceipt(r, true)}>
+                  <td className="table-actions">
+                    <button className="btn btn-primary btn-sm" disabled={receiptBusyId === r.id} onClick={() => decideReceipt(r, true)}>
                       Approve
                     </button>
-                    <button className="btn btn-danger" disabled={receiptBusyId === r.id} onClick={() => decideReceipt(r, false)}>
+                    <button className="btn btn-danger btn-sm" disabled={receiptBusyId === r.id} onClick={() => decideReceipt(r, false)}>
                       Reject
                     </button>
                   </td>
@@ -284,8 +284,8 @@ export default function Fees() {
                     {r.month}/{r.year}
                   </td>
                   <td>₹{r.amount}</td>
-                  <td>
-                    <button className="btn btn-primary" onClick={() => downloadReceiptPdf(r)}>
+                  <td className="table-actions">
+                    <button className="btn btn-primary btn-sm" onClick={() => downloadReceiptPdf(r)}>
                       Receipt (PDF)
                     </button>
                   </td>
@@ -326,14 +326,14 @@ export default function Fees() {
                     {d.month}/{d.year}
                   </td>
                   <td style={{ maxWidth: 320, whiteSpace: "pre-wrap", fontSize: "0.8rem" }}>{d.message}</td>
-                  <td>
-                    <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => copyMessage(d.message)}>
+                  <td className="table-actions">
+                    <button className="btn btn-secondary btn-sm" onClick={() => copyMessage(d.message)}>
                       Copy
                     </button>
-                    <button className="btn btn-primary" style={{ marginRight: 6 }} disabled={reminderBusyId === d.id} onClick={() => decideReminder(d, true)}>
+                    <button className="btn btn-primary btn-sm" disabled={reminderBusyId === d.id} onClick={() => decideReminder(d, true)}>
                       Approve &amp; Send
                     </button>
-                    <button className="btn btn-danger" disabled={reminderBusyId === d.id} onClick={() => decideReminder(d, false)}>
+                    <button className="btn btn-danger btn-sm" disabled={reminderBusyId === d.id} onClick={() => decideReminder(d, false)}>
                       Reject
                     </button>
                   </td>
@@ -387,25 +387,25 @@ export default function Fees() {
                   <td>
                     <StatusBadge status={f.status} />
                   </td>
-                  <td>
+                  <td className="table-actions">
                     {f.status !== "PAID" ? (
                       <>
-                        <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => remind(f)}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => remind(f)}>
                           Remind
                         </button>
-                        <button className="btn btn-primary" style={{ marginRight: 6 }} onClick={() => markPaid(f)}>
+                        <button className="btn btn-primary btn-sm" onClick={() => markPaid(f)}>
                           Mark Paid
                         </button>
                       </>
                     ) : (
-                      <button className="btn btn-primary" style={{ marginRight: 6 }} onClick={() => downloadReceipt(f)}>
+                      <button className="btn btn-primary btn-sm" onClick={() => downloadReceipt(f)}>
                         Receipt (PDF)
                       </button>
                     )}
-                    <button className="btn btn-secondary" style={{ marginRight: 6 }} onClick={() => openEdit(f)}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => openEdit(f)}>
                       Edit
                     </button>
-                    <button className="btn btn-danger" onClick={() => remove(f)}>
+                    <button className="btn btn-danger btn-sm" onClick={() => remove(f)}>
                       Delete
                     </button>
                   </td>
