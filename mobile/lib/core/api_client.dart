@@ -138,4 +138,21 @@ class ApiClient {
       _request('PUT', path, query: query, body: body, auth: auth);
 
   Future<dynamic> delete(String path, {bool auth = true}) => _request('DELETE', path, auth: auth);
+
+  /// For endpoints that return a raw file (CSV/PDF export, receipt PDF) rather than JSON.
+  Future<List<int>> getBytes(String path, {Map<String, dynamic>? query}) async {
+    final uri = _uri(path, query);
+    final headers = await _headers();
+    final response = await _http.get(uri, headers: headers);
+    if (response.statusCode == 401) {
+      final refreshed = await _tryRefresh();
+      if (refreshed) return getBytes(path, query: query);
+      await AuthStorage.clear();
+      throw ApiException(401, 'Session expired. Please log in again.');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(response.statusCode, 'Download failed (${response.statusCode})');
+    }
+    return response.bodyBytes;
+  }
 }

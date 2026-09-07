@@ -219,28 +219,41 @@ admin directed to the web dashboard instead; changed by explicit decision
 (2026-09-07) to also support admin login natively in the app.
 
 ### Coach App
-- **Dashboard:** Today's classes, mark attendance button
+Bottom-nav shell (`lib/features/coach/`) with 4 primary tabs (Dashboard,
+Classes, Leave, Swaps) plus a "More" sheet — same overflow pattern as the
+web dashboard's `Layout.jsx` — for My Students, Fee Receipts, Fee Reminders,
+Chat, and Profile. Full parity with the web coach dashboard's 9 sections
+(as of 2026-09-08):
+- **Dashboard:** Today's classes, mark attendance button, facility entry/exit
 - **Mark Attendance:** GPS validation (50m), camera for selfie, confirmation with timestamp
-- **Auto-reminder:** Notification 15 min after class (with whatsup)
-- **Classes:** View assigned classes, mark multiple students
-- **Profile:** View attendance %, salary history, salary acknowledgment (10th)
+- **Classes:** View assigned classes, mark multiple students, flag not-conducted, late-mark reason, batch photo
+- **My Students:** Own roster grouped by assigned activity, add a student
 - **Leave:** Submit request, view status, view approved/rejected history
-- **Swaps:** View swap requests, accept/reject
+- **Salary / Attendance history:** Folded into Profile — attendance %, salary history, acknowledgment (10th)
+- **Fee Receipts:** Record a fee collected in person, pending admin approval
+- **Fee Reminders:** Draft a reminder message, pending admin approval, copy once approved
+- **Swaps:** View swap requests, accept/reject (ahead of web here — web has no coach-facing swap UI yet)
+- **Chat:** Direct line to admin
 - **Offline:** Queue marking offline, sync when online
 - Biometric login (fingerprint)
 - Dark/light theme
 - Push notifications (with sms)
 
 ### Admin App
-Same login screen, routed by role. Drawer-nav shell (`lib/features/admin/`)
-covering: Dashboard (stats + fee pie chart + coaches missing attendance),
-Students (CRUD, activate/deactivate), Coaches (CRUD, manage activities,
-activate/deactivate), Activities (CRUD), Attendance (daily missing + manual
-entry), Leave (approve/reject with note), Fees (unpaid list, mark paid,
-remind, create), Salary (list, create). Web dashboard remains the fuller
-admin surface (batches/classes/roster management, business analytics,
-reports/exports, chat, settings) — the mobile admin view is the
-day-to-day-operations subset, not full parity.
+Same login screen, routed by role. Drawer-nav shell (`lib/features/admin/`),
+full parity with all 14 web admin dashboard sections (as of 2026-09-08):
+Dashboard (stats + fee pie chart + coaches missing attendance), Students
+(CRUD, activate/deactivate, individual report + CSV/PDF export via the
+share sheet), Coaches (CRUD, manage activities, activate/deactivate,
+individual report + export), Activities (CRUD), Batches (recurring
+schedule CRUD, generate-sessions, day/month pickers), Attendance (daily
+missing + manual entry), Compliance (submitted/pending/delayed tracking,
+late-attendance approval), Leave (approve/reject with note), Fees (unpaid
+list, mark paid, remind, create), Salary (list, create, edit, delete),
+Reports (business analytics), Chat (message any coach), Settings (own +
+coach credentials), About (academy profile). CSV/PDF export opens the
+native share sheet (`share_plus`) since there's no browser download folder
+on mobile.
 
 ---
 
