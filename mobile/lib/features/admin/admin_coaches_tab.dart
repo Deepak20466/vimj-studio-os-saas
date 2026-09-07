@@ -38,6 +38,7 @@ class _AdminCoachesTabState extends State<AdminCoachesTab> {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (_) => _CoachForm(coach: coach),
     );
     if (saved == true) _load();
@@ -47,6 +48,7 @@ class _AdminCoachesTabState extends State<AdminCoachesTab> {
     await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (_) => _CoachActivitiesSheet(coach: c),
     );
   }

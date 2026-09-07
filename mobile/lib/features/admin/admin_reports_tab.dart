@@ -18,11 +18,18 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
   List<dynamic> _hundredPct = [];
   late int _month = DateTime.now().month;
   late int _year = DateTime.now().year;
+  late final _yearCtrl = TextEditingController(text: _year.toString());
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _yearCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -87,7 +94,7 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
                 child: TextField(
                   decoration: const InputDecoration(labelText: 'Year'),
                   keyboardType: TextInputType.number,
-                  controller: TextEditingController(text: _year.toString()),
+                  controller: _yearCtrl,
                   onSubmitted: (v) {
                     _year = int.tryParse(v) ?? _year;
                     _load();

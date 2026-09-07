@@ -38,6 +38,7 @@ class _AdminStudentsTabState extends State<AdminStudentsTab> {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (_) => _StudentForm(student: student),
     );
     if (saved == true) _load();

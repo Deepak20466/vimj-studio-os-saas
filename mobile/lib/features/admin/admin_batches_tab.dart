@@ -54,6 +54,7 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (_) => _BatchForm(batch: batch, activities: _activities, coaches: _coaches),
     );
     if (saved == true) _load();

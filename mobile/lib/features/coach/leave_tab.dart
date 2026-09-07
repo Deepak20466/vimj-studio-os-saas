@@ -36,6 +36,7 @@ class _LeaveTabState extends State<LeaveTab> {
     final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (_) => const _NewLeaveForm(),
     );
     if (result == true) _load();

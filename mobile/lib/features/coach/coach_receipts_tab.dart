@@ -52,6 +52,7 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (_) => _ReceiptForm(students: _students),
     );
     if (saved == true) _load();

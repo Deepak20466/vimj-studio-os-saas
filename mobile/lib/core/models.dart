@@ -71,13 +71,15 @@ class RosterStudent {
   final int id;
   final String name;
   final String email;
+  final int? enrollmentId;
 
-  RosterStudent({required this.id, required this.name, required this.email});
+  RosterStudent({required this.id, required this.name, required this.email, this.enrollmentId});
 
   factory RosterStudent.fromJson(Map<String, dynamic> json) => RosterStudent(
         id: json['id'] as int,
         name: json['name'] as String,
         email: json['email'] as String,
+        enrollmentId: json['enrollment_id'] as int?,
       );
 }
 
@@ -520,6 +522,18 @@ class PendingLateSubmission {
         activityName: json['activity_name'] as String,
         classDate: json['class_date'] as String,
         lateReason: json['late_reason'] as String?,
+      );
+}
+
+class ClassPhoto {
+  final int id;
+  final int classId;
+
+  ClassPhoto({required this.id, required this.classId});
+
+  factory ClassPhoto.fromJson(Map<String, dynamic> json) => ClassPhoto(
+        id: json['id'] as int,
+        classId: json['class_id'] as int,
       );
 }
 

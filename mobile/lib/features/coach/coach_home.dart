@@ -51,6 +51,7 @@ class _CoachHomeState extends State<CoachHome> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (sheetContext) => SafeArea(
         child: Wrap(
           children: [

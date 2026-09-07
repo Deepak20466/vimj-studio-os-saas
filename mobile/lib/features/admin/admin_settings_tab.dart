@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
+import '../../core/models.dart';
 
 class AdminSettingsTab extends StatefulWidget {
   const AdminSettingsTab({super.key});
@@ -17,10 +18,15 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
   final _currentPasswordCtrl = TextEditingController();
   final _newPasswordCtrl = TextEditingController();
 
+  List<Coach> _coaches = [];
+  bool _loadingCoaches = true;
+  String _coachSearch = '';
+
   @override
   void initState() {
     super.initState();
     _load();
+    _loadCoaches();
   }
 
   Future<void> _load() async {
@@ -34,6 +40,28 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _loadCoaches() async {
+    setState(() => _loadingCoaches = true);
+    try {
+      final data = await ApiClient.instance.get('/coaches', query: {'search': _coachSearch.isEmpty ? null : _coachSearch}) as List;
+      _coaches = data.map((e) => Coach.fromJson(e as Map<String, dynamic>)).toList();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _loadingCoaches = false);
+    }
+  }
+
+  Future<void> _openCoachCredentials(Coach coach) async {
+    await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _CoachCredentialsForm(coach: coach),
+    );
+    _loadCoaches();
   }
 
   Future<void> _submit() async {
@@ -104,7 +132,109 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
             ],
           ),
         ),
+        const SizedBox(height: 20),
+        const Text('Coach Accounts', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        const SizedBox(height: 8),
+        TextField(
+          decoration: const InputDecoration(hintText: 'Search by name or email...', prefixIcon: Icon(Icons.search)),
+          onChanged: (v) {
+            _coachSearch = v;
+            _loadCoaches();
+          },
+        ),
+        const SizedBox(height: 12),
+        _loadingCoaches
+            ? const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()))
+            : _coaches.isEmpty
+                ? const Padding(padding: EdgeInsets.all(16), child: Center(child: Text('No coaches found.')))
+                : Column(
+                    children: _coaches
+                        .map((c) => Card(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              child: ListTile(
+                                title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                subtitle: Text(c.email),
+                                trailing: TextButton(
+                                  onPressed: () => _openCoachCredentials(c),
+                                  child: const Text('Change Login'),
+                                ),
+                              ),
+                            ))
+                        .toList(),
+                  ),
       ],
+    );
+  }
+}
+
+class _CoachCredentialsForm extends StatefulWidget {
+  final Coach coach;
+  const _CoachCredentialsForm({required this.coach});
+
+  @override
+  State<_CoachCredentialsForm> createState() => _CoachCredentialsFormState();
+}
+
+class _CoachCredentialsFormState extends State<_CoachCredentialsForm> {
+  late final _emailCtrl = TextEditingController(text: widget.coach.email);
+  final _passwordCtrl = TextEditingController();
+  bool _saving = false;
+
+  Future<void> _submit() async {
+    final body = <String, dynamic>{};
+    if (_emailCtrl.text.trim().isNotEmpty && _emailCtrl.text.trim() != widget.coach.email) body['email'] = _emailCtrl.text.trim();
+    if (_passwordCtrl.text.isNotEmpty) body['password'] = _passwordCtrl.text;
+    if (body.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Change the login email or password before saving')));
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await ApiClient.instance.put('/coaches/${widget.coach.id}', body: body);
+      if (mounted) {
+        Navigator.of(context).pop(true);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Coach credentials updated')));
+      }
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _passwordCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Change Credentials — ${widget.coach.name}', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 16),
+            TextField(controller: _emailCtrl, decoration: const InputDecoration(labelText: 'Login Email (User ID)')),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _passwordCtrl,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'New Password (optional)'),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _saving ? null : _submit,
+              child: _saving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Save'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

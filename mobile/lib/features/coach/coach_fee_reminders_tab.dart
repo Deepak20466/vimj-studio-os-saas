@@ -53,6 +53,7 @@ class _CoachFeeRemindersTabState extends State<CoachFeeRemindersTab> {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (_) => _ReminderForm(students: _students),
     );
     if (saved == true) _load();

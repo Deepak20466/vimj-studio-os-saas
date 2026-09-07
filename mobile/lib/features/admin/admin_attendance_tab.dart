@@ -36,6 +36,7 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
     final marked = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (_) => const _ManualEntryForm(),
     );
     if (marked == true) _load();

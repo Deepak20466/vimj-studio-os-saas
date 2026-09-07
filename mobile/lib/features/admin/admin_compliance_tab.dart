@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
+import '../../core/api_config.dart';
 import '../../core/app_theme.dart';
+import '../../core/auth_storage.dart';
 import '../../core/models.dart';
 
 class AdminComplianceTab extends StatefulWidget {
@@ -46,13 +48,56 @@ class _AdminComplianceTabState extends State<AdminComplianceTab> {
   Future<void> _decide(PendingLateSubmission p, bool approve) async {
     setState(() => _busyId = p.id);
     try {
-      await ApiClient.instance.put('/compliance/late/${p.id}/${approve ? 'approve' : 'reject'}');
+      await ApiClient.instance.put('/compliance/late/${p.id}/${approve ? 'approve' : 'reject'}', body: {});
       _load();
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _busyId = null);
     }
+  }
+
+  Future<void> _viewPhotos(int classId) async {
+    List<ClassPhoto> photos;
+    try {
+      final data = await ApiClient.instance.get('/compliance/class/$classId/photos') as List;
+      photos = data.map((e) => ClassPhoto.fromJson(e as Map<String, dynamic>)).toList();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      return;
+    }
+    if (!mounted) return;
+    if (photos.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No photos uploaded for this class.')));
+      return;
+    }
+    final session = await AuthStorage.load();
+    final headers = {'Authorization': 'Bearer ${session?.accessToken ?? ''}'};
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Batch Photos'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: GridView.builder(
+            shrinkWrap: true,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, mainAxisSpacing: 8, crossAxisSpacing: 8),
+            itemCount: photos.length,
+            itemBuilder: (context, i) => ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.network(
+                '${ApiConfig.baseUrl}/compliance/class-photo/${photos[i].id}',
+                headers: headers,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.broken_image_outlined)),
+              ),
+            ),
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+      ),
+    );
   }
 
   Color _stateColor(String state) {
@@ -130,9 +175,15 @@ class _AdminComplianceTabState extends State<AdminComplianceTab> {
                       child: ListTile(
                         title: Text('${r.activityName} · ${r.coachName}'),
                         subtitle: Text('${r.classDate} · ends ${r.endTime}${r.skipReason != null ? "\n${r.skipReason}" : ""}'),
-                        trailing: Chip(
-                          label: Text(r.state, style: const TextStyle(fontSize: 11, color: Colors.white)),
-                          backgroundColor: _stateColor(r.state),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(icon: const Icon(Icons.photo_library_outlined), tooltip: 'Photos', onPressed: () => _viewPhotos(r.classId)),
+                            Chip(
+                              label: Text(r.state, style: const TextStyle(fontSize: 11, color: Colors.white)),
+                              backgroundColor: _stateColor(r.state),
+                            ),
+                          ],
                         ),
                       ),
                     ),

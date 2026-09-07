@@ -46,6 +46,7 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (_) => _AddStudentForm(activities: _activities),
     );
     if (saved == true) _load();

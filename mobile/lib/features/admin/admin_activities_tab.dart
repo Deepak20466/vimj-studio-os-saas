@@ -36,6 +36,7 @@ class _AdminActivitiesTabState extends State<AdminActivitiesTab> {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (_) => _ActivityForm(activity: activity),
     );
     if (saved == true) _load();
@@ -90,10 +91,14 @@ class _AdminActivitiesTabState extends State<AdminActivitiesTab> {
                             subtitle: Text('Capacity: ${a.capacity} · Monthly fee: ₹${a.monthlyFee}'),
                             trailing: PopupMenuButton<String>(
                               onSelected: (v) {
+                                if (v == 'manage') {
+                                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => _ManageActivityScreen(activity: a)));
+                                }
                                 if (v == 'edit') _openForm(activity: a);
                                 if (v == 'delete') _remove(a);
                               },
                               itemBuilder: (_) => [
+                                const PopupMenuItem(value: 'manage', child: Text('Manage (Classes/Roster)')),
                                 const PopupMenuItem(value: 'edit', child: Text('Edit')),
                                 const PopupMenuItem(value: 'delete', child: Text('Delete')),
                               ],
@@ -175,6 +180,305 @@ class _ActivityFormState extends State<_ActivityForm> {
             ElevatedButton(
               onPressed: _saving ? null : _submit,
               child: _saving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : Text(editing ? 'Save' : 'Create'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ManageActivityScreen extends StatefulWidget {
+  final Activity activity;
+  const _ManageActivityScreen({required this.activity});
+
+  @override
+  State<_ManageActivityScreen> createState() => _ManageActivityScreenState();
+}
+
+class _ManageActivityScreenState extends State<_ManageActivityScreen> with SingleTickerProviderStateMixin {
+  late final TabController _tabController = TabController(length: 2, vsync: this);
+  List<ClassSession> _classes = [];
+  List<RosterStudent> _roster = [];
+  List<Coach> _coaches = [];
+  List<Student> _allStudents = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final results = await Future.wait([
+        ApiClient.instance.get('/activities/${widget.activity.id}/classes'),
+        ApiClient.instance.get('/activities/${widget.activity.id}/roster'),
+        ApiClient.instance.get('/coaches'),
+        ApiClient.instance.get('/students'),
+      ]);
+      _classes = (results[0] as List).map((e) => ClassSession.fromJson(e as Map<String, dynamic>)).toList();
+      _roster = (results[1] as List).map((e) => RosterStudent.fromJson(e as Map<String, dynamic>)).toList();
+      _coaches = (results[2] as List).map((e) => Coach.fromJson(e as Map<String, dynamic>)).toList();
+      _allStudents = (results[3] as List).map((e) => Student.fromJson(e as Map<String, dynamic>)).toList();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _scheduleClass() async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _ScheduleClassForm(activityId: widget.activity.id, coaches: _coaches),
+    );
+    if (saved == true) _load();
+  }
+
+  Future<void> _removeClass(ClassSession c) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Remove class?'),
+        content: Text('Remove the class on ${c.date}? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove', style: TextStyle(color: AppColors.danger))),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ApiClient.instance.delete('/activities/classes/${c.id}');
+      _load();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<void> _enrollStudent() async {
+    final enrolled = _roster.map((r) => r.id).toSet();
+    final available = _allStudents.where((s) => !enrolled.contains(s.id)).toList();
+    if (available.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All students are already enrolled.')));
+      return;
+    }
+    final selected = await showDialog<int>(
+      context: context,
+      builder: (_) => SimpleDialog(
+        title: const Text('Enroll Student'),
+        children: available
+            .map((s) => SimpleDialogOption(onPressed: () => Navigator.pop(context, s.id), child: Text(s.name)))
+            .toList(),
+      ),
+    );
+    if (selected == null) return;
+    try {
+      await ApiClient.instance.post('/activities/enroll', body: {'student_id': selected, 'activity_id': widget.activity.id});
+      _load();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<void> _unenroll(RosterStudent s) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Remove from activity?'),
+        content: Text('Remove ${s.name} from ${widget.activity.name}?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove', style: TextStyle(color: AppColors.danger))),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ApiClient.instance.delete('/activities/enroll/${s.enrollmentId}');
+      _load();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  String _coachName(int id) => _coaches.firstWhere((c) => c.id == id, orElse: () => Coach(id: id, name: '#$id', email: '', isActive: true)).name;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.activity.name),
+        bottom: TabBar(controller: _tabController, tabs: const [Tab(text: 'Classes'), Tab(text: 'Roster')]),
+      ),
+      floatingActionButton: AnimatedBuilder(
+        animation: _tabController,
+        builder: (context, _) => FloatingActionButton.extended(
+          heroTag: 'manage-activity-fab',
+          onPressed: _tabController.index == 0 ? _scheduleClass : _enrollStudent,
+          icon: const Icon(Icons.add),
+          label: Text(_tabController.index == 0 ? 'Schedule Class' : 'Enroll Student'),
+        ),
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : TabBarView(
+              controller: _tabController,
+              children: [
+                RefreshIndicator(
+                  onRefresh: _load,
+                  child: _classes.isEmpty
+                      ? ListView(children: const [Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No classes scheduled yet.')))])
+                      : ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
+                          itemCount: _classes.length,
+                          itemBuilder: (context, i) {
+                            final c = _classes[i];
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              child: ListTile(
+                                title: Text(c.date),
+                                subtitle: Text('${c.startTime} - ${c.endTime} · Coach: ${_coachName(c.coachId)}'),
+                                trailing: IconButton(icon: const Icon(Icons.delete_outline, color: AppColors.danger), onPressed: () => _removeClass(c)),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+                RefreshIndicator(
+                  onRefresh: _load,
+                  child: _roster.isEmpty
+                      ? ListView(children: const [Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No students enrolled yet.')))])
+                      : ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
+                          itemCount: _roster.length,
+                          itemBuilder: (context, i) {
+                            final s = _roster[i];
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              child: ListTile(
+                                title: Text(s.name),
+                                subtitle: Text(s.email),
+                                trailing: IconButton(icon: const Icon(Icons.person_remove_outlined, color: AppColors.danger), onPressed: () => _unenroll(s)),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+class _ScheduleClassForm extends StatefulWidget {
+  final int activityId;
+  final List<Coach> coaches;
+  const _ScheduleClassForm({required this.activityId, required this.coaches});
+
+  @override
+  State<_ScheduleClassForm> createState() => _ScheduleClassFormState();
+}
+
+class _ScheduleClassFormState extends State<_ScheduleClassForm> {
+  int? _coachId;
+  DateTime _date = DateTime.now();
+  TimeOfDay _startTime = const TimeOfDay(hour: 7, minute: 0);
+  TimeOfDay _endTime = const TimeOfDay(hour: 8, minute: 0);
+  bool _saving = false;
+
+  String _fmtTime(TimeOfDay t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:00';
+
+  Future<void> _submit() async {
+    if (_coachId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select a coach')));
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await ApiClient.instance.post('/activities/classes', body: {
+        'activity_id': widget.activityId,
+        'coach_id': _coachId,
+        'date': _date.toIso8601String().substring(0, 10),
+        'start_time': _fmtTime(_startTime),
+        'end_time': _fmtTime(_endTime),
+      });
+      if (mounted) Navigator.of(context).pop(true);
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Schedule Class', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<int>(
+              initialValue: _coachId,
+              decoration: const InputDecoration(labelText: 'Coach'),
+              items: widget.coaches.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
+              onChanged: (v) => setState(() => _coachId = v),
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Date'),
+              subtitle: Text(_date.toIso8601String().substring(0, 10)),
+              onTap: () async {
+                final picked = await showDatePicker(context: context, initialDate: _date, firstDate: DateTime(2020), lastDate: DateTime(2100));
+                if (picked != null) setState(() => _date = picked);
+              },
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Start Time'),
+                    subtitle: Text(_startTime.format(context)),
+                    onTap: () async {
+                      final picked = await showTimePicker(context: context, initialTime: _startTime);
+                      if (picked != null) setState(() => _startTime = picked);
+                    },
+                  ),
+                ),
+                Expanded(
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('End Time'),
+                    subtitle: Text(_endTime.format(context)),
+                    onTap: () async {
+                      final picked = await showTimePicker(context: context, initialTime: _endTime);
+                      if (picked != null) setState(() => _endTime = picked);
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _saving ? null : _submit,
+              child: _saving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Create'),
             ),
           ],
         ),

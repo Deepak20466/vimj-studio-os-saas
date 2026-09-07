@@ -51,6 +51,7 @@ class _SwapTabState extends State<SwapTab> {
     final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (_) => const _NewSwapForm(),
     );
     if (result == true) _load();

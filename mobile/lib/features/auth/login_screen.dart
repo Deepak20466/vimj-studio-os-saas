@@ -117,18 +117,29 @@ class _LoginScreenState extends State<LoginScreen> {
                       TextFormField(
                         controller: _emailCtrl,
                         keyboardType: TextInputType.emailAddress,
-                        decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email_outlined)),
+                        // This card is always white regardless of the app's light/dark
+                        // theme setting, so the typed text color must be pinned dark too —
+                        // otherwise dark mode's default light input text is nearly
+                        // invisible here.
+                        style: const TextStyle(color: AppColors.text),
+                        decoration: const InputDecoration(
+                          labelText: 'Email',
+                          labelStyle: TextStyle(color: AppColors.textMuted),
+                          prefixIcon: Icon(Icons.email_outlined, color: AppColors.brandOrange),
+                        ),
                         validator: (v) => (v == null || !v.contains('@')) ? 'Enter a valid email' : null,
                       ),
                       const SizedBox(height: 14),
                       TextFormField(
                         controller: _passwordCtrl,
                         obscureText: _obscure,
+                        style: const TextStyle(color: AppColors.text),
                         decoration: InputDecoration(
                           labelText: 'Password',
-                          prefixIcon: const Icon(Icons.lock_outline),
+                          labelStyle: const TextStyle(color: AppColors.textMuted),
+                          prefixIcon: const Icon(Icons.lock_outline, color: AppColors.brandOrange),
                           suffixIcon: IconButton(
-                            icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
+                            icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility, color: AppColors.brandOrange),
                             onPressed: () => setState(() => _obscure = !_obscure),
                           ),
                         ),

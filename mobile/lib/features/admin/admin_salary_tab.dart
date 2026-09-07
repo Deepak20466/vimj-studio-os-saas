@@ -36,6 +36,7 @@ class _AdminSalaryTabState extends State<AdminSalaryTab> {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (_) => const _SalaryForm(),
     );
     if (saved == true) _load();
@@ -90,8 +91,8 @@ class _SalaryFormState extends State<_SalaryForm> {
   List<Coach> _coaches = [];
   int? _coachId;
   final _now = DateTime.now();
-  late int _month = _now.month;
-  late int _year = _now.year;
+  late final _monthCtrl = TextEditingController(text: _now.month.toString());
+  late final _yearCtrl = TextEditingController(text: _now.year.toString());
   final _amountCtrl = TextEditingController();
   bool _loadingCoaches = true;
   bool _saving = false;
@@ -122,8 +123,8 @@ class _SalaryFormState extends State<_SalaryForm> {
     try {
       await ApiClient.instance.post('/salary', body: {
         'coach_id': _coachId,
-        'month': _month,
-        'year': _year,
+        'month': int.tryParse(_monthCtrl.text.trim()) ?? _now.month,
+        'year': int.tryParse(_yearCtrl.text.trim()) ?? _now.year,
         'amount': _amountCtrl.text.trim(),
       });
       if (mounted) Navigator.of(context).pop(true);
@@ -136,6 +137,8 @@ class _SalaryFormState extends State<_SalaryForm> {
 
   @override
   void dispose() {
+    _monthCtrl.dispose();
+    _yearCtrl.dispose();
     _amountCtrl.dispose();
     super.dispose();
   }
@@ -166,8 +169,7 @@ class _SalaryFormState extends State<_SalaryForm> {
                   child: TextField(
                     decoration: const InputDecoration(labelText: 'Month'),
                     keyboardType: TextInputType.number,
-                    controller: TextEditingController(text: _month.toString()),
-                    onChanged: (v) => _month = int.tryParse(v) ?? _month,
+                    controller: _monthCtrl,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -175,8 +177,7 @@ class _SalaryFormState extends State<_SalaryForm> {
                   child: TextField(
                     decoration: const InputDecoration(labelText: 'Year'),
                     keyboardType: TextInputType.number,
-                    controller: TextEditingController(text: _year.toString()),
-                    onChanged: (v) => _year = int.tryParse(v) ?? _year,
+                    controller: _yearCtrl,
                   ),
                 ),
               ],
