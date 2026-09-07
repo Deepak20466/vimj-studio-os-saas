@@ -63,20 +63,32 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.brandBlue,
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            Icon(Icons.sports_gymnastics, color: Colors.white, size: 64),
-            SizedBox(height: 16),
-            Text(
-              'VIMJ Studio',
-              style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 24),
-            CircularProgressIndicator(color: Colors.white),
-          ],
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [AppColors.brandOrangeBright, AppColors.brandOrangeDark, AppColors.brandYellowBright],
+            stops: [0.0, 0.55, 1.0],
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Image.asset('assets/images/logo.jpeg', width: 76, height: 76, fit: BoxFit.cover),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'VIMJ Studio',
+                style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 24),
+              const CircularProgressIndicator(color: Colors.white),
+            ],
+          ),
         ),
       ),
     );
