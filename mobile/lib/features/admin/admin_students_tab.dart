@@ -76,6 +76,7 @@ class _AdminStudentsTabState extends State<AdminStudentsTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'admin-students-fab',
         onPressed: () => _openForm(),
         icon: const Icon(Icons.add),
         label: const Text('Add Student'),

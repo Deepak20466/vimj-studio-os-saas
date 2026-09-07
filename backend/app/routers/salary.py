@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User, UserRole
 from app.models.salary import CoachSalary
-from app.schemas.salary import SalaryCreate, SalaryAcknowledge, SalaryOut, SalaryAdminOut
+from app.schemas.salary import SalaryCreate, SalaryAcknowledge, SalaryOut, SalaryAdminOut, SalaryUpdate
 from app.security import require_admin, require_coach
 from app.services.audit import log_action
 from app.services.notifications import notify
@@ -40,6 +40,62 @@ def create_salary(
     db.commit()
     db.refresh(salary)
     return salary
+
+
+@router.put("/{salary_id}", response_model=SalaryOut)
+def update_salary(
+    salary_id: int,
+    payload: SalaryUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    salary = db.query(CoachSalary).filter(CoachSalary.id == salary_id).first()
+    if not salary:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Salary record not found")
+    if salary.acknowledged_date:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot edit a record the coach already acknowledged")
+
+    updates = payload.model_dump(exclude_unset=True)
+    new_month = updates.get("month", salary.month)
+    new_year = updates.get("year", salary.year)
+    if (new_month, new_year) != (salary.month, salary.year):
+        clash = (
+            db.query(CoachSalary)
+            .filter(
+                CoachSalary.coach_id == salary.coach_id,
+                CoachSalary.month == new_month,
+                CoachSalary.year == new_year,
+                CoachSalary.id != salary.id,
+            )
+            .first()
+        )
+        if clash:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Salary record already exists for this period")
+
+    for field, value in updates.items():
+        setattr(salary, field, value)
+
+    log_action(db, current_user.id, "UPDATE", "CoachSalary", salary.id)
+    db.commit()
+    db.refresh(salary)
+    return salary
+
+
+@router.delete("/{salary_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_salary(
+    salary_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    salary = db.query(CoachSalary).filter(CoachSalary.id == salary_id).first()
+    if not salary:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Salary record not found")
+    if salary.acknowledged_date:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete a record the coach already acknowledged")
+
+    log_action(db, current_user.id, "DELETE", "CoachSalary", salary.id)
+    db.delete(salary)
+    db.commit()
 
 
 @router.post("/acknowledge", response_model=SalaryOut)

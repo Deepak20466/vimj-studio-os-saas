@@ -45,6 +45,7 @@ class _AdminSalaryTabState extends State<AdminSalaryTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'admin-salary-fab',
         onPressed: _openCreate,
         icon: const Icon(Icons.add),
         label: const Text('Add Salary'),

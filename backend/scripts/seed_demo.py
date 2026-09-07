@@ -20,6 +20,7 @@ from app.models.attendance import (
 )
 from app.models.class_session import ClassSession
 from app.models.coach_activity import CoachActivity
+from app.models.compliance import AttendanceSubmission, LateStatus
 from app.models.enrollment import StudentEnrollment
 from app.models.fee import FeeStatus, StudentFee
 from app.models.leave import CoachLeave, LeaveStatus
@@ -162,6 +163,16 @@ def main():
             if cls.date >= today:
                 continue
             roster = enrollment_map.get(cls.activity_id, [])
+            if roster and not db.query(AttendanceSubmission).filter(AttendanceSubmission.class_id == cls.id).first():
+                db.add(
+                    AttendanceSubmission(
+                        class_id=cls.id,
+                        coach_id=cls.coach_id,
+                        submitted_at=datetime.combine(cls.date, cls.end_time),
+                        is_late=False,
+                        late_status=LateStatus.NONE,
+                    )
+                )
             for student_id in roster:
                 exists = (
                     db.query(StudentAttendance)

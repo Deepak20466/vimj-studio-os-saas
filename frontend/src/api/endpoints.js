@@ -76,6 +76,8 @@ export const FeesAPI = {
 
 export const SalaryAPI = {
   create: (payload) => client.post("/salary", payload),
+  update: (id, payload) => client.put(`/salary/${id}`, payload),
+  remove: (id) => client.delete(`/salary/${id}`),
   coachHistory: (coachId) => client.get(`/salary/coach/${coachId}`),
   list: (params) => client.get("/salary", { params }),
 };

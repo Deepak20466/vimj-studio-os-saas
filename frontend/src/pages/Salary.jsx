@@ -11,6 +11,7 @@ export default function Salary() {
   const [coaches, setCoaches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ coach_id: "", month: new Date().getMonth() + 1, year: new Date().getFullYear(), amount: "" });
 
   const load = () => {
@@ -27,19 +28,43 @@ export default function Salary() {
   }, []);
 
   const openCreate = () => {
+    setEditing(null);
     setForm({ coach_id: "", month: new Date().getMonth() + 1, year: new Date().getFullYear(), amount: "" });
+    setShowForm(true);
+  };
+
+  const openEdit = (s) => {
+    setEditing(s);
+    setForm({ coach_id: s.coach_id, month: s.month, year: s.year, amount: s.amount });
     setShowForm(true);
   };
 
   const submit = async (e) => {
     e.preventDefault();
     try {
-      await SalaryAPI.create({ ...form, coach_id: Number(form.coach_id), month: Number(form.month), year: Number(form.year) });
-      toast.success("Salary record created");
+      if (editing) {
+        await SalaryAPI.update(editing.id, { month: Number(form.month), year: Number(form.year), amount: Number(form.amount) });
+        toast.success("Salary record updated");
+      } else {
+        await SalaryAPI.create({ ...form, coach_id: Number(form.coach_id), month: Number(form.month), year: Number(form.year) });
+        toast.success("Salary record created");
+      }
       setShowForm(false);
+      setEditing(null);
       load();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to create salary record");
+      toast.error(err.response?.data?.detail || `Failed to ${editing ? "update" : "create"} salary record`);
+    }
+  };
+
+  const remove = async (s) => {
+    if (!window.confirm(`Delete the ${MONTH_NAMES[s.month]} ${s.year} salary record for ${s.coach_name}? This cannot be undone.`)) return;
+    try {
+      await SalaryAPI.remove(s.id);
+      toast.success("Salary record deleted");
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to delete salary record");
     }
   };
 
@@ -66,6 +91,7 @@ export default function Salary() {
                 <th>Amount</th>
                 <th>Notified</th>
                 <th>Acknowledgement</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -84,6 +110,24 @@ export default function Salary() {
                       <StatusBadge status="pending" />
                     )}
                   </td>
+                  <td>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      disabled={!!s.acknowledged_date}
+                      title={s.acknowledged_date ? "Already acknowledged by coach" : "Edit"}
+                      onClick={() => openEdit(s)}
+                    >
+                      Edit
+                    </button>{" "}
+                    <button
+                      className="btn btn-danger btn-sm"
+                      disabled={!!s.acknowledged_date}
+                      title={s.acknowledged_date ? "Already acknowledged by coach" : "Delete"}
+                      onClick={() => remove(s)}
+                    >
+                      Delete
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -92,11 +136,17 @@ export default function Salary() {
       </div>
 
       {showForm && (
-        <Modal title="Record Monthly Salary" onClose={() => setShowForm(false)}>
+        <Modal
+          title={editing ? "Edit Salary Record" : "Record Monthly Salary"}
+          onClose={() => {
+            setShowForm(false);
+            setEditing(null);
+          }}
+        >
           <form onSubmit={submit}>
             <div className="field">
               <label>Coach</label>
-              <select value={form.coach_id} onChange={(e) => setForm({ ...form, coach_id: e.target.value })} required>
+              <select value={form.coach_id} onChange={(e) => setForm({ ...form, coach_id: e.target.value })} disabled={!!editing} required>
                 <option value="">Select coach</option>
                 {coaches.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -120,10 +170,17 @@ export default function Salary() {
               <input type="number" min={0} step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
             </div>
             <div className="modal-actions">
-              <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  setShowForm(false);
+                  setEditing(null);
+                }}
+              >
                 Cancel
               </button>
-              <button className="btn btn-primary">Create</button>
+              <button className="btn btn-primary">{editing ? "Save" : "Create"}</button>
             </div>
           </form>
         </Modal>

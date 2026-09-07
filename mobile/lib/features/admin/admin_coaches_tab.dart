@@ -84,6 +84,7 @@ class _AdminCoachesTabState extends State<AdminCoachesTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'admin-coaches-fab',
         onPressed: () => _openForm(),
         icon: const Icon(Icons.add),
         label: const Text('Add Coach'),

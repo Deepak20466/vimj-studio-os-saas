@@ -16,6 +16,12 @@ class SalaryAcknowledge(BaseModel):
     salary_id: int
 
 
+class SalaryUpdate(BaseModel):
+    amount: Optional[Decimal] = None
+    month: Optional[int] = None
+    year: Optional[int] = None
+
+
 class SalaryOut(BaseModel):
     id: int
     coach_id: int

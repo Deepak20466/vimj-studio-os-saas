@@ -57,6 +57,7 @@ class _LeaveTabState extends State<LeaveTab> {
     return Scaffold(
       appBar: AppBar(title: const Text('Leave Requests')),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'coach-leave-fab',
         onPressed: _openNewLeaveSheet,
         icon: const Icon(Icons.add),
         label: const Text('Request Leave'),

@@ -45,6 +45,7 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'admin-attendance-fab',
         onPressed: _openManualEntry,
         icon: const Icon(Icons.edit_calendar_outlined),
         label: const Text('Manual Entry'),

@@ -66,6 +66,7 @@ class _AdminActivitiesTabState extends State<AdminActivitiesTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'admin-activities-fab',
         onPressed: () => _openForm(),
         icon: const Icon(Icons.add),
         label: const Text('Add Activity'),

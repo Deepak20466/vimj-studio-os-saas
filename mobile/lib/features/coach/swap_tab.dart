@@ -61,6 +61,7 @@ class _SwapTabState extends State<SwapTab> {
     return Scaffold(
       appBar: AppBar(title: const Text('Class Swaps')),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'coach-swap-fab',
         onPressed: _openRequestSheet,
         icon: const Icon(Icons.swap_horiz),
         label: const Text('Request Swap'),

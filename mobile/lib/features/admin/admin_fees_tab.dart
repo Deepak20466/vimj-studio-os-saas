@@ -75,6 +75,7 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'admin-fees-fab',
         onPressed: _openCreate,
         icon: const Icon(Icons.add),
         label: const Text('Add Fee'),

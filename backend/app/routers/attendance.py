@@ -192,6 +192,20 @@ def mark_student_attendance_manual(
     if not class_session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
 
+    submission = db.query(AttendanceSubmission).filter(AttendanceSubmission.class_id == class_session.id).first()
+    if not submission:
+        # An admin's own backfill is authoritative and never needs the late-approval
+        # workflow that a coach's own late mark goes through.
+        db.add(
+            AttendanceSubmission(
+                class_id=class_session.id,
+                coach_id=class_session.coach_id,
+                submitted_at=datetime.now(),
+                is_late=False,
+                late_status=LateStatus.NONE,
+            )
+        )
+
     existing = (
         db.query(StudentAttendance)
         .filter(

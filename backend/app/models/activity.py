@@ -16,4 +16,4 @@ class Activity(Base):
     monthly_fee = Column(Numeric(10, 2), nullable=False, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    classes = relationship("ClassSession", back_populates="activity")
+    classes = relationship("ClassSession", back_populates="activity", passive_deletes=True)

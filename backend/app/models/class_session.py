@@ -20,4 +20,4 @@ class ClassSession(Base):
     activity = relationship("Activity", back_populates="classes")
     coach = relationship("User", foreign_keys=[coach_id])
     batch = relationship("Batch")
-    student_attendance = relationship("StudentAttendance", back_populates="class_session")
+    student_attendance = relationship("StudentAttendance", back_populates="class_session", passive_deletes=True)
