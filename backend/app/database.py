@@ -3,7 +3,13 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 from app.config import settings
 
-engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True, pool_size=10, max_overflow=20)
+# Managed Postgres providers (Render, Heroku, etc.) commonly hand out
+# "postgres://" URLs, a scheme SQLAlchemy dropped support for in 1.4+.
+_database_url = settings.DATABASE_URL
+if _database_url.startswith("postgres://"):
+    _database_url = _database_url.replace("postgres://", "postgresql+psycopg2://", 1)
+
+engine = create_engine(_database_url, pool_pre_ping=True, pool_size=10, max_overflow=20)
 
 if engine.dialect.name == "sqlite":
     # SQLite ignores FK constraints (and ON DELETE CASCADE) unless explicitly enabled per connection.

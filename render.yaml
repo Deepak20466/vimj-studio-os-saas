@@ -1,0 +1,31 @@
+databases:
+  - name: vimj-db
+    plan: free
+    databaseName: vimj_attendance
+    user: vimj_user
+
+services:
+  - type: web
+    name: vimj-backend
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt && alembic upgrade head"
+    startCommand: "gunicorn -c gunicorn_conf.py app.main:app"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DATABASE_URL
+        fromDatabase:
+          name: vimj-db
+          property: connectionString
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: FRONTEND_ORIGIN
+        value: https://placeholder.vercel.app
+      - key: MOBILE_WEB_ORIGIN
+        value: https://placeholder.vercel.app
+      - key: ENV
+        value: production
+      - key: NOTIFICATIONS_ENABLED
+        value: "false"
