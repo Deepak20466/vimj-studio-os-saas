@@ -85,16 +85,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
-                        child: Image.asset(
-                          'assets/images/logo.jpeg',
-                          width: 76,
-                          height: 76,
-                          fit: BoxFit.cover,
-                        ),
+                      Image.asset(
+                        'assets/images/logo.jpeg',
+                        width: 120,
+                        height: 120,
+                        fit: BoxFit.contain,
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                       Text(
                         'VIMJ Studio',
                         textAlign: TextAlign.center,
@@ -107,7 +104,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       Text(
                         'Coach sign in',
                         textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodyMedium,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 32),
                       if (_error != null) ...[

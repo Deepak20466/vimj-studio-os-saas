@@ -15,6 +15,10 @@ class AppColors {
   static const Color success = Color(0xFF16A34A);
   static const Color warning = Color(0xFFD97706);
   static const Color danger = Color(0xFFDC2626);
+  // Matches theme.css's --text/--text-muted so body copy reads clearly
+  // instead of Flutter's default pale gray.
+  static const Color text = Color(0xFF1A1A2E);
+  static const Color textMuted = Color(0xFF6B5A45);
 }
 
 class AppTheme {
@@ -28,6 +32,14 @@ class AppTheme {
         secondary: AppColors.brandYellowDark,
       ),
       scaffoldBackgroundColor: AppColors.bg,
+      textTheme: const TextTheme(
+        headlineMedium: TextStyle(color: AppColors.text),
+        titleLarge: TextStyle(color: AppColors.text),
+        titleMedium: TextStyle(color: AppColors.text),
+        bodyLarge: TextStyle(color: AppColors.text),
+        bodyMedium: TextStyle(color: AppColors.textMuted),
+        labelLarge: TextStyle(color: AppColors.text),
+      ).apply(bodyColor: AppColors.text, displayColor: AppColors.text),
       appBarTheme: const AppBarTheme(
         backgroundColor: AppColors.brandOrange,
         foregroundColor: Colors.white,
@@ -46,6 +58,10 @@ class AppTheme {
         fillColor: Colors.white,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        labelStyle: const TextStyle(color: AppColors.textMuted),
+        hintStyle: const TextStyle(color: AppColors.textMuted),
+        prefixIconColor: AppColors.brandOrange,
+        suffixIconColor: AppColors.brandOrange,
       ),
       cardTheme: CardThemeData(
         color: Colors.white,

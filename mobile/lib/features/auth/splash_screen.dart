@@ -76,9 +76,10 @@ class _SplashScreenState extends State<SplashScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: Image.asset('assets/images/logo.jpeg', width: 76, height: 76, fit: BoxFit.cover),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+                child: Image.asset('assets/images/logo.jpeg', width: 100, height: 100, fit: BoxFit.contain),
               ),
               const SizedBox(height: 16),
               const Text(
