@@ -1,7 +1,11 @@
 import axios from "axios";
 
+// Local dev: relative "/api", proxied to localhost:8000 by vite.config.js.
+// Production (e.g. Vercel): set VITE_API_BASE_URL to the deployed backend's
+// root URL (no trailing slash, no /api suffix — the backend mounts routes
+// directly, the /api prefix only exists for the dev proxy rewrite).
 const client = axios.create({
-  baseURL: "/api",
+  baseURL: import.meta.env.VITE_API_BASE_URL || "/api",
 });
 
 client.interceptors.request.use((config) => {
