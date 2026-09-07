@@ -3,8 +3,8 @@
 Production-ready attendance system for a coaching studio: geofenced + selfie-verified
 attendance, fee/salary reminders, leave & swap workflows, role-based data isolation, and
 business analytics — across a FastAPI backend, a React admin/coach dashboard, and a
-Flutter mobile app for coaches. Students never get a login (see CLAUDE.md) — they exist
-only as records admins and coaches manage.
+Flutter mobile app for coaches and admins. Students never get a login (see CLAUDE.md) —
+they exist only as records admins and coaches manage.
 
 ## Structure
 
@@ -12,8 +12,9 @@ only as records admins and coaches manage.
 backend/    FastAPI + PostgreSQL API — all 15 core requirements, RBAC enforced server-side
 frontend/   React admin dashboard (students, coaches, activities, batches, attendance,
             compliance, leave, fees, salary, reports, about) plus a coach web dashboard
-mobile/     Flutter app for coaches only (mark attendance, leave, swaps, salary,
-            receipts, fee reminders) — see mobile/README.md
+mobile/     Flutter app for coaches (mark attendance, leave, swaps, salary, receipts,
+            fee reminders) and admins (students, coaches, activities, attendance, leave,
+            fees, salary) — see mobile/README.md
 ```
 
 Each has its own README with setup steps: [backend/README.md](backend/README.md),

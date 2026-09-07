@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
 import '../../core/auth_storage.dart';
 import '../../core/biometric_service.dart';
+import '../admin/admin_home.dart';
 import '../coach/coach_home.dart';
 import 'login_screen.dart';
 
@@ -48,16 +49,19 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   void _goToHome(String role) {
-    if (role != 'COACH') {
-      // Only coach sessions are ever meant to persist — the backend rejects
-      // student logins outright, and the login screen clears an admin
-      // session immediately after login. A stored session with any other
-      // role means stale/corrupt local state, so drop it and start over.
-      AuthStorage.clear();
-      _goToLogin();
-      return;
+    switch (role) {
+      case 'COACH':
+        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const CoachHome()));
+        break;
+      case 'ADMIN':
+        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const AdminHome()));
+        break;
+      default:
+        // The backend rejects student logins outright, so a stored session
+        // with any other role means stale/corrupt local state.
+        AuthStorage.clear();
+        _goToLogin();
     }
-    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const CoachHome()));
   }
 
   @override

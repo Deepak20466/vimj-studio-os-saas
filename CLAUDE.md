@@ -213,8 +213,10 @@ UserDetails (id, user_id, address, phone, dob, profile_photo, created_at)
 
 ## MOBILE (Flutter)
 
-A single coach-only app. Admin logs in through the web dashboard instead;
-students never log in anywhere (see ROLES & PERMISSIONS).
+One app, two logged-in experiences based on the account's role — students
+never log in anywhere (see ROLES & PERMISSIONS). Originally coach-only, with
+admin directed to the web dashboard instead; changed by explicit decision
+(2026-09-07) to also support admin login natively in the app.
 
 ### Coach App
 - **Dashboard:** Today's classes, mark attendance button
@@ -228,6 +230,17 @@ students never log in anywhere (see ROLES & PERMISSIONS).
 - Biometric login (fingerprint)
 - Dark/light theme
 - Push notifications (with sms)
+
+### Admin App
+Same login screen, routed by role. Drawer-nav shell (`lib/features/admin/`)
+covering: Dashboard (stats + fee pie chart + coaches missing attendance),
+Students (CRUD, activate/deactivate), Coaches (CRUD, manage activities,
+activate/deactivate), Activities (CRUD), Attendance (daily missing + manual
+entry), Leave (approve/reject with note), Fees (unpaid list, mark paid,
+remind, create), Salary (list, create). Web dashboard remains the fuller
+admin surface (batches/classes/roster management, business analytics,
+reports/exports, chat, settings) — the mobile admin view is the
+day-to-day-operations subset, not full parity.
 
 ---
 

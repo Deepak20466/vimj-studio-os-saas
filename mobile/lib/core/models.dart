@@ -168,6 +168,187 @@ class StudentAttendanceRecord {
       );
 }
 
+class Student {
+  final int id;
+  final String name;
+  final String email;
+  final String? phone;
+  final String? phoneSecondary;
+  final bool isActive;
+
+  Student({
+    required this.id,
+    required this.name,
+    required this.email,
+    this.phone,
+    this.phoneSecondary,
+    required this.isActive,
+  });
+
+  factory Student.fromJson(Map<String, dynamic> json) => Student(
+        id: json['id'] as int,
+        name: json['name'] as String,
+        email: json['email'] as String,
+        phone: json['phone'] as String?,
+        phoneSecondary: json['phone_secondary'] as String?,
+        isActive: json['is_active'] as bool? ?? true,
+      );
+}
+
+class Coach {
+  final int id;
+  final String name;
+  final String email;
+  final String? phone;
+  final bool isActive;
+
+  Coach({required this.id, required this.name, required this.email, this.phone, required this.isActive});
+
+  factory Coach.fromJson(Map<String, dynamic> json) => Coach(
+        id: json['id'] as int,
+        name: json['name'] as String,
+        email: json['email'] as String,
+        phone: json['phone'] as String?,
+        isActive: json['is_active'] as bool? ?? true,
+      );
+}
+
+class Activity {
+  final int id;
+  final String name;
+  final int capacity;
+  final String monthlyFee;
+
+  Activity({required this.id, required this.name, required this.capacity, required this.monthlyFee});
+
+  factory Activity.fromJson(Map<String, dynamic> json) => Activity(
+        id: json['id'] as int,
+        name: json['name'] as String,
+        capacity: json['capacity'] as int,
+        monthlyFee: json['monthly_fee'].toString(),
+      );
+}
+
+class DailyMissingRow {
+  final int classId;
+  final String coachName;
+  final String activityName;
+  final String date;
+  final String endTime;
+
+  DailyMissingRow({
+    required this.classId,
+    required this.coachName,
+    required this.activityName,
+    required this.date,
+    required this.endTime,
+  });
+
+  factory DailyMissingRow.fromJson(Map<String, dynamic> json) => DailyMissingRow(
+        classId: json['class_id'] as int,
+        coachName: json['coach_name'] as String? ?? '-',
+        activityName: json['activity_name'] as String? ?? '-',
+        date: json['date'] as String,
+        endTime: json['end_time'] as String,
+      );
+}
+
+class AdminLeaveRequest {
+  final int id;
+  final int coachId;
+  final String? coachName;
+  final String startDate;
+  final String endDate;
+  final String reason;
+  final String status;
+
+  AdminLeaveRequest({
+    required this.id,
+    required this.coachId,
+    this.coachName,
+    required this.startDate,
+    required this.endDate,
+    required this.reason,
+    required this.status,
+  });
+
+  factory AdminLeaveRequest.fromJson(Map<String, dynamic> json) => AdminLeaveRequest(
+        id: json['id'] as int,
+        coachId: json['coach_id'] as int,
+        coachName: json['coach_name'] as String?,
+        startDate: json['start_date'] as String,
+        endDate: json['end_date'] as String,
+        reason: json['reason'] as String,
+        status: json['status'] as String,
+      );
+}
+
+class AdminFeeRecord {
+  final int id;
+  final int studentId;
+  final String? studentName;
+  final int month;
+  final int year;
+  final String amount;
+  final String balanceAmount;
+  final String status;
+  final String dueDate;
+
+  AdminFeeRecord({
+    required this.id,
+    required this.studentId,
+    this.studentName,
+    required this.month,
+    required this.year,
+    required this.amount,
+    required this.balanceAmount,
+    required this.status,
+    required this.dueDate,
+  });
+
+  factory AdminFeeRecord.fromJson(Map<String, dynamic> json) => AdminFeeRecord(
+        id: json['id'] as int,
+        studentId: json['student_id'] as int,
+        studentName: json['student_name'] as String?,
+        month: json['month'] as int,
+        year: json['year'] as int,
+        amount: json['amount'].toString(),
+        balanceAmount: (json['balance_amount'] ?? json['amount']).toString(),
+        status: json['status'] as String,
+        dueDate: json['due_date'] as String,
+      );
+}
+
+class AdminSalaryRecord {
+  final int id;
+  final int coachId;
+  final String? coachName;
+  final int month;
+  final int year;
+  final String amount;
+  final String? acknowledgedDate;
+
+  AdminSalaryRecord({
+    required this.id,
+    required this.coachId,
+    this.coachName,
+    required this.month,
+    required this.year,
+    required this.amount,
+    this.acknowledgedDate,
+  });
+
+  factory AdminSalaryRecord.fromJson(Map<String, dynamic> json) => AdminSalaryRecord(
+        id: json['id'] as int,
+        coachId: json['coach_id'] as int,
+        coachName: json['coach_name'] as String?,
+        month: json['month'] as int,
+        year: json['year'] as int,
+        amount: json['amount'].toString(),
+        acknowledgedDate: json['acknowledged_date'] as String?,
+      );
+}
+
 class AttendanceGraphPoint {
   final String label;
   final double value;

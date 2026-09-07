@@ -1,9 +1,13 @@
 # VIMJ Studio Mobile App (Flutter)
 
-A Flutter app for coaches only. Students are records the admin/coach manage
-(attendance subjects, fee accounts) but do not get their own login — the
-backend rejects Student-role logins outright. Admins are directed to the web
-dashboard instead (see `lib/features/auth/login_screen.dart`).
+A Flutter app for coaches and admins. Students are records the admin/coach
+manage (attendance subjects, fee accounts) but do not get their own login —
+the backend rejects Student-role logins outright. The login screen
+(`lib/features/auth/login_screen.dart`) routes to `CoachHome` or `AdminHome`
+based on the account's role. The admin view (`lib/features/admin/`) covers
+day-to-day operations (students, coaches, activities, attendance, leave,
+fees, salary); the web dashboard remains the fuller admin surface for
+batches/analytics/reports/settings.
 
 ## One-time setup (this repo ships `lib/` and `pubspec.yaml` only)
 

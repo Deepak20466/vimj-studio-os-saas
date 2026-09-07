@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/auth_api.dart';
-import '../../core/auth_storage.dart';
+import '../admin/admin_home.dart';
 import '../coach/coach_home.dart';
 import 'forgot_password_screen.dart';
 
@@ -31,13 +31,9 @@ class _LoginScreenState extends State<LoginScreen> {
       final session = await AuthApi.login(_emailCtrl.text.trim(), _passwordCtrl.text);
       if (!mounted) return;
 
-      if (session.role == 'ADMIN') {
-        await AuthStorage.clear();
-        setState(() => _error = 'Admin accounts should use the web dashboard, not this app.');
-        return;
-      }
-
-      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const CoachHome()));
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => session.role == 'ADMIN' ? const AdminHome() : const CoachHome()),
+      );
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } catch (_) {
@@ -102,7 +98,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Coach sign in',
+                        'Sign in',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                       ),
