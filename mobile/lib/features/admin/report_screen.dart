@@ -1,5 +1,7 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
+import '../../core/app_theme.dart';
 import '../../core/export_helper.dart';
 import '../../core/models.dart';
 
@@ -16,6 +18,8 @@ class ReportScreen extends StatefulWidget {
 class _ReportScreenState extends State<ReportScreen> {
   StudentReport? _studentReport;
   CoachReport? _coachReport;
+  List<AttendanceGraphPoint> _attendanceGraph = [];
+  List<AdminSalaryRecord> _salaryHistory = [];
   bool _loading = true;
   bool _exporting = false;
 
@@ -29,11 +33,19 @@ class _ReportScreenState extends State<ReportScreen> {
     setState(() => _loading = true);
     try {
       if (widget.isCoach) {
-        final data = await ApiClient.instance.get('/reports/coach/${widget.id}') as Map<String, dynamic>;
-        _coachReport = CoachReport.fromJson(data);
+        final results = await Future.wait([
+          ApiClient.instance.get('/reports/coach/${widget.id}'),
+          ApiClient.instance.get('/coaches/${widget.id}/salary'),
+        ]);
+        _coachReport = CoachReport.fromJson(results[0] as Map<String, dynamic>);
+        _salaryHistory = (results[1] as List).map((e) => AdminSalaryRecord.fromJson(e as Map<String, dynamic>)).toList();
       } else {
-        final data = await ApiClient.instance.get('/reports/student/${widget.id}') as Map<String, dynamic>;
-        _studentReport = StudentReport.fromJson(data);
+        final results = await Future.wait([
+          ApiClient.instance.get('/reports/student/${widget.id}'),
+          ApiClient.instance.get('/reports/attendance-graph/${widget.id}'),
+        ]);
+        _studentReport = StudentReport.fromJson(results[0] as Map<String, dynamic>);
+        _attendanceGraph = ((results[1] as Map<String, dynamic>)['points'] as List).map((e) => AttendanceGraphPoint.fromJson(e as Map<String, dynamic>)).toList();
       }
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
@@ -94,6 +106,83 @@ class _ReportScreenState extends State<ReportScreen> {
                     ),
                   ),
                 ),
+                if (!widget.isCoach && (_studentReport!.feesPaid + _studentReport!.feesUnpaid) > 0) ...[
+                  const SizedBox(height: 20),
+                  const Text('Fee Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 160,
+                    child: PieChart(
+                      PieChartData(
+                        sectionsSpace: 2,
+                        sections: [
+                          if (_studentReport!.feesPaid > 0)
+                            PieChartSectionData(value: _studentReport!.feesPaid.toDouble(), color: AppColors.success, title: 'Paid\n${_studentReport!.feesPaid}', radius: 60, titleStyle: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold)),
+                          if (_studentReport!.feesUnpaid > 0)
+                            PieChartSectionData(value: _studentReport!.feesUnpaid.toDouble(), color: AppColors.warning, title: 'Unpaid\n${_studentReport!.feesUnpaid}', radius: 60, titleStyle: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                if (!widget.isCoach && _attendanceGraph.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  const Text('Attendance Trend', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 180,
+                    child: LineChart(
+                      LineChartData(
+                        gridData: const FlGridData(drawVerticalLine: false),
+                        titlesData: FlTitlesData(
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              getTitlesWidget: (value, meta) {
+                                final idx = value.toInt();
+                                if (idx < 0 || idx >= _attendanceGraph.length) return const SizedBox.shrink();
+                                return Padding(padding: const EdgeInsets.only(top: 4), child: Text(_attendanceGraph[idx].label, style: const TextStyle(fontSize: 9)));
+                              },
+                            ),
+                          ),
+                          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 32, getTitlesWidget: (v, m) => Text('${v.toInt()}%', style: const TextStyle(fontSize: 9)))),
+                          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        ),
+                        borderData: FlBorderData(show: false),
+                        lineBarsData: [
+                          LineChartBarData(
+                            spots: [for (int i = 0; i < _attendanceGraph.length; i++) FlSpot(i.toDouble(), _attendanceGraph[i].value)],
+                            isCurved: true,
+                            color: AppColors.brandOrange,
+                            barWidth: 2,
+                            dotData: const FlDotData(show: true),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                if (widget.isCoach) ...[
+                  const SizedBox(height: 20),
+                  const Text('Salary History', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 8),
+                  if (_salaryHistory.isEmpty)
+                    const Text('No salary records yet.', style: TextStyle(color: AppColors.textMuted))
+                  else
+                    ..._salaryHistory.map((s) => Card(
+                          margin: const EdgeInsets.only(bottom: 6),
+                          child: ListTile(
+                            title: Text('${s.month}/${s.year}'),
+                            subtitle: Text('₹${s.amount}'),
+                            trailing: Chip(
+                              label: Text(s.acknowledgedDate != null ? 'Acknowledged' : 'Pending', style: const TextStyle(fontSize: 11, color: Colors.white)),
+                              backgroundColor: s.acknowledgedDate != null ? AppColors.success : AppColors.warning,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
+                        )),
+                ],
                 const SizedBox(height: 20),
                 Row(
                   children: [

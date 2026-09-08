@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/models.dart';
+import 'activity_report_screen.dart';
+import 'activity_sessions_screen.dart';
 
 class AdminActivitiesTab extends StatefulWidget {
   const AdminActivitiesTab({super.key});
@@ -94,11 +96,19 @@ class _AdminActivitiesTabState extends State<AdminActivitiesTab> {
                                 if (v == 'manage') {
                                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => _ManageActivityScreen(activity: a)));
                                 }
+                                if (v == 'report') {
+                                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => ActivityReportScreen(activityId: a.id, activityName: a.name)));
+                                }
+                                if (v == 'sessions') {
+                                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => ActivitySessionsScreen(activity: a)));
+                                }
                                 if (v == 'edit') _openForm(activity: a);
                                 if (v == 'delete') _remove(a);
                               },
                               itemBuilder: (_) => [
                                 const PopupMenuItem(value: 'manage', child: Text('Manage (Classes/Roster)')),
+                                const PopupMenuItem(value: 'report', child: Text('Report')),
+                                const PopupMenuItem(value: 'sessions', child: Text('Sessions')),
                                 const PopupMenuItem(value: 'edit', child: Text('Edit')),
                                 const PopupMenuItem(value: 'delete', child: Text('Delete')),
                               ],
@@ -246,6 +256,16 @@ class _ManageActivityScreenState extends State<_ManageActivityScreen> with Singl
     if (saved == true) _load();
   }
 
+  Future<void> _editClass(ClassSession c) async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _ScheduleClassForm(activityId: widget.activity.id, coaches: _coaches, editing: c),
+    );
+    if (saved == true) _load();
+  }
+
   Future<void> _removeClass(ClassSession c) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -350,7 +370,13 @@ class _ManageActivityScreenState extends State<_ManageActivityScreen> with Singl
                               child: ListTile(
                                 title: Text(c.date),
                                 subtitle: Text('${c.startTime} - ${c.endTime} · Coach: ${_coachName(c.coachId)}'),
-                                trailing: IconButton(icon: const Icon(Icons.delete_outline, color: AppColors.danger), onPressed: () => _removeClass(c)),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(icon: const Icon(Icons.edit_outlined), onPressed: () => _editClass(c)),
+                                    IconButton(icon: const Icon(Icons.delete_outline, color: AppColors.danger), onPressed: () => _removeClass(c)),
+                                  ],
+                                ),
                               ),
                             );
                           },
@@ -385,7 +411,8 @@ class _ManageActivityScreenState extends State<_ManageActivityScreen> with Singl
 class _ScheduleClassForm extends StatefulWidget {
   final int activityId;
   final List<Coach> coaches;
-  const _ScheduleClassForm({required this.activityId, required this.coaches});
+  final ClassSession? editing;
+  const _ScheduleClassForm({required this.activityId, required this.coaches, this.editing});
 
   @override
   State<_ScheduleClassForm> createState() => _ScheduleClassFormState();
@@ -398,6 +425,20 @@ class _ScheduleClassFormState extends State<_ScheduleClassForm> {
   TimeOfDay _endTime = const TimeOfDay(hour: 8, minute: 0);
   bool _saving = false;
 
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.editing;
+    if (e != null) {
+      _coachId = e.coachId;
+      _date = DateTime.parse(e.date);
+      final st = e.startTime.split(':');
+      final et = e.endTime.split(':');
+      _startTime = TimeOfDay(hour: int.parse(st[0]), minute: int.parse(st[1]));
+      _endTime = TimeOfDay(hour: int.parse(et[0]), minute: int.parse(et[1]));
+    }
+  }
+
   String _fmtTime(TimeOfDay t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:00';
 
   Future<void> _submit() async {
@@ -407,13 +448,17 @@ class _ScheduleClassFormState extends State<_ScheduleClassForm> {
     }
     setState(() => _saving = true);
     try {
-      await ApiClient.instance.post('/activities/classes', body: {
-        'activity_id': widget.activityId,
+      final body = {
         'coach_id': _coachId,
         'date': _date.toIso8601String().substring(0, 10),
         'start_time': _fmtTime(_startTime),
         'end_time': _fmtTime(_endTime),
-      });
+      };
+      if (widget.editing != null) {
+        await ApiClient.instance.put('/activities/classes/${widget.editing!.id}', body: body);
+      } else {
+        await ApiClient.instance.post('/activities/classes', body: {...body, 'activity_id': widget.activityId});
+      }
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
@@ -431,7 +476,7 @@ class _ScheduleClassFormState extends State<_ScheduleClassForm> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Schedule Class', style: Theme.of(context).textTheme.titleLarge),
+            Text(widget.editing != null ? 'Edit Class' : 'Schedule Class', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
             DropdownButtonFormField<int>(
               initialValue: _coachId,
@@ -478,7 +523,9 @@ class _ScheduleClassFormState extends State<_ScheduleClassForm> {
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _saving ? null : _submit,
-              child: _saving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Create'),
+              child: _saving
+                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : Text(widget.editing != null ? 'Save' : 'Create'),
             ),
           ],
         ),

@@ -1,8 +1,16 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/models.dart';
 import 'report_screen.dart';
+
+const _feeReminderMessage = "Hi, this is VIMJ Academy.\n\n"
+    "This is a reminder that your fees are due by the 5th of this month.\n"
+    "Kindly pay as soon as possible via Cash or UPI Payment to 6361174605.\n\n"
+    "Thank you!";
 
 class AdminStudentsTab extends StatefulWidget {
   const AdminStudentsTab({super.key});
@@ -74,6 +82,20 @@ class _AdminStudentsTabState extends State<AdminStudentsTab> {
     }
   }
 
+  Future<void> _copyFeeReminder(Student s) async {
+    await Clipboard.setData(const ClipboardData(text: _feeReminderMessage));
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fee reminder copied for ${s.name}')));
+  }
+
+  Future<void> _openProfile(Student s) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _StudentProfileSheet(student: s),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -122,14 +144,18 @@ class _AdminStudentsTabState extends State<AdminStudentsTab> {
                                       if (v == 'report') {
                                         Navigator.of(context).push(MaterialPageRoute(builder: (_) => ReportScreen(isCoach: false, id: s.id, name: s.name)));
                                       }
+                                      if (v == 'profile') _openProfile(s);
                                       if (v == 'edit') _openForm(student: s);
                                       if (v == 'toggle') _toggleActive(s);
+                                      if (v == 'copy') _copyFeeReminder(s);
                                       if (v == 'delete') _remove(s);
                                     },
                                     itemBuilder: (_) => [
                                       const PopupMenuItem(value: 'report', child: Text('View Report')),
+                                      const PopupMenuItem(value: 'profile', child: Text('Profile')),
                                       const PopupMenuItem(value: 'edit', child: Text('Edit')),
                                       PopupMenuItem(value: 'toggle', child: Text(s.isActive ? 'Deactivate' : 'Activate')),
+                                      const PopupMenuItem(value: 'copy', child: Text('Copy Fee Reminder')),
                                       const PopupMenuItem(value: 'delete', child: Text('Delete')),
                                     ],
                                   ),
@@ -143,6 +169,109 @@ class _AdminStudentsTabState extends State<AdminStudentsTab> {
       ),
     );
   }
+}
+
+class _StudentProfileSheet extends StatefulWidget {
+  final Student student;
+  const _StudentProfileSheet({required this.student});
+
+  @override
+  State<_StudentProfileSheet> createState() => _StudentProfileSheetState();
+}
+
+class _StudentProfileSheetState extends State<_StudentProfileSheet> {
+  Uint8List? _photoBytes;
+  bool _loadingPhoto = true;
+  bool _uploading = false;
+  final _picker = ImagePicker();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPhoto();
+  }
+
+  Future<void> _loadPhoto() async {
+    setState(() => _loadingPhoto = true);
+    try {
+      final bytes = await ApiClient.instance.getBytes('/students/${widget.student.id}/photo');
+      _photoBytes = Uint8List.fromList(bytes);
+    } on ApiException {
+      _photoBytes = null;
+    } finally {
+      if (mounted) setState(() => _loadingPhoto = false);
+    }
+  }
+
+  Future<void> _uploadPhoto() async {
+    final photo = await _picker.pickImage(source: ImageSource.camera, imageQuality: 70, preferredCameraDevice: CameraDevice.front);
+    if (photo == null) return;
+    setState(() => _uploading = true);
+    try {
+      final bytes = await photo.readAsBytes();
+      await ApiClient.instance.post('/students/${widget.student.id}/photo', body: {'photo_base64': base64Encode(bytes)});
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Photo saved')));
+      await _loadPhoto();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.student;
+    return Padding(
+      padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Student Profile', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 16),
+            Center(
+              child: _loadingPhoto
+                  ? const SizedBox(height: 140, width: 140, child: Center(child: CircularProgressIndicator()))
+                  : ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: _photoBytes != null
+                          ? Image.memory(_photoBytes!, width: 140, height: 140, fit: BoxFit.cover)
+                          : Container(
+                              width: 140,
+                              height: 140,
+                              color: AppColors.brandLight,
+                              alignment: Alignment.center,
+                              child: const Text('No photo', style: TextStyle(color: AppColors.textMuted)),
+                            ),
+                    ),
+            ),
+            const SizedBox(height: 12),
+            Center(
+              child: OutlinedButton.icon(
+                onPressed: _uploading ? null : _uploadPhoto,
+                icon: _uploading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.camera_alt_outlined),
+                label: const Text('Upload Photo'),
+              ),
+            ),
+            const SizedBox(height: 20),
+            _row('Student ID', '#${s.id}'),
+            _row('Name', s.name),
+            _row('Phone', s.phone ?? '-'),
+            _row('Emergency Contact', s.phoneSecondary ?? '-'),
+            _row('Email', s.email.endsWith('@no-login.internal') ? '-' : s.email),
+            _row('Status', s.isActive ? 'Active' : 'Inactive'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _row(String label, String value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(label, style: const TextStyle(color: AppColors.textMuted)), Text(value, style: const TextStyle(fontWeight: FontWeight.bold))]),
+      );
 }
 
 class _StudentForm extends StatefulWidget {

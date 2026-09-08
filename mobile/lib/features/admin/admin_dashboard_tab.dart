@@ -15,6 +15,7 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
   Map<String, dynamic>? _summary;
   Map<String, dynamic>? _feeGraph;
   List<dynamic> _missing = [];
+  List<dynamic> _activityBreakdown = [];
 
   @override
   void initState() {
@@ -25,14 +26,17 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
+      final now = DateTime.now();
       final results = await Future.wait([
         ApiClient.instance.get('/reports/dashboard-summary'),
         ApiClient.instance.get('/reports/fee-status-graph'),
         ApiClient.instance.get('/attendance/daily-missing'),
+        ApiClient.instance.get('/reports/monthly-analysis', query: {'month': now.month, 'year': now.year}),
       ]);
       _summary = results[0] as Map<String, dynamic>;
       _feeGraph = results[1] as Map<String, dynamic>;
       _missing = results[2] as List<dynamic>;
+      _activityBreakdown = (results[3] as Map<String, dynamic>)['activity_breakdown'] as List<dynamic>? ?? [];
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
@@ -110,6 +114,52 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
                           if (overdue > 0) PieChartSectionData(value: overdue, color: AppColors.danger, title: 'Overdue\n${overdue.toInt()}', radius: 70, titleStyle: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)),
                         ],
                         sectionsSpace: 2,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Activity Attendance %', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 12),
+                if (_activityBreakdown.isEmpty)
+                  const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Center(child: Text('No activity data for this period.')))
+                else
+                  SizedBox(
+                    height: 180,
+                    child: BarChart(
+                      BarChartData(
+                        barGroups: [
+                          for (int i = 0; i < _activityBreakdown.length; i++)
+                            BarChartGroupData(x: i, barRods: [
+                              BarChartRodData(toY: (_activityBreakdown[i]['avg_attendance_pct'] as num).toDouble(), color: AppColors.brandOrange, width: 18, borderRadius: BorderRadius.circular(4)),
+                            ]),
+                        ],
+                        titlesData: FlTitlesData(
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              getTitlesWidget: (value, meta) {
+                                final idx = value.toInt();
+                                if (idx < 0 || idx >= _activityBreakdown.length) return const SizedBox.shrink();
+                                final name = _activityBreakdown[idx]['activity_name'] as String;
+                                return Padding(padding: const EdgeInsets.only(top: 4), child: Text(name.length > 8 ? '${name.substring(0, 8)}…' : name, style: const TextStyle(fontSize: 9)));
+                              },
+                            ),
+                          ),
+                          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 32, getTitlesWidget: (v, m) => Text('${v.toInt()}%', style: const TextStyle(fontSize: 9)))),
+                          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        ),
+                        gridData: const FlGridData(drawVerticalLine: false),
+                        borderData: FlBorderData(show: false),
                       ),
                     ),
                   ),

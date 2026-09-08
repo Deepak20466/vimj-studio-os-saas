@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/auth_storage.dart';
+import '../../core/export_helper.dart';
 import '../../core/models.dart';
 
 class CoachReceiptsTab extends StatefulWidget {
@@ -15,6 +16,7 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
   List<FeeReceiptRecord> _receipts = [];
   List<RosterStudent> _students = [];
   bool _loading = true;
+  int? _downloadingId;
 
   @override
   void initState() {
@@ -58,6 +60,18 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
     if (saved == true) _load();
   }
 
+  Future<void> _downloadPdf(FeeReceiptRecord r) async {
+    setState(() => _downloadingId = r.id);
+    try {
+      final bytes = await ApiClient.instance.getBytes('/receipts/${r.id}/pdf');
+      await shareExportedFile(bytes, 'receipt_${r.id}.pdf');
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _downloadingId = null);
+    }
+  }
+
   Color _statusColor(String status) {
     switch (status) {
       case 'APPROVED':
@@ -96,7 +110,16 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
                             title: Text('${r.studentName ?? "Student #${r.studentId}"} — ₹${r.amount}'),
                             subtitle: Text('${r.month}/${r.year} · ${r.paymentMode}${r.decisionNote != null ? "\n${r.decisionNote}" : ""}'),
                             isThreeLine: r.decisionNote != null,
-                            trailing: Chip(label: Text(r.status, style: const TextStyle(fontSize: 11, color: Colors.white)), backgroundColor: _statusColor(r.status)),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (r.status == 'APPROVED')
+                                  _downloadingId == r.id
+                                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                                      : IconButton(icon: const Icon(Icons.picture_as_pdf_outlined), tooltip: 'Receipt (PDF)', onPressed: () => _downloadPdf(r)),
+                                Chip(label: Text(r.status, style: const TextStyle(fontSize: 11, color: Colors.white)), backgroundColor: _statusColor(r.status)),
+                              ],
+                            ),
                           ),
                         );
                       },

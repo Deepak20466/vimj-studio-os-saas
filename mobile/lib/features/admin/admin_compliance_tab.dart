@@ -12,32 +12,45 @@ class AdminComplianceTab extends StatefulWidget {
   State<AdminComplianceTab> createState() => _AdminComplianceTabState();
 }
 
+String _isoDate(DateTime d) => d.toIso8601String().substring(0, 10);
+
 class _AdminComplianceTabState extends State<AdminComplianceTab> {
   ComplianceSummary? _summary;
   List<PendingLateSubmission> _pending = [];
+  List<Activity> _activities = [];
   bool _loading = true;
   int? _busyId;
+  DateTime _dateFrom = DateTime.now().subtract(const Duration(days: 7));
+  DateTime _dateTo = DateTime.now();
+  int? _activityFilter;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _init();
   }
 
-  Future<void> _load() async {
+  Future<void> _init() async {
+    try {
+      final data = await ApiClient.instance.get('/activities') as List;
+      _activities = data.map((e) => Activity.fromJson(e as Map<String, dynamic>)).toList();
+    } on ApiException {
+      // filters just won't have options; not fatal
+    }
+    _loadPending();
+    _loadSummary();
+  }
+
+  Future<void> _loadSummary() async {
     setState(() => _loading = true);
     try {
-      final now = DateTime.now();
-      final start = DateTime(now.year, now.month - 1, now.day);
-      final results = await Future.wait([
-        ApiClient.instance.get('/compliance/summary', query: {
-          'start_date': start.toIso8601String().substring(0, 10),
-          'end_date': now.toIso8601String().substring(0, 10),
-        }),
-        ApiClient.instance.get('/compliance/pending'),
-      ]);
-      _summary = ComplianceSummary.fromJson(results[0] as Map<String, dynamic>);
-      _pending = (results[1] as List).map((e) => PendingLateSubmission.fromJson(e as Map<String, dynamic>)).toList();
+      final query = <String, dynamic>{
+        'start_date': _isoDate(_dateFrom),
+        'end_date': _isoDate(_dateTo),
+      };
+      if (_activityFilter != null) query['activity_id'] = _activityFilter;
+      final data = await ApiClient.instance.get('/compliance/summary', query: query);
+      _summary = ComplianceSummary.fromJson(data as Map<String, dynamic>);
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
@@ -45,10 +58,53 @@ class _AdminComplianceTabState extends State<AdminComplianceTab> {
     }
   }
 
+  Future<void> _loadPending() async {
+    try {
+      final data = await ApiClient.instance.get('/compliance/pending') as List;
+      if (mounted) setState(() => _pending = data.map((e) => PendingLateSubmission.fromJson(e as Map<String, dynamic>)).toList());
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<void> _load() async {
+    await _loadPending();
+    await _loadSummary();
+  }
+
+  Future<void> _pickDate(bool isFrom) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: isFrom ? _dateFrom : _dateTo,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+    if (picked == null) return;
+    setState(() => isFrom ? _dateFrom = picked : _dateTo = picked);
+    _loadSummary();
+  }
+
   Future<void> _decide(PendingLateSubmission p, bool approve) async {
+    String note = '';
+    if (!approve) {
+      final ctrl = TextEditingController();
+      final result = await showDialog<String>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Reject late attendance'),
+          content: TextField(controller: ctrl, decoration: const InputDecoration(labelText: 'Reason (optional)'), maxLines: 2),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.pop(context, ctrl.text.trim()), child: const Text('Confirm')),
+          ],
+        ),
+      );
+      if (result == null) return;
+      note = result;
+    }
     setState(() => _busyId = p.id);
     try {
-      await ApiClient.instance.put('/compliance/late/${p.id}/${approve ? 'approve' : 'reject'}', body: {});
+      await ApiClient.instance.put('/compliance/late/${p.id}/${approve ? 'approve' : 'reject'}', body: {'decision_note': note});
       _load();
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
@@ -150,8 +206,30 @@ class _AdminComplianceTabState extends State<AdminComplianceTab> {
                   ),
                   const SizedBox(height: 16),
                 ],
-                Text('Compliance Overview (last 30 days)', style: Theme.of(context).textTheme.titleMedium),
+                Text('Compliance Overview', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    DropdownButton<int?>(
+                      value: _activityFilter,
+                      hint: const Text('All activities'),
+                      items: [
+                        const DropdownMenuItem<int?>(value: null, child: Text('All activities')),
+                        ..._activities.map((a) => DropdownMenuItem<int?>(value: a.id, child: Text(a.name))),
+                      ],
+                      onChanged: (v) {
+                        setState(() => _activityFilter = v);
+                        _loadSummary();
+                      },
+                    ),
+                    OutlinedButton(onPressed: () => _pickDate(true), child: Text('From ${_isoDate(_dateFrom)}')),
+                    OutlinedButton(onPressed: () => _pickDate(false), child: Text('To ${_isoDate(_dateTo)}')),
+                  ],
+                ),
+                const SizedBox(height: 12),
                 if (_summary != null)
                   GridView.count(
                     crossAxisCount: 2,

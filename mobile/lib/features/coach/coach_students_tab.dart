@@ -1,8 +1,15 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/auth_storage.dart';
 import '../../core/models.dart';
+
+const _feeReminderMessage = "Hi this is VIMJ Studio and it is an reminder for fee payment is pending for the sos "
+    "month and kindly pay as before the deadline of 5th of every month as cash or upi number - 6361174605  to "
+    "Mahesh Sir.  Thank you";
 
 class CoachStudentsTab extends StatefulWidget {
   const CoachStudentsTab({super.key});
@@ -52,6 +59,95 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
     if (saved == true) _load();
   }
 
+  Future<void> _copyFeeReminder() async {
+    await Clipboard.setData(const ClipboardData(text: _feeReminderMessage));
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Message copied — paste it into WhatsApp/SMS')));
+  }
+
+  Future<void> _capturePhoto(RosterStudent s) async {
+    final picker = ImagePicker();
+    final photo = await picker.pickImage(source: ImageSource.camera, imageQuality: 70, preferredCameraDevice: CameraDevice.front);
+    if (photo == null) return;
+    try {
+      final bytes = await photo.readAsBytes();
+      await ApiClient.instance.post('/students/${s.id}/photo', body: {'photo_base64': base64Encode(bytes)});
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Photo saved')));
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<void> _openEdit(RosterStudent s) async {
+    final nameCtrl = TextEditingController(text: s.name);
+    final phoneCtrl = TextEditingController();
+    final phoneSecondaryCtrl = TextEditingController();
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Edit Student — ${s.name}', style: Theme.of(ctx).textTheme.titleLarge),
+              const SizedBox(height: 16),
+              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
+              const SizedBox(height: 12),
+              TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Primary Phone'), keyboardType: TextInputType.phone),
+              const SizedBox(height: 12),
+              TextField(controller: phoneSecondaryCtrl, decoration: const InputDecoration(labelText: 'Emergency Contact'), keyboardType: TextInputType.phone),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () async {
+                  try {
+                    await ApiClient.instance.put('/students/${s.id}', body: {
+                      'name': nameCtrl.text.trim(),
+                      'phone': phoneCtrl.text.trim(),
+                      'phone_secondary': phoneSecondaryCtrl.text.trim(),
+                    });
+                    if (ctx.mounted) Navigator.of(ctx).pop(true);
+                  } on ApiException catch (e) {
+                    if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(e.message)));
+                  }
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (saved == true) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Student updated')));
+      _load();
+    }
+  }
+
+  Future<void> _removeStudent(RosterStudent s) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Remove student?'),
+        content: Text('Remove ${s.name}? This deletes their attendance and fee history too.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove', style: TextStyle(color: AppColors.danger))),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ApiClient.instance.delete('/students/${s.id}');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Student removed')));
+      _load();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -89,6 +185,20 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
                                         leading: const Icon(Icons.person_outline),
                                         title: Text(s.name),
                                         subtitle: Text(s.email),
+                                        trailing: PopupMenuButton<String>(
+                                          onSelected: (v) {
+                                            if (v == 'copy') _copyFeeReminder();
+                                            if (v == 'photo') _capturePhoto(s);
+                                            if (v == 'edit') _openEdit(s);
+                                            if (v == 'delete') _removeStudent(s);
+                                          },
+                                          itemBuilder: (_) => [
+                                            const PopupMenuItem(value: 'copy', child: Text('Copy Fee Reminder')),
+                                            const PopupMenuItem(value: 'photo', child: Text('Capture Photo')),
+                                            const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                                            const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                                          ],
+                                        ),
                                       )),
                               ],
                             ),

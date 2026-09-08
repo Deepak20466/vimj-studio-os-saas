@@ -42,6 +42,38 @@ class _AdminSalaryTabState extends State<AdminSalaryTab> {
     if (saved == true) _load();
   }
 
+  Future<void> _openEdit(AdminSalaryRecord r) async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _SalaryForm(editing: r),
+    );
+    if (saved == true) _load();
+  }
+
+  Future<void> _remove(AdminSalaryRecord r) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete salary record?'),
+        content: Text('Delete the ${r.month}/${r.year} salary record for ${r.coachName ?? "Coach #${r.coachId}"}? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete', style: TextStyle(color: AppColors.danger))),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ApiClient.instance.delete('/salary/${r.id}');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Salary record deleted')));
+      _load();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -62,15 +94,38 @@ class _AdminSalaryTabState extends State<AdminSalaryTab> {
                       itemCount: _records.length,
                       itemBuilder: (context, i) {
                         final r = _records[i];
+                        final acknowledged = r.acknowledgedDate != null;
                         return Card(
                           margin: const EdgeInsets.only(bottom: 10),
-                          child: ListTile(
-                            leading: const CircleAvatar(backgroundColor: AppColors.brandLight, child: Icon(Icons.account_balance_wallet, color: AppColors.brandOrange)),
-                            title: Text(r.coachName ?? 'Coach #${r.coachId}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text('${r.month}/${r.year} · ₹${r.amount}'),
-                            trailing: r.acknowledgedDate != null
-                                ? const Chip(label: Text('Acknowledged', style: TextStyle(color: Colors.white, fontSize: 11)), backgroundColor: AppColors.success, visualDensity: VisualDensity.compact)
-                                : const Chip(label: Text('Pending', style: TextStyle(color: Colors.white, fontSize: 11)), backgroundColor: AppColors.warning, visualDensity: VisualDensity.compact),
+                          child: Column(
+                            children: [
+                              ListTile(
+                                leading: const CircleAvatar(backgroundColor: AppColors.brandLight, child: Icon(Icons.account_balance_wallet, color: AppColors.brandOrange)),
+                                title: Text(r.coachName ?? 'Coach #${r.coachId}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                subtitle: Text('${r.month}/${r.year} · ₹${r.amount}'),
+                                trailing: acknowledged
+                                    ? const Chip(label: Text('Acknowledged', style: TextStyle(color: Colors.white, fontSize: 11)), backgroundColor: AppColors.success, visualDensity: VisualDensity.compact)
+                                    : const Chip(label: Text('Pending', style: TextStyle(color: Colors.white, fontSize: 11)), backgroundColor: AppColors.warning, visualDensity: VisualDensity.compact),
+                              ),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextButton(
+                                      onPressed: acknowledged ? null : () => _openEdit(r),
+                                      child: const Text('Edit'),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: TextButton(
+                                      onPressed: acknowledged ? null : () => _remove(r),
+                                      style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+                                      child: const Text('Delete'),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                            ],
                           ),
                         );
                       },
@@ -81,7 +136,8 @@ class _AdminSalaryTabState extends State<AdminSalaryTab> {
 }
 
 class _SalaryForm extends StatefulWidget {
-  const _SalaryForm();
+  final AdminSalaryRecord? editing;
+  const _SalaryForm({this.editing});
 
   @override
   State<_SalaryForm> createState() => _SalaryFormState();
@@ -91,16 +147,21 @@ class _SalaryFormState extends State<_SalaryForm> {
   List<Coach> _coaches = [];
   int? _coachId;
   final _now = DateTime.now();
-  late final _monthCtrl = TextEditingController(text: _now.month.toString());
-  late final _yearCtrl = TextEditingController(text: _now.year.toString());
-  final _amountCtrl = TextEditingController();
+  late final _monthCtrl = TextEditingController(text: (widget.editing?.month ?? _now.month).toString());
+  late final _yearCtrl = TextEditingController(text: (widget.editing?.year ?? _now.year).toString());
+  late final _amountCtrl = TextEditingController(text: widget.editing?.amount ?? '');
   bool _loadingCoaches = true;
   bool _saving = false;
 
   @override
   void initState() {
     super.initState();
-    _loadCoaches();
+    _coachId = widget.editing?.coachId;
+    if (widget.editing == null) {
+      _loadCoaches();
+    } else {
+      _loadingCoaches = false;
+    }
   }
 
   Future<void> _loadCoaches() async {
@@ -121,12 +182,16 @@ class _SalaryFormState extends State<_SalaryForm> {
     }
     setState(() => _saving = true);
     try {
-      await ApiClient.instance.post('/salary', body: {
-        'coach_id': _coachId,
+      final body = {
         'month': int.tryParse(_monthCtrl.text.trim()) ?? _now.month,
         'year': int.tryParse(_yearCtrl.text.trim()) ?? _now.year,
         'amount': _amountCtrl.text.trim(),
-      });
+      };
+      if (widget.editing != null) {
+        await ApiClient.instance.put('/salary/${widget.editing!.id}', body: body);
+      } else {
+        await ApiClient.instance.post('/salary', body: {...body, 'coach_id': _coachId});
+      }
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
@@ -152,16 +217,23 @@ class _SalaryFormState extends State<_SalaryForm> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Add Salary', style: Theme.of(context).textTheme.titleLarge),
+            Text(widget.editing != null ? 'Edit Salary Record' : 'Add Salary', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
-            _loadingCoaches
-                ? const Center(child: CircularProgressIndicator())
-                : DropdownButtonFormField<int>(
-                    value: _coachId,
-                    decoration: const InputDecoration(labelText: 'Coach'),
-                    items: _coaches.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
-                    onChanged: (v) => setState(() => _coachId = v),
-                  ),
+            if (widget.editing != null)
+              TextField(
+                enabled: false,
+                controller: TextEditingController(text: widget.editing!.coachName ?? 'Coach #${widget.editing!.coachId}'),
+                decoration: const InputDecoration(labelText: 'Coach'),
+              )
+            else
+              _loadingCoaches
+                  ? const Center(child: CircularProgressIndicator())
+                  : DropdownButtonFormField<int>(
+                      initialValue: _coachId,
+                      decoration: const InputDecoration(labelText: 'Coach'),
+                      items: _coaches.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
+                      onChanged: (v) => setState(() => _coachId = v),
+                    ),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -187,7 +259,9 @@ class _SalaryFormState extends State<_SalaryForm> {
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _saving ? null : _submit,
-              child: _saving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Create'),
+              child: _saving
+                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : Text(widget.editing != null ? 'Save' : 'Create'),
             ),
           ],
         ),

@@ -8,6 +8,7 @@ import 'coach_students_tab.dart';
 import 'coach_receipts_tab.dart';
 import 'coach_fee_reminders_tab.dart';
 import 'coach_chat_tab.dart';
+import 'coach_facility_attendance_tab.dart';
 
 class CoachHome extends StatefulWidget {
   const CoachHome({super.key});
@@ -35,6 +36,7 @@ class _CoachHomeState extends State<CoachHome> {
 
   final _moreItems = const [
     _MoreItem('My Students', Icons.groups_outlined, _buildStudents),
+    _MoreItem('Attendance', Icons.fact_check_outlined, _buildAttendance),
     _MoreItem('Fee Receipts', Icons.receipt_long_outlined, _buildReceipts),
     _MoreItem('Fee Reminders', Icons.notifications_active_outlined, _buildReminders),
     _MoreItem('Chat', Icons.chat_bubble_outline, _buildChat),
@@ -42,6 +44,7 @@ class _CoachHomeState extends State<CoachHome> {
   ];
 
   static Widget _buildStudents(BuildContext context) => const CoachStudentsTab();
+  static Widget _buildAttendance(BuildContext context) => const CoachFacilityAttendanceTab();
   static Widget _buildReceipts(BuildContext context) => const CoachReceiptsTab();
   static Widget _buildReminders(BuildContext context) => const CoachFeeRemindersTab();
   static Widget _buildChat(BuildContext context) => const CoachChatTab();

@@ -18,12 +18,19 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
   List<Batch> _batches = [];
   List<Activity> _activities = [];
   List<Coach> _coaches = [];
+  List<RecentSwap> _recentSwaps = [];
   bool _loading = true;
+
+  Map<String, dynamic>? _coverage;
+  bool _coverageLoading = true;
+  DateTime _coverageDate = DateTime.now();
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadCoverage();
+    _loadRecentSwaps();
   }
 
   Future<void> _load() async {
@@ -41,6 +48,132 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadCoverage() async {
+    setState(() => _coverageLoading = true);
+    try {
+      final data = await ApiClient.instance.get('/batches/coverage', query: {
+        'check_date': _coverageDate.toIso8601String().substring(0, 10),
+      }) as Map<String, dynamic>;
+      _coverage = data;
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _coverageLoading = false);
+    }
+  }
+
+  Future<void> _loadRecentSwaps() async {
+    try {
+      final data = await ApiClient.instance.get('/swap/recent') as List;
+      if (mounted) setState(() => _recentSwaps = data.map((e) => RecentSwap.fromJson(e as Map<String, dynamic>)).toList());
+    } on ApiException {
+      // non-fatal
+    }
+  }
+
+  Future<void> _pickCoverageDate() async {
+    final picked = await showDatePicker(context: context, initialDate: _coverageDate, firstDate: DateTime(2020), lastDate: DateTime(2100));
+    if (picked == null) return;
+    setState(() => _coverageDate = picked);
+    _loadCoverage();
+  }
+
+  Future<void> _openReassign() async {
+    int? originalCoachId;
+    int? batchId;
+    int? coveringCoachId;
+    DateTime date = DateTime.now();
+    final reasonCtrl = TextEditingController();
+
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          final batchesForCoach = _batches.where((b) => b.coachId == originalCoachId).toList();
+          return Padding(
+            padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Reassign Coach', style: Theme.of(ctx).textTheme.titleLarge),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<int>(
+                    initialValue: originalCoachId,
+                    decoration: const InputDecoration(labelText: 'Original / Assigned Coach'),
+                    items: _coaches.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
+                    onChanged: (v) => setSheetState(() {
+                      originalCoachId = v;
+                      batchId = null;
+                    }),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<int>(
+                    initialValue: batchId,
+                    decoration: const InputDecoration(labelText: 'Batch'),
+                    items: batchesForCoach
+                        .map((b) => DropdownMenuItem(value: b.id, child: Text('${_activityName(b.activityId)} — ${b.location} (${b.sessionPeriod}, ${b.startTime}-${b.endTime})')))
+                        .toList(),
+                    onChanged: originalCoachId == null ? null : (v) => setSheetState(() => batchId = v),
+                  ),
+                  const SizedBox(height: 12),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Date'),
+                    subtitle: Text(date.toIso8601String().substring(0, 10)),
+                    onTap: () async {
+                      final picked = await showDatePicker(context: ctx, initialDate: date, firstDate: DateTime(2020), lastDate: DateTime(2100));
+                      if (picked != null) setSheetState(() => date = picked);
+                    },
+                  ),
+                  DropdownButtonFormField<int>(
+                    initialValue: coveringCoachId,
+                    decoration: const InputDecoration(labelText: 'Substitute Coach'),
+                    items: _coaches.where((c) => c.id != originalCoachId).map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
+                    onChanged: (v) => setSheetState(() => coveringCoachId = v),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(controller: reasonCtrl, decoration: const InputDecoration(labelText: 'Reason for substitution'), maxLines: 3),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: () async {
+                      if (originalCoachId == null || batchId == null || coveringCoachId == null || reasonCtrl.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Fill in all fields')));
+                        return;
+                      }
+                      try {
+                        await ApiClient.instance.post('/swap/admin-assign', body: {
+                          'original_coach_id': originalCoachId,
+                          'covering_coach_id': coveringCoachId,
+                          'batch_id': batchId,
+                          'date': date.toIso8601String().substring(0, 10),
+                          'reason': reasonCtrl.text.trim(),
+                        });
+                        if (ctx.mounted) Navigator.of(ctx).pop(true);
+                      } on ApiException catch (e) {
+                        if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(e.message)));
+                      }
+                    },
+                    child: const Text('Reassign'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    if (saved == true) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Coach reassigned for that date')));
+      _loadCoverage();
+      _loadRecentSwaps();
+      _load();
     }
   }
 
@@ -100,9 +233,113 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
     }
   }
 
+  Widget _coverageSection() {
+    final coverage = _coverage;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Coverage', style: Theme.of(context).textTheme.titleMedium),
+                OutlinedButton(onPressed: _pickCoverageDate, child: Text(_coverageDate.toIso8601String().substring(0, 10))),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (_coverageLoading)
+              const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator()))
+            else if (coverage == null)
+              const Text('Failed to load coverage.')
+            else ...[
+              Text('Batches with no coach assigned', style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 4),
+              if ((coverage['unassigned_batches'] as List).isEmpty)
+                const Text('Every active batch has a coach assigned.', style: TextStyle(color: AppColors.textMuted, fontSize: 12))
+              else
+                ...(coverage['unassigned_batches'] as List).map((b) {
+                  final batch = Batch.fromJson(b as Map<String, dynamic>);
+                  return Text('• ${_activityName(batch.activityId)} — ${batch.location} (${batch.sessionPeriod}, ${batch.startTime}-${batch.endTime})', style: const TextStyle(fontSize: 12));
+                }),
+              const SizedBox(height: 12),
+              Text('Scheduled today but no session generated yet', style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 4),
+              if ((coverage['batches_not_generated_today'] as List).isEmpty)
+                Text('Nothing outstanding for ${_coverageDate.toIso8601String().substring(0, 10)}.', style: const TextStyle(color: AppColors.textMuted, fontSize: 12))
+              else
+                ...(coverage['batches_not_generated_today'] as List).map((b) {
+                  final batch = Batch.fromJson(b as Map<String, dynamic>);
+                  return Text('• ${_activityName(batch.activityId)} — ${batch.location} (${_coachName(batch.coachId)}, ${batch.startTime}-${batch.endTime})', style: const TextStyle(fontSize: 12));
+                }),
+              const SizedBox(height: 12),
+              Text('Who takes which activity', style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 4),
+              if ((coverage['activity_coach_map'] as List).isEmpty)
+                const Text('No coach-assigned batches yet.', style: TextStyle(color: AppColors.textMuted, fontSize: 12))
+              else
+                ...(coverage['activity_coach_map'] as List).map((a) {
+                  final coaches = (a['coaches'] as List).map((c) => '${c['coach_name']} (${c['batch_count']})').join(', ');
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Text('${a['activity_name']}: $coaches', style: const TextStyle(fontSize: 12)),
+                  );
+                }),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _recentSwapsSection() {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Recent Reassignments', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            if (_recentSwaps.isEmpty)
+              const Text('No reassignments yet.', style: TextStyle(color: AppColors.textMuted, fontSize: 12))
+            else
+              ..._recentSwaps.map((s) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text('${s.date} · ${s.activityName}\n${s.originalCoachName} → ${s.coveringCoachName}${s.reason != null && s.reason!.isNotEmpty ? "\n${s.reason}" : ""}', style: const TextStyle(fontSize: 12)),
+                        ),
+                        Chip(
+                          label: Text(s.status, style: const TextStyle(fontSize: 10, color: Colors.white)),
+                          backgroundColor: s.status == 'APPROVED' ? AppColors.success : (s.status == 'REJECTED' ? AppColors.danger : AppColors.warning),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ],
+                    ),
+                  )),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Batches'),
+        actions: [
+          TextButton(
+            onPressed: _coaches.isEmpty ? null : _openReassign,
+            child: const Text('Reassign Coach', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'admin-batches-fab',
         onPressed: _activities.isEmpty ? null : () => _openForm(),
@@ -112,14 +349,27 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-              onRefresh: _load,
-              child: _batches.isEmpty
-                  ? ListView(children: const [Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No batches yet. Create one to schedule a recurring class.')))])
-                  : ListView.builder(
+              onRefresh: () async {
+                await _load();
+                await _loadCoverage();
+                await _loadRecentSwaps();
+              },
+              child: ListView.builder(
                       padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
-                      itemCount: _batches.length,
+                      itemCount: 3 + (_batches.isEmpty ? 1 : _batches.length),
                       itemBuilder: (context, i) {
-                        final b = _batches[i];
+                        if (i == 0) return _coverageSection();
+                        if (i == 1) return _recentSwapsSection();
+                        if (i == 2) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Text('All Batches', style: Theme.of(context).textTheme.titleMedium),
+                          );
+                        }
+                        if (_batches.isEmpty) {
+                          return const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('No batches yet. Create one to schedule a recurring class.')));
+                        }
+                        final b = _batches[i - 3];
                         return Card(
                           margin: const EdgeInsets.only(bottom: 10),
                           child: Padding(

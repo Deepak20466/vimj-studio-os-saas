@@ -19,6 +19,7 @@ class CoachDashboardTab extends StatefulWidget {
 
 class _CoachDashboardTabState extends State<CoachDashboardTab> {
   List<ClassSession> _classes = [];
+  Map<int, Map<String, dynamic>> _summaries = {};
   bool _loading = true;
   String? _error;
   String _coachName = '';
@@ -45,6 +46,15 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
       final data = await ApiClient.instance.get('/activities/classes/my', query: {'class_date': today}) as List;
       _classes = data.map((e) => ClassSession.fromJson(e as Map<String, dynamic>)).toList();
       _pendingSync = await OfflineQueue.pendingCount();
+      final summaryPairs = await Future.wait(_classes.map((c) async {
+        try {
+          final s = await ApiClient.instance.get('/activities/classes/${c.id}/summary') as Map<String, dynamic>;
+          return MapEntry(c.id, s);
+        } on ApiException {
+          return MapEntry(c.id, <String, dynamic>{});
+        }
+      }));
+      _summaries = Map.fromEntries(summaryPairs);
     } on ApiException catch (e) {
       _error = e.message;
     } catch (e) {
@@ -170,21 +180,28 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
                       child: Center(child: Text('No classes scheduled today.')),
                     )
                   else
-                    ..._classes.map(
-                      (c) => Card(
-                        child: ListTile(
-                          leading: const Icon(Icons.fitness_center),
-                          title: Text('${c.startTime} - ${c.endTime}'),
-                          subtitle: Text('Class #${c.id}'),
-                          trailing: ElevatedButton(
-                            onPressed: () => Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => MarkAttendanceScreen(classSession: c)),
+                    ..._classes.map((c) {
+                      final s = _summaries[c.id];
+                      return Card(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: ListTile(
+                            leading: const Icon(Icons.fitness_center),
+                            title: Text('${c.startTime} - ${c.endTime}'),
+                            subtitle: s == null || s.isEmpty
+                                ? const Text('-')
+                                : Text('Students: ${s['enrolled_count']} · Marked: ${s['marked_count']} · Paid/Unpaid: ${s['fee_paid_count']}/${s['fee_unpaid_count']}', style: const TextStyle(fontSize: 12)),
+                            isThreeLine: s != null && s.isNotEmpty,
+                            trailing: ElevatedButton(
+                              onPressed: () => Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => MarkAttendanceScreen(classSession: c)),
+                              ),
+                              child: const Text('Mark'),
                             ),
-                            child: const Text('Mark'),
                           ),
                         ),
-                      ),
-                    ),
+                      );
+                    }),
                 ],
               ),
       ),

@@ -72,14 +72,16 @@ class RosterStudent {
   final String name;
   final String email;
   final int? enrollmentId;
+  final String? feeStatus;
 
-  RosterStudent({required this.id, required this.name, required this.email, this.enrollmentId});
+  RosterStudent({required this.id, required this.name, required this.email, this.enrollmentId, this.feeStatus});
 
   factory RosterStudent.fromJson(Map<String, dynamic> json) => RosterStudent(
         id: json['id'] as int,
         name: json['name'] as String,
         email: json['email'] as String,
         enrollmentId: json['enrollment_id'] as int?,
+        feeStatus: json['fee_status'] as String?,
       );
 }
 
@@ -274,6 +276,7 @@ class Activity {
 }
 
 class DailyMissingRow {
+  final int coachId;
   final int classId;
   final String coachName;
   final String activityName;
@@ -281,6 +284,7 @@ class DailyMissingRow {
   final String endTime;
 
   DailyMissingRow({
+    required this.coachId,
     required this.classId,
     required this.coachName,
     required this.activityName,
@@ -289,11 +293,57 @@ class DailyMissingRow {
   });
 
   factory DailyMissingRow.fromJson(Map<String, dynamic> json) => DailyMissingRow(
+        coachId: json['coach_id'] as int,
         classId: json['class_id'] as int,
         coachName: json['coach_name'] as String? ?? '-',
         activityName: json['activity_name'] as String? ?? '-',
         date: json['date'] as String,
         endTime: json['end_time'] as String,
+      );
+}
+
+class AdminAttendanceRecord {
+  final int id;
+  final int studentId;
+  final String studentName;
+  final int classId;
+  final int activityId;
+  final String activityName;
+  final int? coachId;
+  final String? coachName;
+  final String status;
+  final String classDate;
+  final String timestamp;
+  final bool markedManually;
+
+  AdminAttendanceRecord({
+    required this.id,
+    required this.studentId,
+    required this.studentName,
+    required this.classId,
+    required this.activityId,
+    required this.activityName,
+    this.coachId,
+    this.coachName,
+    required this.status,
+    required this.classDate,
+    required this.timestamp,
+    required this.markedManually,
+  });
+
+  factory AdminAttendanceRecord.fromJson(Map<String, dynamic> json) => AdminAttendanceRecord(
+        id: json['id'] as int,
+        studentId: json['student_id'] as int,
+        studentName: json['student_name'] as String,
+        classId: json['class_id'] as int,
+        activityId: json['activity_id'] as int,
+        activityName: json['activity_name'] as String,
+        coachId: json['coach_id'] as int?,
+        coachName: json['coach_name'] as String?,
+        status: json['status'] as String,
+        classDate: json['class_date'] as String,
+        timestamp: json['timestamp'] as String,
+        markedManually: json['marked_manually'] as bool? ?? false,
       );
 }
 
@@ -429,6 +479,36 @@ class Batch {
         daysOfWeek: (json['days_of_week'] as List).map((e) => e as String).toList(),
         activeMonths: (json['active_months'] as List).map((e) => e as int).toList(),
         isActive: json['is_active'] as bool? ?? true,
+      );
+}
+
+class RecentSwap {
+  final int id;
+  final String date;
+  final String activityName;
+  final String originalCoachName;
+  final String coveringCoachName;
+  final String status;
+  final String? reason;
+
+  RecentSwap({
+    required this.id,
+    required this.date,
+    required this.activityName,
+    required this.originalCoachName,
+    required this.coveringCoachName,
+    required this.status,
+    this.reason,
+  });
+
+  factory RecentSwap.fromJson(Map<String, dynamic> json) => RecentSwap(
+        id: json['id'] as int,
+        date: json['date'] as String,
+        activityName: json['activity_name'] as String,
+        originalCoachName: json['original_coach_name'] as String,
+        coveringCoachName: json['covering_coach_name'] as String,
+        status: json['status'] as String,
+        reason: json['reason'] as String?,
       );
 }
 

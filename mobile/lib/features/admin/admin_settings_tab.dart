@@ -64,6 +64,16 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
     _loadCoaches();
   }
 
+  Future<void> _openAddCoach() async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => const _AddCoachForm(),
+    );
+    if (saved == true) _loadCoaches();
+  }
+
   Future<void> _submit() async {
     if (_currentPasswordCtrl.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter your current password to confirm changes')));
@@ -133,7 +143,13 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
           ),
         ),
         const SizedBox(height: 20),
-        const Text('Coach Accounts', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Coach Accounts', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            TextButton.icon(onPressed: _openAddCoach, icon: const Icon(Icons.add), label: const Text('Add Coach')),
+          ],
+        ),
         const SizedBox(height: 8),
         TextField(
           decoration: const InputDecoration(hintText: 'Search by name or email...', prefixIcon: Icon(Icons.search)),
@@ -163,6 +179,83 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
                         .toList(),
                   ),
       ],
+    );
+  }
+}
+
+class _AddCoachForm extends StatefulWidget {
+  const _AddCoachForm();
+
+  @override
+  State<_AddCoachForm> createState() => _AddCoachFormState();
+}
+
+class _AddCoachFormState extends State<_AddCoachForm> {
+  final _nameCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
+  bool _saving = false;
+
+  Future<void> _submit() async {
+    if (_nameCtrl.text.trim().isEmpty || _emailCtrl.text.trim().isEmpty || _passwordCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Name, login email, and password are required')));
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await ApiClient.instance.post('/coaches', body: {
+        'name': _nameCtrl.text.trim(),
+        'email': _emailCtrl.text.trim(),
+        'phone': _phoneCtrl.text.trim(),
+        'password': _passwordCtrl.text,
+      });
+      if (mounted) {
+        Navigator.of(context).pop(true);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Coach created')));
+      }
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _emailCtrl.dispose();
+    _phoneCtrl.dispose();
+    _passwordCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Add Coach', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 16),
+            TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
+            const SizedBox(height: 12),
+            TextField(controller: _emailCtrl, decoration: const InputDecoration(labelText: 'Login Email (User ID)'), keyboardType: TextInputType.emailAddress),
+            const SizedBox(height: 12),
+            TextField(controller: _phoneCtrl, decoration: const InputDecoration(labelText: 'Phone'), keyboardType: TextInputType.phone),
+            const SizedBox(height: 12),
+            TextField(controller: _passwordCtrl, obscureText: true, decoration: const InputDecoration(labelText: 'Password')),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _saving ? null : _submit,
+              child: _saving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Create'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
