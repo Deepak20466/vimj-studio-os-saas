@@ -2,6 +2,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
+import '../../core/export_helper.dart';
 
 const _monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -14,6 +15,7 @@ class AdminReportsTab extends StatefulWidget {
 
 class _AdminReportsTabState extends State<AdminReportsTab> {
   bool _loading = true;
+  bool _exporting = false;
   Map<String, dynamic>? _analysis;
   List<dynamic> _hundredPct = [];
   late int _month = DateTime.now().month;
@@ -48,6 +50,19 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
     }
   }
 
+  Future<void> _export(String fmt) async {
+    setState(() => _exporting = true);
+    try {
+      final bytes = await ApiClient.instance.getBytes('/reports/export/monthly-analysis', query: {'month': _month, 'year': _year, 'fmt': fmt});
+      final monthStr = _month.toString().padLeft(2, '0');
+      await shareExportedFile(bytes, 'business_analytics_${_year}_$monthStr.$fmt');
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
   Widget _statCard(String label, String value, {String? delta, bool? deltaGood}) {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -75,7 +90,7 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
           child: Row(
             children: [
               Expanded(
@@ -99,6 +114,28 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
                     _year = int.tryParse(v) ?? _year;
                     _load();
                   },
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _exporting ? null : () => _export('csv'),
+                  icon: const Icon(Icons.table_chart_outlined),
+                  label: const Text('Export CSV'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _exporting ? null : () => _export('pdf'),
+                  icon: const Icon(Icons.picture_as_pdf_outlined),
+                  label: const Text('Export PDF'),
                 ),
               ),
             ],
