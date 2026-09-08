@@ -30,9 +30,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
-  # Run `dart run flutter_launcher_icons` after the native android/ios projects
-  # are generated (`flutter create .`) to bake the Academy logo in as the real
-  # app icon; until then the app uses Flutter's default launcher icon.
+  # Re-run `dart run flutter_launcher_icons` after changing assets/images/logo.jpeg
+  # to regenerate the Android/iOS launcher icons from it.
   flutter_launcher_icons: ^0.14.1
 
 flutter_launcher_icons:

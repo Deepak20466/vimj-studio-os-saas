@@ -70,7 +70,10 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
           TextButton(onPressed: () => Navigator.pop(context, ctrl.text.trim()), child: const Text('Confirm')),
         ],
       ),
-    );
+    ).then((value) {
+      ctrl.dispose();
+      return value;
+    });
   }
 
   Future<void> _decideReceipt(FeeReceiptRecord r, bool approve) async {

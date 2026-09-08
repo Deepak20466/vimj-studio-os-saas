@@ -168,7 +168,18 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
                         .map((c) => Card(
                               margin: const EdgeInsets.only(bottom: 8),
                               child: ListTile(
-                                title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                title: Row(
+                                  children: [
+                                    Flexible(child: Text(c.name, style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                    const SizedBox(width: 8),
+                                    Chip(
+                                      label: Text(c.isActive ? 'Active' : 'Inactive', style: const TextStyle(color: Colors.white, fontSize: 11)),
+                                      backgroundColor: c.isActive ? AppColors.success : AppColors.danger,
+                                      visualDensity: VisualDensity.compact,
+                                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                  ],
+                                ),
                                 subtitle: Text(c.email),
                                 trailing: TextButton(
                                   onPressed: () => _openCoachCredentials(c),

@@ -59,13 +59,18 @@ class _AdminLeaveTabState extends State<AdminLeaveTab> {
         ],
       ),
     );
-    if (confirmed != true) return;
+    if (confirmed != true) {
+      noteCtrl.dispose();
+      return;
+    }
     try {
       final path = approve ? '/leave/${l.id}/approve' : '/leave/${l.id}/reject';
       await ApiClient.instance.put(path, body: {'note': noteCtrl.text.trim()});
       _load();
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      noteCtrl.dispose();
     }
   }
 
@@ -141,6 +146,9 @@ class _AdminLeaveTabState extends State<AdminLeaveTab> {
         ),
       ),
     );
+    startCtrl.dispose();
+    endCtrl.dispose();
+    reasonCtrl.dispose();
     if (saved == true) _load();
   }
 

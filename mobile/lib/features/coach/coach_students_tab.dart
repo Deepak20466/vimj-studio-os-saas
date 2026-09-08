@@ -120,6 +120,9 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
         ),
       ),
     );
+    nameCtrl.dispose();
+    phoneCtrl.dispose();
+    phoneSecondaryCtrl.dispose();
     if (saved == true) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Student updated')));
       _load();
@@ -222,8 +225,10 @@ class _AddStudentForm extends StatefulWidget {
 class _AddStudentFormState extends State<_AddStudentForm> {
   late int? _activityId = widget.activities.isNotEmpty ? widget.activities.first.activityId : null;
   final _nameCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _phoneSecondaryCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
   bool _saving = false;
 
   Future<void> _submit() async {
@@ -238,6 +243,8 @@ class _AddStudentFormState extends State<_AddStudentForm> {
         'phone': _phoneCtrl.text.trim(),
         'phone_secondary': _phoneSecondaryCtrl.text.trim(),
         'activity_id': _activityId,
+        if (_emailCtrl.text.trim().isNotEmpty) 'email': _emailCtrl.text.trim(),
+        if (_passwordCtrl.text.isNotEmpty) 'password': _passwordCtrl.text,
       });
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
@@ -250,8 +257,10 @@ class _AddStudentFormState extends State<_AddStudentForm> {
   @override
   void dispose() {
     _nameCtrl.dispose();
+    _emailCtrl.dispose();
     _phoneCtrl.dispose();
     _phoneSecondaryCtrl.dispose();
+    _passwordCtrl.dispose();
     super.dispose();
   }
 
@@ -275,9 +284,21 @@ class _AddStudentFormState extends State<_AddStudentForm> {
             const SizedBox(height: 12),
             TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
             const SizedBox(height: 12),
+            TextField(
+              controller: _emailCtrl,
+              decoration: const InputDecoration(labelText: "Email (optional — students don't log in)"),
+              keyboardType: TextInputType.emailAddress,
+            ),
+            const SizedBox(height: 12),
             TextField(controller: _phoneCtrl, decoration: const InputDecoration(labelText: 'Primary Phone'), keyboardType: TextInputType.phone),
             const SizedBox(height: 12),
             TextField(controller: _phoneSecondaryCtrl, decoration: const InputDecoration(labelText: 'Emergency Contact'), keyboardType: TextInputType.phone),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _passwordCtrl,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: "Password (optional — students don't log in)"),
+            ),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _saving ? null : _submit,

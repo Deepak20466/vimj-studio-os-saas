@@ -141,6 +141,8 @@ class _ReminderFormState extends State<_ReminderForm> {
   final _messageCtrl = TextEditingController();
   bool _saving = false;
   final _now = DateTime.now();
+  late final _monthCtrl = TextEditingController(text: _now.month.toString());
+  late final _yearCtrl = TextEditingController(text: _now.year.toString());
 
   Future<void> _submit() async {
     if (_studentId == null) {
@@ -151,8 +153,8 @@ class _ReminderFormState extends State<_ReminderForm> {
     try {
       await ApiClient.instance.post('/fee-reminders', body: {
         'student_id': _studentId,
-        'month': _now.month,
-        'year': _now.year,
+        'month': int.tryParse(_monthCtrl.text.trim()) ?? _now.month,
+        'year': int.tryParse(_yearCtrl.text.trim()) ?? _now.year,
         if (_messageCtrl.text.trim().isNotEmpty) 'message': _messageCtrl.text.trim(),
       });
       if (mounted) Navigator.of(context).pop(true);
@@ -166,6 +168,8 @@ class _ReminderFormState extends State<_ReminderForm> {
   @override
   void dispose() {
     _messageCtrl.dispose();
+    _monthCtrl.dispose();
+    _yearCtrl.dispose();
     super.dispose();
   }
 
@@ -185,6 +189,26 @@ class _ReminderFormState extends State<_ReminderForm> {
               decoration: const InputDecoration(labelText: 'Student'),
               items: widget.students.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
               onChanged: (v) => setState(() => _studentId = v),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _monthCtrl,
+                    decoration: const InputDecoration(labelText: 'Month'),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _yearCtrl,
+                    decoration: const InputDecoration(labelText: 'Year'),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             TextField(

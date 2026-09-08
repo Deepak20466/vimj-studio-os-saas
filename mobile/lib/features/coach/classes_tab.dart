@@ -63,13 +63,18 @@ class _ClassesTabState extends State<ClassesTab> {
         ],
       ),
     );
-    if (confirmed != true) return;
-    if (reasonCtrl.text.trim().isEmpty) {
+    if (confirmed != true) {
+      reasonCtrl.dispose();
+      return;
+    }
+    final reason = reasonCtrl.text.trim();
+    reasonCtrl.dispose();
+    if (reason.isEmpty) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('A reason is required')));
       return;
     }
     try {
-      await ApiClient.instance.post('/compliance/class-not-conducted', body: {'class_id': c.id, 'reason': reasonCtrl.text.trim()});
+      await ApiClient.instance.post('/compliance/class-not-conducted', body: {'class_id': c.id, 'reason': reason});
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Recorded — admin has been notified')));
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));

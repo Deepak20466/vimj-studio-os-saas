@@ -45,8 +45,8 @@ class _AdminComplianceTabState extends State<AdminComplianceTab> {
     setState(() => _loading = true);
     try {
       final query = <String, dynamic>{
-        'start_date': _isoDate(_dateFrom),
-        'end_date': _isoDate(_dateTo),
+        'date_from': _isoDate(_dateFrom),
+        'date_to': _isoDate(_dateTo),
       };
       if (_activityFilter != null) query['activity_id'] = _activityFilter;
       final data = await ApiClient.instance.get('/compliance/summary', query: query);
@@ -99,6 +99,7 @@ class _AdminComplianceTabState extends State<AdminComplianceTab> {
           ],
         ),
       );
+      ctrl.dispose();
       if (result == null) return;
       note = result;
     }

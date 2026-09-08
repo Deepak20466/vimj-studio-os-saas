@@ -421,6 +421,7 @@ class AdminSalaryRecord {
   final int year;
   final String amount;
   final String? acknowledgedDate;
+  final String? notifiedAt;
 
   AdminSalaryRecord({
     required this.id,
@@ -430,6 +431,7 @@ class AdminSalaryRecord {
     required this.year,
     required this.amount,
     this.acknowledgedDate,
+    this.notifiedAt,
   });
 
   factory AdminSalaryRecord.fromJson(Map<String, dynamic> json) => AdminSalaryRecord(
@@ -440,6 +442,7 @@ class AdminSalaryRecord {
         year: json['year'] as int,
         amount: json['amount'].toString(),
         acknowledgedDate: json['acknowledged_date'] as String?,
+        notifiedAt: json['notified_at'] as String?,
       );
 }
 

@@ -144,6 +144,8 @@ class _ReceiptFormState extends State<_ReceiptForm> {
   String _paymentMode = 'CASH';
   bool _saving = false;
   final _now = DateTime.now();
+  late final _monthCtrl = TextEditingController(text: _now.month.toString());
+  late final _yearCtrl = TextEditingController(text: _now.year.toString());
 
   Future<void> _submit() async {
     if (_studentId == null || _amountCtrl.text.trim().isEmpty) {
@@ -155,8 +157,8 @@ class _ReceiptFormState extends State<_ReceiptForm> {
       await ApiClient.instance.post('/receipts', body: {
         'student_id': _studentId,
         'amount': _amountCtrl.text.trim(),
-        'month': _now.month,
-        'year': _now.year,
+        'month': int.tryParse(_monthCtrl.text.trim()) ?? _now.month,
+        'year': int.tryParse(_yearCtrl.text.trim()) ?? _now.year,
         'payment_mode': _paymentMode,
         'note': _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
       });
@@ -172,6 +174,8 @@ class _ReceiptFormState extends State<_ReceiptForm> {
   void dispose() {
     _amountCtrl.dispose();
     _noteCtrl.dispose();
+    _monthCtrl.dispose();
+    _yearCtrl.dispose();
     super.dispose();
   }
 
@@ -193,6 +197,26 @@ class _ReceiptFormState extends State<_ReceiptForm> {
               onChanged: (v) => setState(() => _studentId = v),
             ),
             const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _monthCtrl,
+                    decoration: const InputDecoration(labelText: 'Month'),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _yearCtrl,
+                    decoration: const InputDecoration(labelText: 'Year'),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
             TextField(controller: _amountCtrl, decoration: const InputDecoration(labelText: 'Amount (₹)'), keyboardType: const TextInputType.numberWithOptions(decimal: true)),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
@@ -202,7 +226,7 @@ class _ReceiptFormState extends State<_ReceiptForm> {
                 DropdownMenuItem(value: 'CASH', child: Text('Cash')),
                 DropdownMenuItem(value: 'UPI', child: Text('UPI')),
                 DropdownMenuItem(value: 'CARD', child: Text('Card')),
-                DropdownMenuItem(value: 'OTHER', child: Text('Other')),
+                DropdownMenuItem(value: 'BANK_TRANSFER', child: Text('Bank Transfer')),
               ],
               onChanged: (v) => setState(() => _paymentMode = v!),
             ),

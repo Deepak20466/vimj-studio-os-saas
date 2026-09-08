@@ -43,8 +43,22 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
       final session = await AuthStorage.load();
       _coachName = session?.name ?? '';
       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      final data = await ApiClient.instance.get('/activities/classes/my', query: {'class_date': today}) as List;
-      _classes = data.map((e) => ClassSession.fromJson(e as Map<String, dynamic>)).toList();
+      final results = await Future.wait([
+        ApiClient.instance.get('/activities/classes/my', query: {'class_date': today}),
+        session != null ? ApiClient.instance.get('/coaches/${session.userId}/attendance') : Future.value([]),
+      ]);
+      _classes = (results[0] as List).map((e) => ClassSession.fromJson(e as Map<String, dynamic>)).toList();
+      final attendance = results[1] as List;
+      Map<String, dynamic>? todayRecord;
+      for (final e in attendance) {
+        final a = e as Map<String, dynamic>;
+        if ((a['date'] as String).substring(0, 10) == today) {
+          todayRecord = a;
+          break;
+        }
+      }
+      _entryDone = todayRecord?['entry_time'] != null;
+      _exitDone = todayRecord?['exit_time'] != null;
       _pendingSync = await OfflineQueue.pendingCount();
       final summaryPairs = await Future.wait(_classes.map((c) async {
         try {

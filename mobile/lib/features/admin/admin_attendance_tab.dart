@@ -134,6 +134,7 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
         ),
       ),
     );
+    reasonCtrl.dispose();
     if (saved == true) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Class reassigned to substitute coach')));
       _load();

@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/models.dart';
+
+String _formatDate(String isoDate) {
+  final parsed = DateTime.tryParse(isoDate);
+  return parsed == null ? isoDate : DateFormat('MMM d, yyyy').format(parsed);
+}
 
 class AdminSalaryTab extends StatefulWidget {
   const AdminSalaryTab({super.key});
@@ -102,7 +108,18 @@ class _AdminSalaryTabState extends State<AdminSalaryTab> {
                               ListTile(
                                 leading: const CircleAvatar(backgroundColor: AppColors.brandLight, child: Icon(Icons.account_balance_wallet, color: AppColors.brandOrange)),
                                 title: Text(r.coachName ?? 'Coach #${r.coachId}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: Text('${r.month}/${r.year} · ₹${r.amount}'),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text('${r.month}/${r.year} · ₹${r.amount}'),
+                                    Text(
+                                      'Notified: ${r.notifiedAt != null ? _formatDate(r.notifiedAt!) : "-"}',
+                                      style: Theme.of(context).textTheme.bodySmall,
+                                    ),
+                                  ],
+                                ),
+                                isThreeLine: true,
                                 trailing: acknowledged
                                     ? const Chip(label: Text('Acknowledged', style: TextStyle(color: Colors.white, fontSize: 11)), backgroundColor: AppColors.success, visualDensity: VisualDensity.compact)
                                     : const Chip(label: Text('Pending', style: TextStyle(color: Colors.white, fontSize: 11)), backgroundColor: AppColors.warning, visualDensity: VisualDensity.compact),

@@ -169,6 +169,7 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
         },
       ),
     );
+    reasonCtrl.dispose();
     if (saved == true) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Coach reassigned for that date')));
       _loadCoverage();
@@ -205,7 +206,7 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
         'end_date': range[1].toIso8601String().substring(0, 10),
       }) as Map<String, dynamic>;
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Generated ${result['created'] ?? 0} session(s)')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['detail'] as String? ?? 'Sessions generated')));
       }
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));

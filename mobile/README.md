@@ -11,11 +11,10 @@ batches/analytics/reports/settings.
 
 ## One-time setup (this repo ships `lib/` and `pubspec.yaml` only)
 
-This machine doesn't have the Flutter SDK installed, so the native `android/`
-and `ios/` platform projects (Gradle files, `AndroidManifest.xml`, Xcode
-project, etc.) haven't been generated or verified here — that tooling output
-shouldn't be hand-written. After installing Flutter, run this once from
-`mobile/`:
+`android/`, `ios/`, `macos/`, `windows/`, `linux/`, and `web/` are generated
+tooling output (see `.gitignore`) — not committed, since they're
+machine/Flutter-version specific. Run this once from `mobile/` on any machine
+that has the Flutter SDK:
 
 ```bash
 flutter create --org com.vimjstudio --project-name vimj_attendance .
@@ -23,7 +22,8 @@ flutter pub get
 ```
 
 This generates `android/` and `ios/` without touching the `lib/` code already
-here. Then add the permissions below before your first run.
+here. Then add the permissions below before your first run — `flutter create`
+does not know about the camera/location/biometric features this app uses.
 
 ### Android — `android/app/src/main/AndroidManifest.xml`
 
@@ -39,7 +39,9 @@ Add inside `<manifest>`, before `<application>`:
 ```
 
 Minimum SDK: set `minSdkVersion 23` in `android/app/build.gradle` (required by
-`local_auth` and `geolocator`).
+`local_auth` and `geolocator`). Build with `flutter build apk --release`
+(installable `.apk`) or `flutter build appbundle --release` (Play Store
+upload format).
 
 ### iOS — `ios/Runner/Info.plist`
 
@@ -47,12 +49,20 @@ Add:
 
 ```xml
 <key>NSCameraUsageDescription</key>
-<string>Used to capture a selfie when marking attendance.</string>
+<string>VIMJ Studio needs camera access to capture your selfie for attendance verification.</string>
 <key>NSLocationWhenInUseUsageDescription</key>
-<string>Used to confirm you're at the facility when checking in or marking attendance.</string>
+<string>VIMJ Studio needs your location to confirm you are at the facility when marking attendance.</string>
 <key>NSFaceIDUsageDescription</key>
-<string>Used to unlock the app quickly and securely.</string>
+<string>VIMJ Studio uses Face ID to let you sign in quickly and securely.</string>
 ```
+
+Building and signing the `.ipa` requires Xcode on macOS with an Apple
+Developer account — that can't be done from this Windows environment. On a
+Mac: `cd mobile && flutter pub get && open ios/Runner.xcworkspace` (CocoaPods
+generates `ios/Podfile`/`Podfile.lock` and `Runner.xcworkspace` on first
+build), set up signing in Xcode, then `flutter build ipa --release` or
+Product → Archive from Xcode. The bundle id (`com.vimjstudio.vimjAttendance`)
+and deployment target (iOS 15.0) are already set.
 
 ## Configuration
 
