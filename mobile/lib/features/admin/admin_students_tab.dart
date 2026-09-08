@@ -288,6 +288,7 @@ class _StudentFormState extends State<_StudentForm> {
   late final _phoneCtrl = TextEditingController(text: widget.student?.phone ?? '');
   late final _phoneSecondaryCtrl = TextEditingController(text: widget.student?.phoneSecondary ?? '');
   final _passwordCtrl = TextEditingController();
+  final _additionalDetailsCtrl = TextEditingController();
   bool _saving = false;
 
   Future<void> _submit() async {
@@ -313,6 +314,7 @@ class _StudentFormState extends State<_StudentForm> {
         };
         if (_emailCtrl.text.trim().isNotEmpty) body['email'] = _emailCtrl.text.trim();
         if (_passwordCtrl.text.isNotEmpty) body['password'] = _passwordCtrl.text;
+        if (_additionalDetailsCtrl.text.trim().isNotEmpty) body['additional_details'] = _additionalDetailsCtrl.text.trim();
         await ApiClient.instance.post('/students', body: body);
       }
       if (mounted) Navigator.of(context).pop(true);
@@ -330,6 +332,7 @@ class _StudentFormState extends State<_StudentForm> {
     _phoneCtrl.dispose();
     _phoneSecondaryCtrl.dispose();
     _passwordCtrl.dispose();
+    _additionalDetailsCtrl.dispose();
     super.dispose();
   }
 
@@ -362,6 +365,14 @@ class _StudentFormState extends State<_StudentForm> {
               obscureText: true,
               decoration: InputDecoration(labelText: editing ? 'New Password (optional)' : 'Password (optional)'),
             ),
+            if (!editing) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _additionalDetailsCtrl,
+                maxLines: 2,
+                decoration: const InputDecoration(labelText: 'Additional Details (optional)'),
+              ),
+            ],
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _saving ? null : _submit,

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/export_helper.dart';
+import 'activity_report_screen.dart';
 
 const _monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -219,21 +220,36 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
                                 ),
                               ),
                               const SizedBox(height: 12),
-                              ...breakdown.map((row) => Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 6),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(row['activity_name'] as String, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                        Text(
-                                          '${row['student_count']} students · ${row['total_classes']} classes · ${row['avg_attendance_pct']}% attendance',
-                                          style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                                        ),
-                                        Text(
-                                          'Revenue ₹${row['revenue']} · Collected ₹${row['revenue_collected']}',
-                                          style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                                        ),
-                                      ],
+                              ...breakdown.map((row) => InkWell(
+                                    onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                                      builder: (_) => ActivityReportScreen(
+                                        activityId: row['activity_id'] as int,
+                                        activityName: row['activity_name'] as String,
+                                      ),
+                                    )),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 6),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(row['activity_name'] as String, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                                Text(
+                                                  '${row['student_count']} students · ${row['total_classes']} classes · ${row['avg_attendance_pct']}% attendance',
+                                                  style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                                                ),
+                                                Text(
+                                                  'Revenue ₹${row['revenue']} · Collected ₹${row['revenue_collected']}',
+                                                  style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted),
+                                        ],
+                                      ),
                                     ),
                                   )),
                             ],
