@@ -55,6 +55,81 @@ def rows_to_pdf(title: str, headers: Sequence[str], rows: Sequence[Sequence]) ->
     return buffer
 
 
+def build_monthly_analysis_pdf(
+    *,
+    month: int,
+    year: int,
+    overview: dict,
+    activity_headers: Sequence[str],
+    activity_rows: Sequence[Sequence],
+    hundred_pct_rows: Sequence[Sequence],
+) -> io.BytesIO:
+    """Business Analytics overview export: stat summary + activity breakdown + 100%-attendance coaches."""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=1.5 * cm, bottomMargin=1.5 * cm)
+    styles = getSampleStyleSheet()
+    title_style = styles["Title"]
+    title_style.textColor = BRAND_BLUE
+    heading_style = styles["Heading3"]
+    heading_style.textColor = BRAND_BLUE
+
+    month_names = ["", "January", "February", "March", "April", "May", "June", "July", "August",
+                   "September", "October", "November", "December"]
+
+    def _table(headers, rows, header_color):
+        data = [list(headers)] + [list(map(str, row)) for row in rows]
+        table = Table(data, repeatRows=1)
+        table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), header_color),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, BRAND_LIGHT]),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ]
+            )
+        )
+        return table
+
+    elements = [
+        Paragraph("Business Analytics", title_style),
+        Paragraph(f"{month_names[month]} {year}", styles["Normal"]),
+        Spacer(1, 0.5 * cm),
+        _table(
+            ["Total Students", "Total Coaches", "Total Classes", "Attendance Rate %", "Monthly Revenue"],
+            [[
+                overview["total_students"],
+                overview["total_coaches"],
+                overview["total_classes"],
+                overview["attendance_rate"],
+                overview["monthly_revenue"],
+            ]],
+            BRAND_BLUE,
+        ),
+        Spacer(1, 0.6 * cm),
+        Paragraph("Activity Breakdown", heading_style),
+    ]
+
+    if activity_rows:
+        elements.append(_table(activity_headers, activity_rows, BRAND_ORANGE))
+    else:
+        elements.append(Paragraph("No activity data for this period.", styles["Normal"]))
+
+    elements.append(Spacer(1, 0.6 * cm))
+    elements.append(Paragraph("Coaches with 100% Student Attendance", heading_style))
+    if hundred_pct_rows:
+        elements.append(_table(["Coach", "Attendance %"], hundred_pct_rows, BRAND_ORANGE))
+    else:
+        elements.append(Paragraph("No coach hit 100% attendance this period.", styles["Normal"]))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+
+
 def build_coach_monthly_report_pdf(
     *,
     coach_name: str,

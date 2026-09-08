@@ -29,6 +29,22 @@ export default function Reports() {
 
   useEffect(load, [month, year]);
 
+  const downloadAnalytics = async (fmt) => {
+    try {
+      const { data } = await ReportsAPI.exportMonthlyAnalysis(month, year, fmt);
+      const url = window.URL.createObjectURL(new Blob([data]));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `business_analytics_${year}_${String(month).padStart(2, "0")}.${fmt}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Export failed");
+    }
+  };
+
   const revenueDelta = analysis ? analysis.monthly_revenue - analysis.prev_month_revenue : 0;
   const attendanceDelta = analysis ? analysis.attendance_rate - analysis.prev_month_attendance_rate : 0;
 
@@ -45,6 +61,12 @@ export default function Reports() {
             ))}
           </select>
           <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} style={{ width: 100 }} />
+          <button className="btn btn-secondary" onClick={() => downloadAnalytics("csv")}>
+            Export CSV
+          </button>
+          <button className="btn btn-primary" onClick={() => downloadAnalytics("pdf")}>
+            Export PDF
+          </button>
         </div>
       </div>
 

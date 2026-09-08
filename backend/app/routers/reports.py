@@ -1,4 +1,6 @@
 import calendar
+import csv
+import io
 from collections import defaultdict
 from datetime import date, time
 from typing import List, Optional
@@ -32,7 +34,7 @@ from app.schemas.reports import (
     SessionPeriodBreakdown,
 )
 from app.security import get_current_user, require_admin, require_coach
-from app.services.export import rows_to_csv, rows_to_pdf, build_coach_monthly_report_pdf
+from app.services.export import rows_to_csv, rows_to_pdf, build_coach_monthly_report_pdf, build_monthly_analysis_pdf
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -179,6 +181,10 @@ def hundred_percent_coaches(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
+    return _hundred_percent_coaches(db, month, year)
+
+
+def _hundred_percent_coaches(db: Session, month: int, year: int) -> List[HundredPercentCoach]:
     coaches = db.query(User).filter(User.role == UserRole.COACH).all()
     result = []
     for coach in coaches:
@@ -233,6 +239,10 @@ def monthly_analysis(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
+    return _monthly_analysis(db, month, year)
+
+
+def _monthly_analysis(db: Session, month: int, year: int) -> MonthlyAnalysis:
     total_students = db.query(User).filter(User.role == UserRole.STUDENT).count()
     total_coaches = db.query(User).filter(User.role == UserRole.COACH).count()
 
@@ -553,6 +563,64 @@ def activity_report(
         coach_breakdown=coach_breakdown,
         session_breakdown=session_breakdown,
     )
+
+
+@router.get("/export/monthly-analysis")
+def export_monthly_analysis(
+    month: int,
+    year: int,
+    fmt: str = "csv",
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Export the Business Analytics overview (stat cards + activity breakdown + 100%-attendance coaches)."""
+    analysis = _monthly_analysis(db, month, year)
+    hundred_pct = _hundred_percent_coaches(db, month, year)
+    filename = f"business_analytics_{year}_{month:02d}"
+
+    activity_headers = ["Activity", "Students", "Total Classes", "Present", "Absent", "Avg Attendance %", "Revenue (Projected)", "Revenue Collected"]
+    activity_rows = [
+        [a.activity_name, a.student_count, a.total_classes, a.total_present, a.total_absent, a.avg_attendance_pct, a.revenue, a.revenue_collected]
+        for a in analysis.activity_breakdown
+    ]
+    hundred_pct_rows = [[c.coach_name, c.attendance_pct] for c in hundred_pct]
+
+    if fmt == "pdf":
+        buffer = build_monthly_analysis_pdf(
+            month=month,
+            year=year,
+            overview={
+                "total_students": analysis.total_students,
+                "total_coaches": analysis.total_coaches,
+                "total_classes": analysis.total_classes,
+                "attendance_rate": analysis.attendance_rate,
+                "monthly_revenue": analysis.monthly_revenue,
+            },
+            activity_headers=activity_headers,
+            activity_rows=activity_rows,
+            hundred_pct_rows=hundred_pct_rows,
+        )
+        return Response(content=buffer.read(), media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename={filename}.pdf"})
+
+    buffer_io = io.StringIO()
+    writer = csv.writer(buffer_io)
+    writer.writerow(["Business Analytics", f"{month}/{year}"])
+    writer.writerow([])
+    writer.writerow(["Total Students", analysis.total_students])
+    writer.writerow(["Total Coaches", analysis.total_coaches])
+    writer.writerow(["Total Classes", analysis.total_classes])
+    writer.writerow(["Attendance Rate %", analysis.attendance_rate])
+    writer.writerow(["Monthly Revenue", analysis.monthly_revenue])
+    writer.writerow([])
+    writer.writerow(["Activity Breakdown"])
+    writer.writerow(activity_headers)
+    writer.writerows(activity_rows)
+    writer.writerow([])
+    writer.writerow(["Coaches with 100% Student Attendance"])
+    writer.writerow(["Coach", "Attendance %"])
+    writer.writerows(hundred_pct_rows)
+    content = buffer_io.getvalue().encode("utf-8")
+    return Response(content=content, media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={filename}.csv"})
 
 
 @router.get("/export/student/{student_id}")

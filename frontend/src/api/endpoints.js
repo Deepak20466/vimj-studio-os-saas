@@ -186,4 +186,6 @@ export const ReportsAPI = {
   exportStudent: (id, fmt) => client.get(`/reports/export/student/${id}`, { params: { fmt }, responseType: "blob" }),
   exportCoach: (id, fmt) => client.get(`/reports/export/coach/${id}`, { params: { fmt }, responseType: "blob" }),
   activityDetail: (id) => client.get(`/reports/activity/${id}`),
+  exportMonthlyAnalysis: (month, year, fmt) =>
+    client.get("/reports/export/monthly-analysis", { params: { month, year, fmt }, responseType: "blob" }),
 };
