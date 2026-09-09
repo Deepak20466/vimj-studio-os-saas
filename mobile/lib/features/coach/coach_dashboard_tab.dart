@@ -9,6 +9,7 @@ import '../../core/models.dart';
 import '../../core/offline_queue.dart';
 import '../../core/sync_service.dart';
 import 'mark_attendance_screen.dart';
+import '../shared/notification_bell_action.dart';
 
 class CoachDashboardTab extends StatefulWidget {
   const CoachDashboardTab({super.key});
@@ -90,15 +91,11 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
     setState(() => _actionLoading = true);
     try {
       final position = await LocationService.getCurrentPosition();
-      final within = Geofence.isWithin(
-        position.latitude,
-        position.longitude,
-        FacilityConfig.lat,
-        FacilityConfig.lng,
-        radiusMeters: FacilityConfig.radiusMeters,
-      );
-      if (!within && mounted) {
-        _showSnack('You appear to be outside the facility. The server will reject this if you are not within range.');
+      final distance = Geofence.distanceMeters(position.latitude, position.longitude, FacilityConfig.lat, FacilityConfig.lng);
+      if (distance > FacilityConfig.radiusMeters && mounted) {
+        _showSnack(
+          'You are ${distance.toStringAsFixed(0)}m from the facility (limit ${FacilityConfig.radiusMeters.toStringAsFixed(0)}m). The server will reject this.',
+        );
       }
       await ApiClient.instance.post(path, body: {
         'location_lat': position.latitude,
@@ -147,6 +144,7 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
           ),
         ),
         title: Text('Hi, $_coachName'),
+        actions: const [NotificationBellAction(), SizedBox(width: 4)],
       ),
       body: RefreshIndicator(
         onRefresh: _load,

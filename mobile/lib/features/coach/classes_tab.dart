@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/api_client.dart';
 import '../../core/models.dart';
 import 'mark_attendance_screen.dart';
+import '../shared/notification_bell_action.dart';
 
 class ClassesTab extends StatefulWidget {
   const ClassesTab({super.key});
@@ -112,7 +113,11 @@ class _ClassesTabState extends State<ClassesTab> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Classes'),
-        actions: [IconButton(icon: const Icon(Icons.calendar_month), onPressed: _pickDate)],
+        actions: [
+          IconButton(icon: const Icon(Icons.calendar_month), onPressed: _pickDate),
+          const NotificationBellAction(),
+          const SizedBox(width: 4),
+        ],
       ),
       body: Column(
         children: [

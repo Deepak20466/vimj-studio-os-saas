@@ -64,9 +64,9 @@ code:
 ```bash
 flutter run \
   --dart-define=API_BASE_URL=http://10.0.2.2:8000 \
-  --dart-define=FACILITY_LAT=12.9716 \
-  --dart-define=FACILITY_LNG=77.5946 \
-  --dart-define=GEOFENCE_RADIUS_METERS=50
+  --dart-define=FACILITY_LAT=12.9745723 \
+  --dart-define=FACILITY_LNG=77.5689324 \
+  --dart-define=GEOFENCE_RADIUS_METERS=100
 ```
 
 - Android emulator → host machine backend: `http://10.0.2.2:8000`
@@ -76,6 +76,16 @@ flutter run \
   `FACILITY_LNG`, `GEOFENCE_RADIUS_METERS`) — the client-side check in
   `lib/core/geofence.dart` is just an early warning; the server re-validates
   independently on every request regardless of what the client sends.
+  **The values above are geocoded from the facility's street address (near
+  Chowdeswari Temple, TD Ln, Subhash Nagar, Cottonpete, Bengaluru 560053),
+  accurate to roughly a city block, not an exact pin.** They replace an
+  earlier placeholder that was ~3km off and meant attendance marking failed
+  unconditionally, every time, everywhere near the real building — a release
+  build that reverts to demo coordinates (from an old copy of this command,
+  or omitting the flags and falling back to `api_config.dart`'s defaults)
+  reintroduces exactly that. For full accuracy, stand at the facility,
+  long-press the exact spot in Google Maps, and use the coordinates it shows
+  instead of these.
 
 ## Release process
 
@@ -88,13 +98,15 @@ IP:
 ```bash
 flutter build apk --release --split-per-abi \
   --dart-define=API_BASE_URL=https://vimj-backend.onrender.com \
-  --dart-define=FACILITY_LAT=<facility latitude> \
-  --dart-define=FACILITY_LNG=<facility longitude> \
-  --dart-define=GEOFENCE_RADIUS_METERS=50
+  --dart-define=FACILITY_LAT=12.9745723 \
+  --dart-define=FACILITY_LNG=77.5689324 \
+  --dart-define=GEOFENCE_RADIUS_METERS=100
 ```
 
-The lat/lng/radius must match the backend's `.env` (`FACILITY_LAT`,
-`FACILITY_LNG`, `GEOFENCE_RADIUS_METERS`) on Render. Tag the release
+Replace the lat/lng above with an exact Google Maps pin for the real facility
+if one becomes available — these are geocoded from the address only, accurate
+to roughly a city block. The lat/lng/radius must match the backend's config
+(`FACILITY_LAT`, `FACILITY_LNG`, `GEOFENCE_RADIUS_METERS`) on Render. Tag the release
 (`mobile-vX.Y.Z`) and publish the three split-ABI APKs as GitHub release
 assets:
 

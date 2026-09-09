@@ -98,15 +98,12 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
       final position = await LocationService.getCurrentPosition();
       lat = position.latitude;
       lng = position.longitude;
-      final within = Geofence.isWithin(
-        lat,
-        lng,
-        FacilityConfig.lat,
-        FacilityConfig.lng,
-        radiusMeters: FacilityConfig.radiusMeters,
-      );
-      if (!within) {
-        _showSnack('You are outside the facility geofence. The server will reject this.', isError: true);
+      final distance = Geofence.distanceMeters(lat, lng, FacilityConfig.lat, FacilityConfig.lng);
+      if (distance > FacilityConfig.radiusMeters) {
+        _showSnack(
+          'You are ${distance.toStringAsFixed(0)}m from the facility (limit ${FacilityConfig.radiusMeters.toStringAsFixed(0)}m). The server will reject this.',
+          isError: true,
+        );
       }
 
       if (status == 'PRESENT') {

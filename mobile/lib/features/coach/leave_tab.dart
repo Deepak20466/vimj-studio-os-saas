@@ -4,6 +4,7 @@ import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/auth_storage.dart';
 import '../../core/models.dart';
+import '../shared/notification_bell_action.dart';
 
 class LeaveTab extends StatefulWidget {
   const LeaveTab({super.key});
@@ -100,7 +101,7 @@ class _LeaveTabState extends State<LeaveTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Leave Requests')),
+      appBar: AppBar(title: const Text('Leave Requests'), actions: const [NotificationBellAction(), SizedBox(width: 4)]),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'coach-leave-fab',
         onPressed: _openNewLeaveSheet,

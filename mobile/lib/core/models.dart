@@ -1,3 +1,36 @@
+class AppNotification {
+  final int id;
+  final String type;
+  final String title;
+  final String message;
+  final String? link;
+  final int? delayMinutes;
+  final bool isRead;
+  final String createdAt;
+
+  AppNotification({
+    required this.id,
+    required this.type,
+    required this.title,
+    required this.message,
+    required this.isRead,
+    required this.createdAt,
+    this.link,
+    this.delayMinutes,
+  });
+
+  factory AppNotification.fromJson(Map<String, dynamic> json) => AppNotification(
+        id: json['id'] as int,
+        type: json['type'] as String,
+        title: json['title'] as String,
+        message: json['message'] as String,
+        link: json['link'] as String?,
+        delayMinutes: json['delay_minutes'] as int?,
+        isRead: json['is_read'] as bool,
+        createdAt: json['created_at'] as String,
+      );
+}
+
 class ChatThreadSummary {
   final int coachId;
   final String coachName;
@@ -119,6 +152,9 @@ class SwapRequest {
   final int classId;
   final String date;
   final String status;
+  final String initiatedBy; // ADMIN or COACH
+  final String? reason;
+  final String? declineReason;
 
   SwapRequest({
     required this.id,
@@ -127,6 +163,9 @@ class SwapRequest {
     required this.classId,
     required this.date,
     required this.status,
+    required this.initiatedBy,
+    this.reason,
+    this.declineReason,
   });
 
   factory SwapRequest.fromJson(Map<String, dynamic> json) => SwapRequest(
@@ -136,6 +175,9 @@ class SwapRequest {
         classId: json['class_id'] as int,
         date: json['date'] as String,
         status: json['status'] as String,
+        initiatedBy: json['initiated_by'] as String,
+        reason: json['reason'] as String?,
+        declineReason: json['decline_reason'] as String?,
       );
 }
 

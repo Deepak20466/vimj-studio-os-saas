@@ -15,7 +15,7 @@ class Geofence {
     return earthRadius * c;
   }
 
-  static bool isWithin(double lat, double lng, double facilityLat, double facilityLng, {double radiusMeters = 50}) {
+  static bool isWithin(double lat, double lng, double facilityLat, double facilityLng, {double radiusMeters = 100}) {
     return distanceMeters(lat, lng, facilityLat, facilityLng) <= radiusMeters;
   }
 }

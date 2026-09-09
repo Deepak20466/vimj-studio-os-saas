@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/models.dart';
+import '../shared/theme_toggle_tile.dart';
 
 class AdminSettingsTab extends StatefulWidget {
   const AdminSettingsTab({super.key});
@@ -111,9 +112,14 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        const Card(child: ThemeToggleTile()),
+        const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(14),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

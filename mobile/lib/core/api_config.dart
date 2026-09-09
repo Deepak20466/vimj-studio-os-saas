@@ -23,8 +23,11 @@ class ApiConfig {
 /// to give the coach instant feedback before submitting — the server is the
 /// source of truth and re-validates every request independently.
 class FacilityConfig {
-  static final double lat = double.parse(const String.fromEnvironment('FACILITY_LAT', defaultValue: '12.9716'));
-  static final double lng = double.parse(const String.fromEnvironment('FACILITY_LNG', defaultValue: '77.5946'));
+  // Defaults are VIMJ Studio's real facility (geocoded from its address — see
+  // backend/app/config.py for the full note); still override via --dart-define if a more
+  // exact pin becomes available.
+  static final double lat = double.parse(const String.fromEnvironment('FACILITY_LAT', defaultValue: '12.9745723'));
+  static final double lng = double.parse(const String.fromEnvironment('FACILITY_LNG', defaultValue: '77.5689324'));
   static final double radiusMeters =
-      double.parse(const String.fromEnvironment('GEOFENCE_RADIUS_METERS', defaultValue: '50'));
+      double.parse(const String.fromEnvironment('GEOFENCE_RADIUS_METERS', defaultValue: '100'));
 }

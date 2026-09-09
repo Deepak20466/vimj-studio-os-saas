@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../../core/api_client.dart';
 import '../../core/auth_storage.dart';
 import '../../core/models.dart';
+import '../shared/notification_bell_action.dart';
 
 class SwapTab extends StatefulWidget {
   const SwapTab({super.key});
@@ -57,10 +58,47 @@ class _SwapTabState extends State<SwapTab> {
     if (result == true) _load();
   }
 
+  bool _needsMyResponse(SwapRequest s) => s.initiatedBy == 'ADMIN' && s.status == 'PENDING' && s.coveringCoachId == _myId;
+
+  Future<void> _accept(SwapRequest s) async {
+    try {
+      await ApiClient.instance.put('/swap/${s.id}/respond', body: {'accept': true});
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Swap accepted — you now cover this class')));
+      _load();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<void> _decline(SwapRequest s) async {
+    final reasonCtrl = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Decline swap'),
+        content: TextField(controller: reasonCtrl, decoration: const InputDecoration(labelText: 'Reason (optional)'), maxLines: 2),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Decline')),
+        ],
+      ),
+    );
+    final reason = reasonCtrl.text.trim();
+    reasonCtrl.dispose();
+    if (confirmed != true) return;
+    try {
+      await ApiClient.instance.put('/swap/${s.id}/respond', body: {'accept': false, 'decline_reason': reason.isEmpty ? null : reason});
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Swap declined')));
+      _load();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Class Swaps')),
+      appBar: AppBar(title: const Text('Class Swaps'), actions: const [NotificationBellAction(), SizedBox(width: 4)]),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'coach-swap-fab',
         onPressed: _openRequestSheet,
@@ -79,15 +117,32 @@ class _SwapTabState extends State<SwapTab> {
                       itemBuilder: (context, i) {
                         final s = _swaps[i];
                         final isCovering = s.coveringCoachId == _myId;
+                        final needsResponse = _needsMyResponse(s);
                         return Card(
-                          child: ListTile(
-                            leading: Icon(isCovering ? Icons.call_received : Icons.call_made),
-                            title: Text('Class #${s.classId} on ${s.date}'),
-                            subtitle: Text(isCovering ? 'You are covering this class' : 'You requested coverage'),
-                            trailing: Chip(
-                              label: Text(s.status, style: const TextStyle(color: Colors.white, fontSize: 11)),
-                              backgroundColor: _statusColor(s.status),
-                            ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ListTile(
+                                leading: Icon(isCovering ? Icons.call_received : Icons.call_made),
+                                title: Text('Class #${s.classId} on ${s.date}'),
+                                subtitle: Text(isCovering ? 'You are covering this class' : 'You requested coverage'),
+                                trailing: Chip(
+                                  label: Text(s.status, style: const TextStyle(color: Colors.white, fontSize: 11)),
+                                  backgroundColor: _statusColor(s.status),
+                                ),
+                              ),
+                              if (needsResponse)
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                                  child: Row(
+                                    children: [
+                                      ElevatedButton(onPressed: () => _accept(s), child: const Text('Accept')),
+                                      const SizedBox(width: 8),
+                                      OutlinedButton(onPressed: () => _decline(s), child: const Text('Decline')),
+                                    ],
+                                  ),
+                                ),
+                            ],
                           ),
                         );
                       },

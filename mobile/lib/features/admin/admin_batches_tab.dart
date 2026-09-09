@@ -19,6 +19,8 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
   List<Activity> _activities = [];
   List<Coach> _coaches = [];
   List<RecentSwap> _recentSwaps = [];
+  List<SwapRequest> _pendingSwaps = [];
+  int? _swapBusyId;
   bool _loading = true;
 
   Map<String, dynamic>? _coverage;
@@ -31,6 +33,7 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
     _load();
     _loadCoverage();
     _loadRecentSwaps();
+    _loadPendingSwaps();
   }
 
   Future<void> _load() async {
@@ -71,6 +74,45 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
       if (mounted) setState(() => _recentSwaps = data.map((e) => RecentSwap.fromJson(e as Map<String, dynamic>)).toList());
     } on ApiException {
       // non-fatal
+    }
+  }
+
+  Future<void> _loadPendingSwaps() async {
+    try {
+      final data = await ApiClient.instance.get('/swap/pending') as List;
+      if (mounted) setState(() => _pendingSwaps = data.map((e) => SwapRequest.fromJson(e as Map<String, dynamic>)).toList());
+    } on ApiException {
+      // non-fatal
+    }
+  }
+
+  Future<void> _approveSwap(SwapRequest s) async {
+    setState(() => _swapBusyId = s.id);
+    try {
+      await ApiClient.instance.put('/swap/${s.id}/approve');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Swap approved')));
+      _loadPendingSwaps();
+      _loadRecentSwaps();
+      _loadCoverage();
+      _load();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _swapBusyId = null);
+    }
+  }
+
+  Future<void> _rejectSwap(SwapRequest s) async {
+    setState(() => _swapBusyId = s.id);
+    try {
+      await ApiClient.instance.put('/swap/${s.id}/reject');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Swap rejected')));
+      _loadPendingSwaps();
+      _loadRecentSwaps();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _swapBusyId = null);
     }
   }
 
@@ -295,6 +337,53 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
     );
   }
 
+  Widget _pendingSwapsSection() {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Pending Swap Requests', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            const Text('Coaches asking another coach to cover their class.', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            const SizedBox(height: 8),
+            if (_pendingSwaps.isEmpty)
+              const Text('No pending swap requests.', style: TextStyle(color: AppColors.textMuted, fontSize: 12))
+            else
+              ..._pendingSwaps.map((s) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${s.date} · Class #${s.classId}\n${_coachName(s.originalCoachId)} → ${_coachName(s.coveringCoachId)}${s.reason != null && s.reason!.isNotEmpty ? "\n${s.reason}" : ""}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            ElevatedButton(
+                              onPressed: _swapBusyId == s.id ? null : () => _approveSwap(s),
+                              child: const Text('Approve'),
+                            ),
+                            const SizedBox(width: 8),
+                            OutlinedButton(
+                              onPressed: _swapBusyId == s.id ? null : () => _rejectSwap(s),
+                              child: const Text('Reject'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  )),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _recentSwapsSection() {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -354,14 +443,16 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
                 await _load();
                 await _loadCoverage();
                 await _loadRecentSwaps();
+                await _loadPendingSwaps();
               },
               child: ListView.builder(
                       padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
-                      itemCount: 3 + (_batches.isEmpty ? 1 : _batches.length),
+                      itemCount: 4 + (_batches.isEmpty ? 1 : _batches.length),
                       itemBuilder: (context, i) {
                         if (i == 0) return _coverageSection();
-                        if (i == 1) return _recentSwapsSection();
-                        if (i == 2) {
+                        if (i == 1) return _pendingSwapsSection();
+                        if (i == 2) return _recentSwapsSection();
+                        if (i == 3) {
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 8),
                             child: Text('All Batches', style: Theme.of(context).textTheme.titleMedium),
@@ -370,7 +461,7 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
                         if (_batches.isEmpty) {
                           return const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('No batches yet. Create one to schedule a recurring class.')));
                         }
-                        final b = _batches[i - 3];
+                        final b = _batches[i - 4];
                         return Card(
                           margin: const EdgeInsets.only(bottom: 10),
                           child: Padding(

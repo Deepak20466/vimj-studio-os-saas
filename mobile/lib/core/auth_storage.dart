@@ -52,7 +52,7 @@ class AuthStorage {
     }
   }
 
-  static Future<void> updateAccessToken(String accessToken) async {
+  static Future<void> updateAccessToken(String accessToken, {String? refreshToken}) async {
     final session = await load();
     if (session == null) return;
     await save(AuthSession(
@@ -60,7 +60,7 @@ class AuthStorage {
       name: session.name,
       role: session.role,
       accessToken: accessToken,
-      refreshToken: session.refreshToken,
+      refreshToken: refreshToken ?? session.refreshToken,
     ));
   }
 

@@ -1,5 +1,6 @@
 import 'api_client.dart';
 import 'auth_storage.dart';
+import 'notification_polling_service.dart';
 
 class AuthApi {
   static Future<AuthSession> login(String email, String password) async {
@@ -27,6 +28,7 @@ class AuthApi {
       // best-effort; clear local session regardless
     }
     await AuthStorage.clear();
+    await NotificationPollingService.resetOnLogout();
   }
 
   static Future<void> forgotPassword(String email) async {

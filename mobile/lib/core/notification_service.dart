@@ -14,10 +14,16 @@ class NotificationService {
   static Future<void> init() async {
     if (_initialized) return;
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosInit = DarwinInitializationSettings();
+    const iosInit = DarwinInitializationSettings(requestAlertPermission: true, requestBadgePermission: true, requestSoundPermission: true);
     const settings = InitializationSettings(android: androidInit, iOS: iosInit);
     await _plugin.initialize(settings);
     _initialized = true;
+
+    // Android 13+ (API 33) requires this runtime prompt — declaring
+    // POST_NOTIFICATIONS in the manifest alone is not enough there; without
+    // this, `show()` below silently does nothing on those devices, with no
+    // error anywhere to indicate why.
+    await _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.requestNotificationsPermission();
   }
 
   static Future<void> show({required int id, required String title, required String body}) async {

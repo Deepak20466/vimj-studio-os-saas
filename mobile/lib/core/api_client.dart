@@ -63,7 +63,10 @@ class ApiClient {
       );
       if (response.statusCode != 200) return false;
       final data = await _decode(response) as Map<String, dynamic>;
-      await AuthStorage.updateAccessToken(data['access_token'] as String);
+      await AuthStorage.updateAccessToken(
+        data['access_token'] as String,
+        refreshToken: data['refresh_token'] as String?,
+      );
       return true;
     } catch (_) {
       return false;
