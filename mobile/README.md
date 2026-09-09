@@ -9,60 +9,51 @@ day-to-day operations (students, coaches, activities, attendance, leave,
 fees, salary); the web dashboard remains the fuller admin surface for
 batches/analytics/reports/settings.
 
-## One-time setup (this repo ships `lib/` and `pubspec.yaml` only)
+## Setup
 
-`android/`, `ios/`, `macos/`, `windows/`, `linux/`, and `web/` are generated
-tooling output (see `.gitignore`) — not committed, since they're
-machine/Flutter-version specific. Run this once from `mobile/` on any machine
-that has the Flutter SDK:
+`android/` and `ios/` **are committed** (unlike a typical `flutter create`
+scaffold) because real, hand-added customizations live inside them — camera/
+location/biometric permissions, the orange/yellow launcher icon regenerated
+via `flutter_launcher_icons`, and the release-signing workaround in
+`android/app/build.gradle.kts`. None of that is reproducible by re-running
+`flutter create`, so it must not be treated as disposable generated output —
+that was tried before and silently lost the icon and permissions on every
+fresh checkout. Their own nested `android/.gitignore` / `ios/.gitignore`
+already exclude the genuinely machine-specific pieces (`local.properties`,
+`.gradle/`, `Pods/`, `ephemeral/`, keystores), so a plain clone is safe.
+
+`macos/`, `windows/`, `linux/`, and `web/` are still generated on demand
+(`flutter create .`) — they're unused scaffolding with no customization,
+kept out of git only because there's nothing in them worth preserving.
+
+On any machine with the Flutter SDK:
 
 ```bash
-flutter create --org com.vimjstudio --project-name vimj_attendance .
+cd mobile
 flutter pub get
 ```
 
-This generates `android/` and `ios/` without touching the `lib/` code already
-here. Then add the permissions below before your first run — `flutter create`
-does not know about the camera/location/biometric features this app uses.
+Build with `flutter build apk --release` (installable `.apk`, split per ABI
+for releases — see the release process note below) or `flutter build
+appbundle --release` (Play Store upload format).
 
-### Android — `android/app/src/main/AndroidManifest.xml`
+**If you ever add/change a permission, regenerate the launcher icon, or touch
+signing config, commit the changed files under `android/`/`ios/` in the same
+commit as the code change** — the whole point of tracking these folders is
+that `git status` will show the diff instead of it silently disappearing on
+the next machine.
 
-Add inside `<manifest>`, before `<application>`:
-
-```xml
-<uses-permission android:name="android.permission.INTERNET" />
-<uses-permission android:name="android.permission.CAMERA" />
-<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-<uses-permission android:name="android.permission.USE_BIOMETRIC" />
-<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-```
-
-Minimum SDK: set `minSdkVersion 23` in `android/app/build.gradle` (required by
-`local_auth` and `geolocator`). Build with `flutter build apk --release`
-(installable `.apk`) or `flutter build appbundle --release` (Play Store
-upload format).
-
-### iOS — `ios/Runner/Info.plist`
-
-Add:
-
-```xml
-<key>NSCameraUsageDescription</key>
-<string>VIMJ Studio needs camera access to capture your selfie for attendance verification.</string>
-<key>NSLocationWhenInUseUsageDescription</key>
-<string>VIMJ Studio needs your location to confirm you are at the facility when marking attendance.</string>
-<key>NSFaceIDUsageDescription</key>
-<string>VIMJ Studio uses Face ID to let you sign in quickly and securely.</string>
-```
+### iOS signing
 
 Building and signing the `.ipa` requires Xcode on macOS with an Apple
 Developer account — that can't be done from this Windows environment. On a
 Mac: `cd mobile && flutter pub get && open ios/Runner.xcworkspace` (CocoaPods
-generates `ios/Podfile`/`Podfile.lock` and `Runner.xcworkspace` on first
-build), set up signing in Xcode, then `flutter build ipa --release` or
-Product → Archive from Xcode. The bundle id (`com.vimjstudio.vimjAttendance`)
-and deployment target (iOS 15.0) are already set.
+generates `ios/Pods/`, `Podfile`, and `Podfile.lock` on first build, all of
+which stay untracked per `ios/.gitignore` — only `Podfile`/`Podfile.lock`
+should be committed once they exist, `Pods/` itself never), set up signing in
+Xcode, then `flutter build ipa --release` or Product → Archive from Xcode.
+The bundle id (`com.vimjstudio.vimjAttendance`) and deployment target
+(iOS 15.0) are already set.
 
 ## Configuration
 
@@ -85,6 +76,43 @@ flutter run \
   `FACILITY_LNG`, `GEOFENCE_RADIUS_METERS`) — the client-side check in
   `lib/core/geofence.dart` is just an early warning; the server re-validates
   independently on every request regardless of what the client sends.
+
+## Release process
+
+Production backend: **https://vimj-backend.onrender.com** (Render, free tier —
+the service spins down after ~15 min idle and takes 20-40s to wake on the
+next request; a cold-start login looks like a long hang, not a bug). Any APK
+built for distribution off the office LAN must point at this URL, not a LAN
+IP:
+
+```bash
+flutter build apk --release --split-per-abi \
+  --dart-define=API_BASE_URL=https://vimj-backend.onrender.com \
+  --dart-define=FACILITY_LAT=<facility latitude> \
+  --dart-define=FACILITY_LNG=<facility longitude> \
+  --dart-define=GEOFENCE_RADIUS_METERS=50
+```
+
+The lat/lng/radius must match the backend's `.env` (`FACILITY_LAT`,
+`FACILITY_LNG`, `GEOFENCE_RADIUS_METERS`) on Render. Tag the release
+(`mobile-vX.Y.Z`) and publish the three split-ABI APKs as GitHub release
+assets:
+
+```bash
+git tag mobile-vX.Y.Z && git push origin mobile-vX.Y.Z
+gh release create mobile-vX.Y.Z \
+  build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
+  build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+  build/app/outputs/flutter-apk/app-x86_64-release.apk \
+  --repo Deepak20466/attendance-management \
+  --title "mobile-vX.Y.Z" --notes "..."
+```
+
+APKs are debug-signed (see `android/app/build.gradle.kts`) — fine for
+sideloading, not for a Play Store upload. Anyone installing the app must
+grab the APK from the latest GitHub release tag, not an older one; a commit
+landing on `master` does nothing for a phone until a new tagged APK is built
+and installed from it.
 
 ## What's implemented
 
