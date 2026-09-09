@@ -54,11 +54,49 @@ export default function Batches() {
   const [showReassign, setShowReassign] = useState(false);
   const [reassignForm, setReassignForm] = useState(emptyReassign);
   const [recentSwaps, setRecentSwaps] = useState([]);
+  const [pendingSwaps, setPendingSwaps] = useState([]);
+  const [swapBusyId, setSwapBusyId] = useState(null);
 
   const loadRecentSwaps = () => {
     SwapAPI.recent()
       .then((r) => setRecentSwaps(r.data))
       .catch(() => {});
+  };
+
+  const loadPendingSwaps = () => {
+    SwapAPI.pending()
+      .then((r) => setPendingSwaps(r.data))
+      .catch(() => {});
+  };
+
+  const approveSwap = async (s) => {
+    setSwapBusyId(s.id);
+    try {
+      await SwapAPI.approve(s.id);
+      toast.success("Swap approved");
+      loadPendingSwaps();
+      loadRecentSwaps();
+      loadCoverage();
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Approve failed");
+    } finally {
+      setSwapBusyId(null);
+    }
+  };
+
+  const rejectSwap = async (s) => {
+    setSwapBusyId(s.id);
+    try {
+      await SwapAPI.reject(s.id);
+      toast.success("Swap rejected");
+      loadPendingSwaps();
+      loadRecentSwaps();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Reject failed");
+    } finally {
+      setSwapBusyId(null);
+    }
   };
 
   const loadCoverage = () => {
@@ -85,6 +123,7 @@ export default function Batches() {
   useEffect(() => {
     load();
     loadRecentSwaps();
+    loadPendingSwaps();
     ActivitiesAPI.list().then((r) => setActivities(r.data));
     CoachesAPI.list().then((r) => setCoaches(r.data));
   }, []);
@@ -304,6 +343,48 @@ export default function Batches() {
               </table>
             )}
           </>
+        )}
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h3 style={{ marginTop: 0 }}>Pending Swap Requests</h3>
+        <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: -8 }}>
+          Coaches asking another coach to cover their class — approve or reject to decide.
+        </p>
+        {pendingSwaps.length === 0 ? (
+          <div className="empty-state">No pending swap requests.</div>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Class</th>
+                <th>Requesting Coach</th>
+                <th>Covering Coach</th>
+                <th>Reason</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingSwaps.map((s) => (
+                <tr key={s.id}>
+                  <td>{s.date}</td>
+                  <td>Class #{s.class_id}</td>
+                  <td>{coachName(s.original_coach_id)}</td>
+                  <td>{coachName(s.covering_coach_id)}</td>
+                  <td>{s.reason || "-"}</td>
+                  <td className="table-actions">
+                    <button className="btn btn-primary btn-sm" disabled={swapBusyId === s.id} onClick={() => approveSwap(s)}>
+                      Approve
+                    </button>
+                    <button className="btn btn-danger btn-sm" disabled={swapBusyId === s.id} onClick={() => rejectSwap(s)}>
+                      Reject
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
 

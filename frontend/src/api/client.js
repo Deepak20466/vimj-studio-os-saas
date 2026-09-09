@@ -43,8 +43,17 @@ client.interceptors.response.use(
       const refreshToken = localStorage.getItem("refresh_token");
 
       try {
-        const { data } = await axios.post("/api/auth/refresh", { refresh_token: refreshToken });
+        // Deliberately a bare `axios` call (not `client`) so a failed refresh doesn't
+        // re-enter this same response interceptor and deadlock against the `isRefreshing`
+        // guard below. It must still resolve against `client`'s own baseURL, though —
+        // the old code hardcoded "/api/auth/refresh", a relative path that only resolves
+        // correctly in local dev (where Vite's proxy rewrites "/api" to localhost:8000).
+        // In production there is no such proxy, so that request hit the frontend's own
+        // domain instead of the backend, refresh always failed, and every user was
+        // forced back to the login screen the moment their 30-minute access token expired.
+        const { data } = await axios.post(`${client.defaults.baseURL}/auth/refresh`, { refresh_token: refreshToken });
         localStorage.setItem("access_token", data.access_token);
+        localStorage.setItem("refresh_token", data.refresh_token);
         processQueue(null, data.access_token);
         originalRequest.headers.Authorization = `Bearer ${data.access_token}`;
         return client(originalRequest);

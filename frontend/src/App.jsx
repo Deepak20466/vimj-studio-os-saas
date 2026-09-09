@@ -23,6 +23,7 @@ import CoachDashboard from "./pages/coach/CoachDashboard";
 import CoachClasses from "./pages/coach/CoachClasses";
 import CoachAttendance from "./pages/coach/CoachAttendance";
 import CoachLeave from "./pages/coach/CoachLeave";
+import CoachSwaps from "./pages/coach/CoachSwaps";
 import CoachSalary from "./pages/coach/CoachSalary";
 import CoachReceipts from "./pages/coach/CoachReceipts";
 import CoachFeeReminders from "./pages/coach/CoachFeeReminders";
@@ -52,6 +53,7 @@ const COACH_LINKS = [
   { to: "/coach/students", label: "Students", icon: "students" },
   { to: "/coach/attendance", label: "Attendance", icon: "attendance" },
   { to: "/coach/leave", label: "Leave", icon: "leave" },
+  { to: "/coach/swaps", label: "Swaps", icon: "swap" },
   { to: "/coach/salary", label: "Salary", icon: "salary" },
   { to: "/coach/receipts", label: "Receipts", icon: "fees" },
   { to: "/coach/fee-reminders", label: "Fee Reminders", icon: "fees" },
@@ -104,6 +106,7 @@ export default function App() {
             <Route path="students" element={<CoachStudents />} />
             <Route path="attendance" element={<CoachAttendance />} />
             <Route path="leave" element={<CoachLeave />} />
+            <Route path="swaps" element={<CoachSwaps />} />
             <Route path="salary" element={<CoachSalary />} />
             <Route path="receipts" element={<CoachReceipts />} />
             <Route path="fee-reminders" element={<CoachFeeReminders />} />

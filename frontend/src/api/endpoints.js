@@ -83,11 +83,14 @@ export const SalaryAPI = {
 };
 
 export const SwapAPI = {
+  my: () => client.get("/swap/my"),
   pending: () => client.get("/swap/pending"),
   recent: () => client.get("/swap/recent"),
   approve: (id) => client.put(`/swap/${id}/approve`),
   reject: (id) => client.put(`/swap/${id}/reject`),
   adminAssign: (payload) => client.post("/swap/admin-assign", payload),
+  request: (payload) => client.post("/swap/request", payload),
+  respond: (id, accept, declineReason) => client.put(`/swap/${id}/respond`, { accept, decline_reason: declineReason }),
 };
 
 export const NotificationsAPI = {
@@ -171,6 +174,7 @@ export const CoachSelfAPI = {
   updateStudentAttendance: (id, payload) => client.put(`/attendance/students/${id}`, payload),
   deleteStudentAttendance: (id) => client.delete(`/attendance/students/${id}`),
   myActivities: (coachId) => client.get(`/coaches/${coachId}/activities`),
+  directory: () => client.get("/coaches/directory"),
   monthlyReport: (month, year, fmt) =>
     client.get("/reports/export/coach-monthly", { params: { month, year, fmt }, responseType: "blob" }),
 };

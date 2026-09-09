@@ -147,6 +147,13 @@ export const IconMoon = (p) => (
   </svg>
 );
 
+export const IconSwap = (p) => (
+  <svg {...base} {...p}>
+    <path d="M4 8h13M13 4l4 4-4 4" />
+    <path d="M20 16H7M11 12l-4 4 4 4" />
+  </svg>
+);
+
 export const IconSettings = (p) => (
   <svg {...base} {...p}>
     <circle cx="12" cy="12" r="3" />
@@ -168,4 +175,5 @@ export const ICONS_BY_KEY = {
   about: IconAbout,
   chat: IconChat,
   settings: IconSettings,
+  swap: IconSwap,
 };
