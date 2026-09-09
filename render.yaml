@@ -22,10 +22,23 @@ services:
       - key: JWT_SECRET_KEY
         generateValue: true
       - key: FRONTEND_ORIGIN
-        value: https://placeholder.vercel.app
+        value: https://vimj-frontend.onrender.com
       - key: MOBILE_WEB_ORIGIN
         value: https://placeholder.vercel.app
       - key: ENV
         value: production
       - key: NOTIFICATIONS_ENABLED
         value: "false"
+
+  - type: web
+    name: vimj-frontend
+    runtime: static
+    buildCommand: "cd frontend && npm install && npm run build"
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://vimj-backend.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
