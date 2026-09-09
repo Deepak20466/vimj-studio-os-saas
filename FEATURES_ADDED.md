@@ -292,3 +292,201 @@ Python/Node/Flutter available).
 4. Confirm nothing existing regressed: the Round 1 verification list above, plus ordinary
    (non-draft) fee reminders sent via the scheduled job and the manual "Remind" button now using
    the new wording, and the existing reactive "Reassign" button on the Attendance page.
+
+---
+
+# Round 3 — 2026-09-09
+
+The client using the shipped app reported 9 problems, plus a separate report that the mobile
+app's icon/permissions kept reverting after every fresh install. Unlike Rounds 1-2, **this round
+was actually run and tested end-to-end** — Python, Node, and Flutter are all available in this
+environment (see `AGENTS`/session memory) — against a live backend, a live Postgres database,
+the real rendered web UI (Playwright/Firefox), and `flutter analyze`. Every fix below was
+verified working, not just written and re-read. Two more requests came in after the initial 9
+were resolved (group-photo confirmation, real device-tray notifications) — folded in below.
+
+## 3.0 Mobile `android/`/`ios/` were never on GitHub at all
+
+Root cause of "features keep disappearing after every deploy/reinstall, even though we
+committed": `mobile/.gitignore` treated `android/` and `ios/` as disposable `flutter create`
+output. But real, hand-added work only ever existed inside them — the branded launcher icon
+(`flutter_launcher_icons`), all 6 Android runtime permissions, the 3 iOS `Info.plist` usage
+descriptions, and the release-signing workaround in `build.gradle.kts` — none of it was ever
+pushed to GitHub. Every fresh checkout silently reverted to Flutter's defaults. Fixed: stopped
+gitignoring both folders and committed their current, correct state (their own nested
+`android/.gitignore`/`ios/.gitignore` already exclude the genuinely machine-specific bits —
+`local.properties`, `.gradle/`, `Pods/`, keystores — verified nothing risky got committed).
+Rewrote `mobile/README.md`'s setup section accordingly and added a release-process section
+(previously only in a prior session's private notes). Verified by cloning the repo fresh into a
+throwaway directory and building a debug APK from nothing but that clone — icon and permissions
+present automatically, zero manual steps.
+
+## 3.1 Session auto-logout
+
+Two independent bugs. (a) `frontend/src/api/client.js`'s token-refresh call was hardcoded to
+`/api/auth/refresh` — a path that only resolves via Vite's local-dev proxy; in production there
+is no such proxy, so refresh silently always failed and every user was logged out the moment
+their 30-minute access token expired. (b) `POST /auth/refresh` never rotated the refresh token,
+so even a working session was capped at a fixed 7 days from the *original* login regardless of
+activity. Fixed: refresh now returns a new access **and** refresh token every call (sliding
+30-day window, `REFRESH_TOKEN_EXPIRE_DAYS` raised 7→30 in `config.py`); web's refresh call fixed
+to hit the configured backend URL via a bare `axios` call (deliberately not through the `client`
+instance, to avoid the response interceptor recursing on a failed refresh and deadlocking);
+mobile's `AuthStorage`/`ApiClient` updated to persist the rotated token. Verified via curl:
+refresh returns a genuinely different token pair each call.
+
+## 3.2 & 3.6 Admin reassign / swap request had no accept step
+
+`POST /swap/admin-assign` used to move the class instantly with zero consent from the covering
+coach; coach-initiated `/swap/request` had a working approval endpoint but **no admin-facing UI
+anywhere** to decide it (`SwapAPI.pending/approve/reject` sat unused in `endpoints.js`). Added
+`CoachSwap.initiated_by` (ADMIN/COACH) and `decline_reason` columns (migration `0012`), a new
+`PUT /swap/{id}/respond` (covering coach accepts/declines), and admin-assign now creates a
+PENDING swap that only reassigns the class on acceptance. Added a "Pending Swap Requests"
+approve/reject section to admin (web `Batches.jsx` + mobile `admin_batches_tab.dart`) and a
+coach-side accept/decline UI (new web page `pages/coach/CoachSwaps.jsx`, route `/coach/swaps`
++ mobile `swap_tab.dart`). Verified via curl: proposed a swap → class did not move until
+accepted → moved after acceptance; tested the decline path too (class correctly stayed put,
+both parties notified). Verified the full click-through in the real browser via Playwright too
+(admin approving, coach accepting).
+
+## 3.3 Notification bar mostly empty / missing on mobile
+
+Web's bell existed but nearly every admin/coach-facing event (leave decisions and requests,
+fee-reminder drafts and submissions, compliance late-attendance, salary acknowledgment, receipt
+submissions, and specifically the 15-minute post-class "mark attendance" reminder) only ever
+called `notify()` (SMS/WhatsApp — `NOTIFICATIONS_ENABLED=false` in production) and never
+`notify_and_push()`, so the bell never got populated for these. Converted every one of those
+~15 call sites across `leave.py`, `fee_reminders.py`, `compliance.py`, `salary.py`, `receipts.py`,
+and `scheduler.py`. Mobile had **no notification UI at all** — added a bell + full notification
+center (`mobile/lib/features/shared/notification_bell_action.dart` /
+`notification_center_screen.dart`) to the admin app's shell AppBar and the coach app's 4 primary
+tabs. Verified live: manually fired the 15-minute reminder job and confirmed it appears in the
+bell via `GET /notifications`.
+
+## 3.4 "Mark" button / batch photo not working
+
+Backend logic verified fully correct via curl (marking with a selfie succeeds inside the
+geofence, is rejected outside it with a clear reason; batch/class photo uploads and reads back
+correctly) — no code bug in the button itself. Real root cause found afterward: see 3.4b below.
+Improved regardless: geofence rejections now state the actual distance and limit (e.g. "You are
+340m from the facility — must be within 100m") instead of a flat, undiagnosable "outside the
+geofence," and the allowed radius was raised 50m→100m to absorb normal indoor GPS drift
+(`geofence.py`, `config.py`, mobile `geofence.dart`/`api_config.dart`, `mobile/README.md`).
+
+### 3.4b Facility coordinates were ~2.8km off the real facility
+
+Given the real facility's address (near Chowdeswari Temple, TD Ln, Subhash Nagar, Cottonpete,
+Bengaluru 560053), geocoded it and found `FACILITY_LAT`/`FACILITY_LNG` had been left at
+placeholder central-Bangalore coordinates (12.9716, 77.5946) the entire time — never overridden
+anywhere, including in production. Updated the default to the geocoded value (12.9745723,
+77.5689324) in `backend/app/config.py`, `backend/.env`, and mobile's `api_config.dart` default.
+**Caveat told to the user**: address-level geocoding is only accurate to roughly a city block —
+a second plausible geocode for the same address came back ~1km away from the one used. This is
+a large, confirmed improvement (2.8km error → much closer) but not verified pinpoint-exact; an
+exact Google Maps long-press pin from the real facility would remove all remaining doubt.
+
+## 3.5 Coach can't be given more than one session
+
+Initially could not reproduce (tested multi-activity assignment, multi-batch assignment, the
+Activities-page "Sessions" screen, and same-day multiple classes — all worked, backend and both
+UIs). The user's plain description ("assign a coach to yoga, dance, zumba at once, coach doesn't
+receive it") was the key to the real bug: **`POST /batches` and `PUT /batches/{id}` never
+generated any dated `ClassSession` rows on creation/update** — only a manual "Generate Sessions"
+click or the once-daily overnight job did. A newly-assigned schedule was invisible to its coach
+for up to ~24 hours, which reads exactly like "never received." Fixed in `routers/batches.py`:
+both endpoints now immediately generate the coach's next 30 days of sessions (same horizon the
+nightly job uses) whenever the batch has an active coach assigned; idempotent, no schema change.
+Verified live twice, including recreating the user's exact scenario (one coach, 3 activities,
+back-to-back) — all 3 appeared in the coach's class list immediately, not the next day.
+
+## 3.7 Student photos not displaying
+
+Root cause: selfies, student photos, and class/batch photos were saved to local disk, but the
+production host's (Render free tier) filesystem is ephemeral — wiped on every restart and every
+free-tier cold-start (frequent). Uploads succeeded in the moment and vanished shortly after,
+with a bare 404 and no indication why. Moved all three photo types to store raw JPEG bytes
+directly as `LargeBinary` columns in Postgres instead (migration `0012` casts the old varchar
+path columns straight to bytea — the old values were unrecoverable paths anyway). Verified via
+curl: uploaded a real image, read it back, confirmed byte-valid JPEG, confirmed zero new files
+appear on disk. Separately reconfirmed the group/batch photo path specifically still works
+end-to-end (upload, list, read-back) after this and all later changes.
+
+## 3.8 Dark/light mode missing (mobile admin)
+
+The theme engine was already global and web already had a working toggle, but the shared
+`ThemeToggleTile` widget was only ever placed in the coach app's Profile screen, never anywhere
+in `features/admin/`. Added it to `admin_settings_tab.dart`; also fixed a hardcoded white card
+background there that would have looked broken against a dark theme.
+
+## 3.9 Left sidebar → bottom nav (mobile admin)
+
+`AdminHome` was the only screen left using a `Drawer` — web's `Layout.jsx` and mobile's
+`CoachHome` both already use a bottom-nav-plus-"More"-sheet pattern. Converted `admin_home.dart`
+to the identical pattern (4 primary tabs + a "More" sheet for the other 10 sections).
+
+## 3.10 Real device-tray ("outside the app") notifications
+
+Building this surfaced two real bugs before it could have worked at all. (a) The bell
+(`NotificationBellAction`) polled `/notifications` itself on its own timer, and is mounted on 5
+screens at once (admin shell + 4 coach tabs) that `IndexedStack` keeps alive simultaneously —
+5 concurrent pollers would have meant the same message popping 5 times over. Fixed by
+centralizing into a new `mobile/lib/core/notification_polling_service.dart`, one static service
+started once from `main.dart` (same pattern `SyncService` already uses), exposing a shared
+`ValueNotifier` that `NotificationBellAction` now just displays. (b) Nothing requested the
+Android 13+ runtime `POST_NOTIFICATIONS` permission — the manifest entry alone doesn't work on
+API 33+, so local notifications would have silently never appeared on newer phones with zero
+error. Fixed in `notification_service.dart`'s `init()`. **What this delivers**: a real
+notification-shade/lock-screen popup for anything new while the app process is alive (open or
+recently backgrounded). **What it is not**: true push that survives the app being fully closed
+for hours/days, the way WhatsApp does it — that needs Firebase Cloud Messaging, which needs a
+real Firebase project (the academy's own Google account) that doesn't exist yet; deliberately
+not started blind, since adding the Firebase SDK without valid credentials would crash the app
+on launch for everyone.
+
+## Files touched — Round 3
+
+Backend: `app/config.py`, `app/models/{attendance,compliance,swap,user}.py`,
+`app/routers/{attendance,auth,batches,compliance,fee_reminders,leave,receipts,salary,students,swap}.py`,
+`app/schemas/{attendance,auth,swap}.py`, `app/services/{geofence,scheduler,storage}.py`,
+`alembic/versions/0012_swap_response_and_db_photos.py` (new), `.env.example`.
+
+Frontend: `App.jsx`, `api/client.js`, `api/endpoints.js`, `components/icons.jsx`,
+`pages/Batches.jsx`, `pages/coach/CoachSwaps.jsx` (new).
+
+Mobile: `README.md`, `lib/core/{api_client,api_config,auth_api,auth_storage,geofence,models,notification_service}.dart`,
+`lib/core/notification_polling_service.dart` (new),
+`lib/features/admin/{admin_batches_tab,admin_home,admin_settings_tab}.dart`,
+`lib/features/coach/{classes_tab,coach_dashboard_tab,leave_tab,mark_attendance_screen,swap_tab}.dart`,
+`lib/features/shared/notification_bell_action.dart` (rewritten),
+`lib/features/shared/notification_center_screen.dart` (new), `.gitignore`, plus every file
+under `android/`/`ios/` (newly tracked, not newly changed).
+
+## Verification — actually performed this round, not just planned
+
+1. `alembic upgrade head` applied migration `0012` cleanly against a real local Postgres DB.
+2. Backend imports cleanly (`python -c "import app.main"`) after every change.
+3. 18 live curl-based end-to-end checks against a running backend, covering every item above,
+   all passed: login/refresh rotation, both directions of the swap accept/decline flow, the
+   reminder job populating the bell, the photo upload→download round-trip (and confirming no
+   disk file is written), geofenced marking (accepted inside the fence, rejected outside with
+   the correct message), assigning a coach to 3 activities/3 batches/3 same-day classes.
+4. `flutter analyze` — 0 errors/warnings across the whole mobile app after every round of
+   changes, only pre-existing style-level infos unrelated to this work.
+5. Web: Playwright/Firefox browser automation against the real dev server — 10/10 scripted
+   checks passed (login, dark-mode toggle, notification bell, admin approving a pending swap by
+   clicking the actual button, a coach accepting a swap by clicking the actual button, activity
+   checkboxes surviving a save-and-reopen).
+6. **Not verified live**: the mobile screens themselves (no Android emulator in this
+   environment) — the Dart code compiles cleanly and mirrors the exact backend contracts the
+   curl tests already proved correct, but a real-device or Flutter-web-server click-through
+   pass is still worth doing before the next release, per this project's established pattern of
+   device-only bugs (gesture-nav/safe-area, missing request bodies) that only real testing catches.
+
+## Still open (needs the user, not more code)
+
+- **3.4b**: an exact Google Maps pin for the real facility, to replace the geocoded estimate
+  with certainty.
+- **3.10's Firebase step**: creating a Firebase project (requires the academy's own Google
+  account) and sharing the resulting config, before true always-on push notifications can be
+  built.
