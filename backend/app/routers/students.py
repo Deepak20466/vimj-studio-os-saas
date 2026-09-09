@@ -17,7 +17,7 @@ from app.schemas.attendance import StudentAttendanceOut
 from app.schemas.fee import FeeOut
 from app.security import get_current_user, require_admin, require_admin_or_coach, hash_password
 from app.services.audit import log_action
-from app.services.storage import save_student_photo, read_student_photo
+from app.services.storage import save_student_photo
 
 router = APIRouter(prefix="/students", tags=["students"])
 
@@ -198,12 +198,12 @@ def upload_student_photo(
     if not photo_base64:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="photo_base64 is required")
 
-    photo_path = save_student_photo(photo_base64, student_id)
+    photo_bytes = save_student_photo(photo_base64)
     details = db.query(UserDetails).filter(UserDetails.user_id == student_id).first()
     if not details:
         details = UserDetails(user_id=student_id)
         db.add(details)
-    details.profile_photo = photo_path
+    details.profile_photo = photo_bytes
 
     log_action(db, current_user.id, "UPLOAD_STUDENT_PHOTO", "Student", student_id)
     db.commit()
@@ -221,5 +221,4 @@ def get_student_photo(
     details = db.query(UserDetails).filter(UserDetails.user_id == student_id).first()
     if not details or not details.profile_photo:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No photo on file")
-    image_bytes = read_student_photo(details.profile_photo)
-    return Response(content=image_bytes, media_type="image/jpeg")
+    return Response(content=details.profile_photo, media_type="image/jpeg")

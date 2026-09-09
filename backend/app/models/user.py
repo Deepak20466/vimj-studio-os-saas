@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Enum, ForeignKey, Date
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Enum, ForeignKey, Date, LargeBinary
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -36,7 +36,7 @@ class UserDetails(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
     address = Column(String(500), nullable=True)
     dob = Column(Date, nullable=True)
-    profile_photo = Column(String(500), nullable=True)
+    profile_photo = Column(LargeBinary, nullable=True)
     additional_details = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

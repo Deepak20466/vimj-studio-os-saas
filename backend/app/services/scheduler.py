@@ -80,13 +80,13 @@ def job_monthly_salary_notifications():
         )
         for salary in salaries:
             coach = db.query(User).filter(User.id == salary.coach_id).first()
-            if not coach or not coach.phone:
+            if not coach:
                 continue
             message = (
                 f"Hi {coach.name}, your VIMJ Studio salary of {salary.amount} for "
                 f"{today.month}/{today.year} has been credited. Please acknowledge receipt in the app."
             )
-            notify(coach.phone, message)
+            notify_and_push(db, coach, message, "Salary credited", "SALARY_CREDITED", link="/coach/salary")
             salary.notified_at = datetime.utcnow()
         db.commit()
         logger.info("Sent %d salary notifications", len(salaries))
@@ -124,10 +124,15 @@ def job_coach_attendance_reminders():
             )
             if enrolled_count > 0 and marked_count < enrolled_count:
                 coach = db.query(User).filter(User.id == cls.coach_id).first()
-                if coach and coach.phone:
-                    notify(
-                        coach.phone,
+                if coach:
+                    notify_and_push(
+                        db,
+                        coach,
                         f"Reminder: please mark attendance for your class that ended at {cls.end_time}.",
+                        "Mark attendance",
+                        "ATTENDANCE_REMINDER",
+                        link="/coach/classes",
+                        delay_minutes=15,
                     )
         db.commit()
     finally:
@@ -179,10 +184,15 @@ def job_coach_before_class_reminder():
             if not (window_start <= class_start_dt < window_end):
                 continue
             coach = db.query(User).filter(User.id == cls.coach_id).first()
-            if coach and coach.phone:
-                notify(
-                    coach.phone,
+            if coach:
+                notify_and_push(
+                    db,
+                    coach,
                     f"Reminder: your {cls.activity.name if cls.activity else 'class'} class starts at {cls.start_time}.",
+                    "Class starting soon",
+                    "PRE_CLASS_REMINDER",
+                    link="/coach/classes",
+                    delay_minutes=-10,
                 )
         db.commit()
     finally:
@@ -242,12 +252,15 @@ def job_coach_entry_missing_alert():
             coach = db.query(User).filter(User.id == coach_id).first()
             coach_name = coach.name if coach else "Unknown coach"
             for admin in admins:
-                if admin.phone:
-                    notify(
-                        admin.phone,
-                        f"Facility entry not recorded: {coach_name} has not checked in ahead of their "
-                        f"{cls.start_time} class today.",
-                    )
+                notify_and_push(
+                    db,
+                    admin,
+                    f"Facility entry not recorded: {coach_name} has not checked in ahead of their "
+                    f"{cls.start_time} class today.",
+                    "Missing facility entry",
+                    "COACH_ENTRY_MISSING",
+                    link="/attendance",
+                )
         db.commit()
     finally:
         db.close()
@@ -306,12 +319,15 @@ def job_coach_exit_missing_alert():
             coach = db.query(User).filter(User.id == coach_id).first()
             coach_name = coach.name if coach else "Unknown coach"
             for admin in admins:
-                if admin.phone:
-                    notify(
-                        admin.phone,
-                        f"Facility exit not recorded: {coach_name} has not checked out after their "
-                        f"{cls.end_time} class today.",
-                    )
+                notify_and_push(
+                    db,
+                    admin,
+                    f"Facility exit not recorded: {coach_name} has not checked out after their "
+                    f"{cls.end_time} class today.",
+                    "Missing facility exit",
+                    "COACH_EXIT_MISSING",
+                    link="/attendance",
+                )
         db.commit()
     finally:
         db.close()
@@ -401,8 +417,15 @@ def job_end_of_day_missing_report():
 
         admins = db.query(User).filter(User.role == UserRole.ADMIN, User.is_active.is_(True)).all()
         for admin in admins:
-            if admin.phone:
-                notify(admin.phone, f"End-of-day report: coaches with no attendance marked today: {names}")
+            notify_and_push(
+                db,
+                admin,
+                f"End-of-day report: coaches with no attendance marked today: {names}",
+                "End-of-day report",
+                "END_OF_DAY_REPORT",
+                link="/attendance",
+            )
+        db.commit()
         logger.info("End-of-day missing report sent for %d coaches", len(missing_coaches))
     finally:
         db.close()

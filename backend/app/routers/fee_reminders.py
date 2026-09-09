@@ -17,7 +17,7 @@ from app.schemas.fee_reminder_draft import (
 from app.security import require_admin, require_coach
 from app.services.audit import log_action
 from app.services.authorization import coach_may_bill_student
-from app.services.notifications import notify, fee_reminder_message
+from app.services.notifications import notify, notify_and_push, fee_reminder_message
 
 router = APIRouter(prefix="/fee-reminders", tags=["fee-reminders"])
 
@@ -63,8 +63,11 @@ def create_draft(
 
     admins = db.query(User).filter(User.role == UserRole.ADMIN, User.is_active.is_(True)).all()
     for admin in admins:
-        if admin.phone:
-            notify(admin.phone, f"{current_user.name} submitted a fee reminder for {student.name} awaiting your approval.")
+        notify_and_push(
+            db, admin, f"{current_user.name} submitted a fee reminder for {student.name} awaiting your approval.",
+            "Fee reminder awaiting approval", "FEE_REMINDER_PENDING", link="/fees",
+        )
+    db.commit()
     return draft
 
 
@@ -146,8 +149,11 @@ def approve_draft(
     db.refresh(draft)
 
     coach = db.query(User).filter(User.id == draft.coach_id).first()
-    if coach and coach.phone:
-        notify(coach.phone, f"Your fee reminder for {student.name if student else 'the student'} was approved and sent.")
+    notify_and_push(
+        db, coach, f"Your fee reminder for {student.name if student else 'the student'} was approved and sent.",
+        "Fee reminder approved", "FEE_REMINDER_DECIDED", link="/coach/fee-reminders",
+    )
+    db.commit()
     return draft
 
 
@@ -174,6 +180,9 @@ def reject_draft(
     db.refresh(draft)
 
     coach = db.query(User).filter(User.id == draft.coach_id).first()
-    if coach and coach.phone:
-        notify(coach.phone, f"Your fee reminder draft was rejected: {draft.decision_note or 'no reason given'}")
+    notify_and_push(
+        db, coach, f"Your fee reminder draft was rejected: {draft.decision_note or 'no reason given'}",
+        "Fee reminder rejected", "FEE_REMINDER_DECIDED", link="/coach/fee-reminders",
+    )
+    db.commit()
     return draft

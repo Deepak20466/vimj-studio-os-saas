@@ -23,8 +23,8 @@ from app.schemas.compliance import (
 )
 from app.security import get_current_user, require_admin, require_coach, require_admin_or_coach
 from app.services.audit import log_action
-from app.services.notifications import notify
-from app.services.storage import save_class_photo, read_class_photo
+from app.services.notifications import notify_and_push
+from app.services.storage import save_class_photo
 from app.routers.attendance import _resolve_marking_coach
 
 router = APIRouter(prefix="/compliance", tags=["compliance"])
@@ -59,8 +59,11 @@ def mark_class_not_conducted(
 
     admins = db.query(User).filter(User.role == UserRole.ADMIN, User.is_active.is_(True)).all()
     for admin in admins:
-        if admin.phone:
-            notify(admin.phone, f"{current_user.name} did not conduct the class on {class_session.date}: {payload.reason}")
+        notify_and_push(
+            db, admin, f"{current_user.name} did not conduct the class on {class_session.date}: {payload.reason}",
+            "Class not conducted", "CLASS_NOT_CONDUCTED", link="/compliance",
+        )
+    db.commit()
     return skip
 
 
@@ -86,8 +89,11 @@ def submit_late_reason(
 
     admins = db.query(User).filter(User.role == UserRole.ADMIN, User.is_active.is_(True)).all()
     for admin in admins:
-        if admin.phone:
-            notify(admin.phone, f"{current_user.name} submitted a late-attendance reason awaiting your approval.")
+        notify_and_push(
+            db, admin, f"{current_user.name} submitted a late-attendance reason awaiting your approval.",
+            "Late attendance awaiting approval", "LATE_ATTENDANCE_PENDING", link="/compliance",
+        )
+    db.commit()
     return submission
 
 
@@ -145,8 +151,8 @@ def approve_late(
     db.refresh(submission)
 
     coach = db.query(User).filter(User.id == submission.coach_id).first()
-    if coach and coach.phone:
-        notify(coach.phone, "Your late-attendance submission was approved.")
+    notify_and_push(db, coach, "Your late-attendance submission was approved.", "Late attendance approved", "LATE_ATTENDANCE_DECIDED")
+    db.commit()
     return submission
 
 
@@ -171,8 +177,11 @@ def reject_late(
     db.refresh(submission)
 
     coach = db.query(User).filter(User.id == submission.coach_id).first()
-    if coach and coach.phone:
-        notify(coach.phone, f"Your late-attendance submission was rejected: {payload.decision_note or 'no reason given'}")
+    notify_and_push(
+        db, coach, f"Your late-attendance submission was rejected: {payload.decision_note or 'no reason given'}",
+        "Late attendance rejected", "LATE_ATTENDANCE_DECIDED",
+    )
+    db.commit()
     return submission
 
 
@@ -266,9 +275,9 @@ def upload_class_photo(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
 
     coach_id = _resolve_marking_coach(db, class_session, current_user)
-    photo_path = save_class_photo(payload.photo_base64, class_id)
+    photo_bytes = save_class_photo(payload.photo_base64)
 
-    photo = ClassPhoto(class_id=class_id, coach_id=coach_id, photo_path=photo_path)
+    photo = ClassPhoto(class_id=class_id, coach_id=coach_id, photo_path=photo_bytes)
     db.add(photo)
     db.flush()
     log_action(db, current_user.id, "UPLOAD_CLASS_PHOTO", "ClassPhoto", photo.id)
@@ -297,5 +306,4 @@ def get_class_photo(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Photo not found")
     if current_user.role not in (UserRole.ADMIN, UserRole.COACH):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-    image_bytes = read_class_photo(photo.photo_path)
-    return Response(content=image_bytes, media_type="image/jpeg")
+    return Response(content=photo.photo_path, media_type="image/jpeg")

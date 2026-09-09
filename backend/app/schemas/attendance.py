@@ -32,7 +32,7 @@ class StudentAttendanceOut(BaseModel):
     timestamp: datetime
     location_lat: Optional[Decimal]
     location_lng: Optional[Decimal]
-    selfie_photo: Optional[str]
+    has_selfie: bool = False
 
     class Config:
         from_attributes = True

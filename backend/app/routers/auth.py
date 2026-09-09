@@ -58,6 +58,15 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
 
 @router.post("/refresh", response_model=AccessTokenResponse)
 def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
+    """Issues a new access token AND a new refresh token (rotation).
+
+    Rotating on every refresh gives a sliding session: as long as the app is opened
+    at least once within any REFRESH_TOKEN_EXPIRE_DAYS window, the user never has to
+    log in again. A fixed, non-rotating refresh token would instead force a re-login
+    exactly REFRESH_TOKEN_EXPIRE_DAYS after the *original* login, regardless of how
+    actively the app was used in between — which is what "gets logged out on its own"
+    actually was.
+    """
     token_data = decode_token(payload.refresh_token)
     if token_data.get("type") != "refresh":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type")
@@ -65,7 +74,8 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
     access_token = create_access_token(user.id, user.role.value)
-    return AccessTokenResponse(access_token=access_token)
+    refresh_token = create_refresh_token(user.id, user.role.value)
+    return AccessTokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
 @router.get("/me", response_model=UserOut)

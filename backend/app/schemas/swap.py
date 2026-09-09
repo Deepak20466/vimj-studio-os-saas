@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel
 
-from app.models.swap import SwapStatus
+from app.models.swap import SwapStatus, SwapInitiator
 
 
 class SwapRequestCreate(BaseModel):
@@ -22,6 +22,11 @@ class AdminAssignSwap(BaseModel):
     reason: str
 
 
+class SwapRespond(BaseModel):
+    accept: bool
+    decline_reason: Optional[str] = None
+
+
 class SwapOut(BaseModel):
     id: int
     original_coach_id: int
@@ -31,6 +36,8 @@ class SwapOut(BaseModel):
     date: date
     reason: Optional[str]
     status: SwapStatus
+    initiated_by: SwapInitiator
+    decline_reason: Optional[str]
     created_at: datetime
 
     class Config:

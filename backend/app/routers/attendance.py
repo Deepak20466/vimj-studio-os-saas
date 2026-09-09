@@ -29,8 +29,8 @@ from app.schemas.attendance import (
     MissingCoachOut,
 )
 from app.security import get_current_user, require_admin, require_coach, require_admin_or_coach
-from app.services.geofence import is_within_geofence
-from app.services.storage import save_selfie, read_selfie
+from app.services.geofence import geofence_check
+from app.services.storage import save_selfie
 from app.services.audit import log_action
 
 router = APIRouter(prefix="/attendance", tags=["attendance"])
@@ -139,10 +139,11 @@ def mark_student_attendance(
     if not enrolled:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Student is not enrolled in this activity")
 
-    if not is_within_geofence(float(payload.location_lat), float(payload.location_lng)):
+    within, distance, radius = geofence_check(float(payload.location_lat), float(payload.location_lng))
+    if not within:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You must be within the facility geofence to mark attendance",
+            detail=f"You are {distance:.0f}m from the facility — must be within {radius:.0f}m to mark attendance",
         )
 
     existing = (
@@ -158,11 +159,11 @@ def mark_student_attendance(
 
     _get_or_create_submission(db, class_session, coach_id, payload.late_reason)
 
-    selfie_path = None
+    selfie_bytes = None
     if payload.status == AttendanceStatus.PRESENT:
         if not payload.selfie_base64:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Selfie is required to mark present")
-        selfie_path = save_selfie(payload.selfie_base64, payload.student_id)
+        selfie_bytes = save_selfie(payload.selfie_base64)
 
     record = StudentAttendance(
         student_id=payload.student_id,
@@ -171,7 +172,7 @@ def mark_student_attendance(
         coach_id=coach_id,
         location_lat=payload.location_lat,
         location_lng=payload.location_lng,
-        selfie_photo=selfie_path,
+        selfie_photo=selfie_bytes,
     )
     db.add(record)
     db.flush()
@@ -245,10 +246,11 @@ def coach_entry(
     if _coach_is_on_leave(db, current_user.id, today):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are on approved leave today")
 
-    if not is_within_geofence(float(payload.location_lat), float(payload.location_lng)):
+    within, distance, radius = geofence_check(float(payload.location_lat), float(payload.location_lng))
+    if not within:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You must be within the facility geofence to check in",
+            detail=f"You are {distance:.0f}m from the facility — must be within {radius:.0f}m to check in",
         )
 
     record = db.query(CoachAttendance).filter(CoachAttendance.coach_id == current_user.id, CoachAttendance.date == today).first()
@@ -277,10 +279,11 @@ def coach_exit(
     current_user: User = Depends(require_coach),
 ):
     today = datetime.now().date()
-    if not is_within_geofence(float(payload.location_lat), float(payload.location_lng)):
+    within, distance, radius = geofence_check(float(payload.location_lat), float(payload.location_lng))
+    if not within:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You must be within the facility geofence to check out",
+            detail=f"You are {distance:.0f}m from the facility — must be within {radius:.0f}m to check out",
         )
 
     record = db.query(CoachAttendance).filter(CoachAttendance.coach_id == current_user.id, CoachAttendance.date == today).first()
@@ -458,5 +461,4 @@ def get_selfie(
     if not allowed:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to view this selfie")
 
-    image_bytes = read_selfie(record.selfie_photo)
-    return Response(content=image_bytes, media_type="image/jpeg")
+    return Response(content=record.selfie_photo, media_type="image/jpeg")

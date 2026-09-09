@@ -4,12 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.leave import CoachLeave, LeaveStatus
 from app.schemas.leave import LeaveRequestCreate, LeaveDecision, LeaveUpdate, LeaveOut, LeaveAdminOut
 from app.security import get_current_user, require_admin, require_coach
 from app.services.audit import log_action
-from app.services.notifications import notify
+from app.services.notifications import notify_and_push
 
 router = APIRouter(prefix="/leave", tags=["leave"])
 
@@ -34,6 +34,15 @@ def request_leave(
     log_action(db, current_user.id, "REQUEST_LEAVE", "CoachLeave", leave.id)
     db.commit()
     db.refresh(leave)
+
+    admins = db.query(User).filter(User.role == UserRole.ADMIN, User.is_active.is_(True)).all()
+    for admin in admins:
+        notify_and_push(
+            db, admin,
+            f"{current_user.name} requested leave from {leave.start_date} to {leave.end_date}. Reason: {leave.reason or 'none given'}",
+            "Leave request awaiting approval", "LEAVE_REQUEST_PENDING", link="/leave",
+        )
+    db.commit()
     return leave
 
 
@@ -191,8 +200,11 @@ def approve_leave(
     db.refresh(leave)
 
     coach = db.query(User).filter(User.id == leave.coach_id).first()
-    if coach and coach.phone:
-        notify(coach.phone, f"Your leave request ({leave.start_date} to {leave.end_date}) has been approved.")
+    notify_and_push(
+        db, coach, f"Your leave request ({leave.start_date} to {leave.end_date}) has been approved.",
+        "Leave approved", "LEAVE_APPROVED", link="/coach/leave",
+    )
+    db.commit()
     return leave
 
 
@@ -217,6 +229,9 @@ def reject_leave(
     db.refresh(leave)
 
     coach = db.query(User).filter(User.id == leave.coach_id).first()
-    if coach and coach.phone:
-        notify(coach.phone, f"Your leave request ({leave.start_date} to {leave.end_date}) has been rejected.")
+    notify_and_push(
+        db, coach, f"Your leave request ({leave.start_date} to {leave.end_date}) has been rejected.",
+        "Leave rejected", "LEAVE_REJECTED", link="/coach/leave",
+    )
+    db.commit()
     return leave

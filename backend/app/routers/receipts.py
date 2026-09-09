@@ -57,6 +57,15 @@ def create_receipt(
     log_action(db, current_user.id, "CREATE", "FeeReceipt", receipt.id)
     db.commit()
     db.refresh(receipt)
+
+    admins = db.query(User).filter(User.role == UserRole.ADMIN, User.is_active.is_(True)).all()
+    for admin in admins:
+        notify_and_push(
+            db, admin,
+            f"{current_user.name} recorded a fee receipt of Rs {receipt.amount} for {student.name} ({receipt.month}/{receipt.year}), awaiting your approval.",
+            "Fee receipt awaiting approval", "RECEIPT_PENDING", link="/fees",
+        )
+    db.commit()
     return receipt
 
 

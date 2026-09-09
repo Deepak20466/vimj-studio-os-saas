@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, Enum, ForeignKey
+from sqlalchemy import Column, Integer, Text, Boolean, DateTime, Enum, ForeignKey, LargeBinary
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -58,7 +58,7 @@ class ClassPhoto(Base):
     id = Column(Integer, primary_key=True, index=True)
     class_id = Column(Integer, ForeignKey("classes.id", ondelete="CASCADE"), nullable=False, index=True)
     coach_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    photo_path = Column(String(500), nullable=False)
+    photo_path = Column(LargeBinary, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     class_session = relationship("ClassSession")

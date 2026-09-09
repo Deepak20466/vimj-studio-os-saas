@@ -7,8 +7,8 @@ from app.database import get_db
 from app.models.user import User, UserRole
 from app.models.batch import Batch
 from app.models.class_session import ClassSession
-from app.models.swap import CoachSwap, SwapStatus
-from app.schemas.swap import SwapRequestCreate, AdminAssignSwap, SwapOut, SwapRecentOut
+from app.models.swap import CoachSwap, SwapStatus, SwapInitiator
+from app.schemas.swap import SwapRequestCreate, AdminAssignSwap, SwapOut, SwapRecentOut, SwapRespond
 from app.security import get_current_user, require_admin, require_coach
 from app.services.audit import log_action
 from app.services.notifications import notify_and_push
@@ -39,12 +39,25 @@ def request_swap(
         batch_id=class_session.batch_id,
         date=payload.date,
         reason=payload.reason,
+        initiated_by=SwapInitiator.COACH,
     )
     db.add(swap)
     db.flush()
     log_action(db, current_user.id, "REQUEST_SWAP", "CoachSwap", swap.id)
     db.commit()
     db.refresh(swap)
+
+    admins = db.query(User).filter(User.role == UserRole.ADMIN, User.is_active.is_(True)).all()
+    for admin in admins:
+        notify_and_push(
+            db,
+            admin,
+            f"{current_user.name} requested {covering_coach.name} cover their class on {swap.date}. Reason: {swap.reason or 'none given'}",
+            "Swap request awaiting approval",
+            "SWAP_REQUEST_PENDING",
+            link="/batches",
+        )
+    db.commit()
     return swap
 
 
@@ -54,12 +67,16 @@ def admin_assign_swap(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Admin directly reassigns a class to a substitute coach, auto-approved.
+    """Admin proposes reassigning a class to a substitute coach.
 
     Accepts either an existing `class_id` (the reactive "missing attendance" flow) or a
     `batch_id` + `date` (the proactive flow: pick a coach's recurring batch and a date that
     may not have a generated `ClassSession` yet — one is created on the fly from the batch's
     activity/time, mirroring `POST /batches/{id}/generate-sessions` for a single date).
+
+    This does NOT take effect immediately: it's created PENDING and the covering coach must
+    accept it via PUT /swap/{id}/respond before the class actually changes hands. A coach
+    can't be committed to covering someone else's class without ever agreeing to it.
     """
     if not payload.class_id and not payload.batch_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provide either class_id or batch_id")
@@ -103,14 +120,13 @@ def admin_assign_swap(
         batch_id=class_session.batch_id,
         date=payload.date,
         reason=payload.reason,
-        status=SwapStatus.APPROVED,
+        status=SwapStatus.PENDING,
+        initiated_by=SwapInitiator.ADMIN,
     )
     db.add(swap)
 
-    # Take effect immediately: the covering coach now owns this class occurrence, so it shows
-    # up in their "Today's Classes" / classes-my query right away, not just in the swap log.
-    class_session.coach_id = covering.id
-
+    # Does NOT reassign class_session.coach_id yet — that only happens once the covering
+    # coach accepts via PUT /swap/{id}/respond (see docstring above).
     db.flush()
     log_action(db, current_user.id, "ADMIN_ASSIGN_SWAP", "CoachSwap", swap.id)
     db.commit()
@@ -119,17 +135,91 @@ def admin_assign_swap(
     notify_and_push(
         db,
         covering,
-        f"You have been assigned to cover a class on {swap.date}. Reason: {swap.reason}",
-        "New class assigned",
+        f"You've been asked to cover a class on {swap.date}. Reason: {swap.reason}. Accept or decline from Swaps.",
+        "Class coverage requested",
         "SWAP_ASSIGNED",
+        link="/coach/swaps",
     )
     notify_and_push(
         db,
         original,
-        f"You have been reassigned off your class on {swap.date}; {covering.name} is now covering it.",
-        "Class reassigned",
+        f"You've been proposed off your class on {swap.date}, pending {covering.name}'s acceptance to cover it.",
+        "Class reassignment pending",
         "SWAP_REASSIGNED_OFF",
+        link="/coach/swaps",
     )
+    db.commit()
+    return swap
+
+
+@router.put("/{swap_id}/respond", response_model=SwapOut)
+def respond_to_swap(
+    swap_id: int,
+    payload: SwapRespond,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_coach),
+):
+    """The covering coach accepts or declines an admin-initiated reassignment.
+
+    Only meaningful for admin-initiated swaps: a coach-initiated request's other party is
+    the admin, who decides via PUT /swap/{id}/approve|reject instead.
+    """
+    swap = db.query(CoachSwap).filter(CoachSwap.id == swap_id).first()
+    if not swap:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Swap request not found")
+    if swap.covering_coach_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not the covering coach for this swap")
+    if swap.initiated_by != SwapInitiator.ADMIN:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This swap does not need your response")
+    if swap.status != SwapStatus.PENDING:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Swap request already decided")
+
+    original = db.query(User).filter(User.id == swap.original_coach_id).first()
+    admins = db.query(User).filter(User.role == UserRole.ADMIN, User.is_active.is_(True)).all()
+
+    if payload.accept:
+        swap.status = SwapStatus.APPROVED
+        class_session = db.query(ClassSession).filter(ClassSession.id == swap.class_id).first()
+        if class_session:
+            class_session.coach_id = current_user.id
+        log_action(db, current_user.id, "ACCEPT_SWAP", "CoachSwap", swap.id)
+        db.commit()
+        db.refresh(swap)
+
+        notify_and_push(
+            db,
+            original,
+            f"{current_user.name} accepted covering your class on {swap.date}.",
+            "Swap accepted",
+            "SWAP_REASSIGNED_OFF",
+        )
+        for admin in admins:
+            notify_and_push(
+                db, admin, f"{current_user.name} accepted covering {original.name if original else 'the'} class on {swap.date}.",
+                "Swap accepted", "SWAP_ASSIGNED", link="/batches",
+            )
+    else:
+        swap.status = SwapStatus.REJECTED
+        swap.decline_reason = payload.decline_reason
+        log_action(db, current_user.id, "DECLINE_SWAP", "CoachSwap", swap.id)
+        db.commit()
+        db.refresh(swap)
+
+        decline_note = f" Reason: {payload.decline_reason}" if payload.decline_reason else ""
+        notify_and_push(
+            db,
+            original,
+            f"{current_user.name} declined to cover your class on {swap.date}.{decline_note} You are still assigned.",
+            "Swap declined",
+            "SWAP_REASSIGNED_OFF",
+        )
+        for admin in admins:
+            notify_and_push(
+                db, admin,
+                f"{current_user.name} declined to cover {original.name if original else 'the'} class on {swap.date}.{decline_note} Please arrange another coach.",
+                "Swap declined — needs a new coach", "SWAP_ASSIGNED", link="/batches",
+            )
+
     db.commit()
     return swap
 
@@ -149,7 +239,14 @@ def my_swaps(db: Session = Depends(get_db), current_user: User = Depends(require
 
 @router.get("/pending", response_model=List[SwapOut])
 def pending_swaps(db: Session = Depends(get_db), _: User = Depends(require_admin)):
-    return db.query(CoachSwap).filter(CoachSwap.status == SwapStatus.PENDING).order_by(CoachSwap.created_at).all()
+    """Coach-initiated requests awaiting admin approval. Admin-initiated ones are also
+    PENDING but await the covering coach's response instead — see /swap/{id}/respond."""
+    return (
+        db.query(CoachSwap)
+        .filter(CoachSwap.status == SwapStatus.PENDING, CoachSwap.initiated_by == SwapInitiator.COACH)
+        .order_by(CoachSwap.created_at)
+        .all()
+    )
 
 
 @router.get("/recent", response_model=List[SwapRecentOut])
@@ -183,6 +280,8 @@ def recent_swaps(db: Session = Depends(get_db), _: User = Depends(require_admin)
                 date=s.date,
                 reason=s.reason,
                 status=s.status,
+                initiated_by=s.initiated_by,
+                decline_reason=s.decline_reason,
                 created_at=s.created_at,
                 original_coach_name=coach_names.get(s.original_coach_id, "Unknown"),
                 covering_coach_name=coach_names.get(s.covering_coach_id, "Unknown"),
@@ -203,6 +302,11 @@ def approve_swap(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Swap request not found")
     if swap.status != SwapStatus.PENDING:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Swap request already decided")
+    if swap.initiated_by != SwapInitiator.COACH:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This swap awaits the covering coach's response, not admin approval",
+        )
 
     swap.status = SwapStatus.APPROVED
 
@@ -239,9 +343,24 @@ def reject_swap(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Swap request not found")
     if swap.status != SwapStatus.PENDING:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Swap request already decided")
+    if swap.initiated_by != SwapInitiator.COACH:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This swap awaits the covering coach's response, not admin approval",
+        )
 
     swap.status = SwapStatus.REJECTED
     log_action(db, current_user.id, "REJECT_SWAP", "CoachSwap", swap.id)
     db.commit()
     db.refresh(swap)
+
+    original = db.query(User).filter(User.id == swap.original_coach_id).first()
+    notify_and_push(
+        db,
+        original,
+        f"Your swap request for {swap.date} was rejected. You are still assigned to this class.",
+        "Swap rejected",
+        "SWAP_REASSIGNED_OFF",
+    )
+    db.commit()
     return swap

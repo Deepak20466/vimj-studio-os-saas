@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -17,6 +17,7 @@ from app.schemas.batch import BatchCreate, BatchUpdate, BatchOut, GenerateSessio
 from app.security import get_current_user, require_admin
 from app.services.audit import log_action
 from app.services.batches import WEEKDAY_CODES as _WEEKDAY_CODES, generate_sessions_for_batch
+from app.services.scheduler import BATCH_AUTO_GENERATE_DAYS_AHEAD
 
 router = APIRouter(prefix="/batches", tags=["batches"])
 
@@ -234,6 +235,15 @@ def create_batch(
     batch = Batch(**data)
     db.add(batch)
     db.flush()
+
+    # Without this, a newly-created batch sits invisible to its coach until the nightly
+    # auto-generate job runs (up to ~24h later) or an admin remembers to click "Generate
+    # Sessions" — a coach assigned a new schedule today sees nothing about it in their
+    # classes list until tomorrow at the earliest, which reads as "the coach never received
+    # the schedule" even though the assignment itself succeeded.
+    if batch.coach_id and batch.is_active:
+        generate_sessions_for_batch(db, batch, date.today(), date.today() + timedelta(days=BATCH_AUTO_GENERATE_DAYS_AHEAD))
+
     log_action(db, current_user.id, "CREATE", "Batch", batch.id)
     db.commit()
     db.refresh(batch)
@@ -262,6 +272,13 @@ def update_batch(
         updates["active_months"] = _months_to_str(updates["active_months"])
     for field, value in updates.items():
         setattr(batch, field, value)
+
+    # Same reasoning as create_batch: e.g. assigning a coach to a previously-unassigned
+    # batch, or reactivating one, shouldn't require waiting for the nightly job before the
+    # coach can see it. generate_sessions_for_batch skips dates that already have a session,
+    # so calling this on every update is harmless even when nothing relevant changed.
+    if batch.coach_id and batch.is_active:
+        generate_sessions_for_batch(db, batch, date.today(), date.today() + timedelta(days=BATCH_AUTO_GENERATE_DAYS_AHEAD))
 
     log_action(db, current_user.id, "UPDATE", "Batch", batch.id)
     db.commit()

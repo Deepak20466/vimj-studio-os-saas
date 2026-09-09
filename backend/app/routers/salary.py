@@ -10,7 +10,7 @@ from app.models.salary import CoachSalary
 from app.schemas.salary import SalaryCreate, SalaryAcknowledge, SalaryOut, SalaryAdminOut, SalaryUpdate
 from app.security import require_admin, require_coach
 from app.services.audit import log_action
-from app.services.notifications import notify
+from app.services.notifications import notify_and_push
 
 router = APIRouter(prefix="/salary", tags=["salary"])
 
@@ -119,8 +119,11 @@ def acknowledge_salary(
 
     admins = db.query(User).filter(User.role == UserRole.ADMIN, User.is_active.is_(True)).all()
     for admin in admins:
-        if admin.phone:
-            notify(admin.phone, f"{current_user.name} acknowledged their salary for {salary.month}/{salary.year}.")
+        notify_and_push(
+            db, admin, f"{current_user.name} acknowledged their salary for {salary.month}/{salary.year}.",
+            "Salary acknowledged", "SALARY_ACKNOWLEDGED", link="/salary",
+        )
+    db.commit()
     return salary
 
 

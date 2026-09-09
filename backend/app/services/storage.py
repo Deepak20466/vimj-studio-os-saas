@@ -1,7 +1,5 @@
 import base64
 import io
-import os
-import uuid
 
 from fastapi import HTTPException, status
 from PIL import Image
@@ -9,15 +7,17 @@ from PIL import Image
 from app.config import settings
 
 
-def _ensure_dir(upload_dir: str) -> str:
-    os.makedirs(upload_dir, exist_ok=True)
-    return upload_dir
+def _compress_image(base64_data: str, max_size_kb: int) -> bytes:
+    """Decode a base64 image and compress it to <= max_size_kb, returning raw JPEG bytes.
 
-
-def _save_compressed_image(base64_data: str, upload_dir: str, name_hint: str, max_size_kb: int) -> str:
-    """Decode a base64 image, compress to <= max_size_kb, store outside the webroot.
-
-    Returns the relative storage path (not a public URL) to persist on the record.
+    Images are stored as bytes directly on the owning row (selfie_photo / profile_photo /
+    photo_path columns) rather than as files on local disk. This app's target deployment
+    (Render's free tier) has an EPHEMERAL filesystem: anything written to disk is wiped on
+    every restart/redeploy and on every free-tier cold-start after ~15 min idle, which is
+    constant. A file-based store would (and did) silently lose every photo shortly after
+    upload with no error at read time — just a 404 next time someone viewed it. Storing the
+    bytes in Postgres, which Render's free tier persists properly, avoids that whole class of
+    failure without needing a separate object-storage service.
     """
     if "," in base64_data:
         base64_data = base64_data.split(",", 1)[1]
@@ -29,10 +29,6 @@ def _save_compressed_image(base64_data: str, upload_dir: str, name_hint: str, ma
     except Exception:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid image data")
 
-    _ensure_dir(upload_dir)
-    filename = f"{uuid.uuid4().hex}_{name_hint}.jpg"
-    filepath = os.path.join(upload_dir, filename)
-
     quality = 85
     max_bytes = max_size_kb * 1024
     buffer = io.BytesIO()
@@ -43,40 +39,16 @@ def _save_compressed_image(base64_data: str, upload_dir: str, name_hint: str, ma
         buffer = io.BytesIO()
         image.save(buffer, format="JPEG", quality=quality)
 
-    with open(filepath, "wb") as f:
-        f.write(buffer.getvalue())
-
-    return filepath
+    return buffer.getvalue()
 
 
-def save_selfie(base64_data: str, student_id: int) -> str:
-    return _save_compressed_image(base64_data, settings.UPLOAD_DIR, str(student_id), settings.MAX_SELFIE_SIZE_KB)
+def save_selfie(base64_data: str) -> bytes:
+    return _compress_image(base64_data, settings.MAX_SELFIE_SIZE_KB)
 
 
-def save_student_photo(base64_data: str, student_id: int) -> str:
-    return _save_compressed_image(base64_data, settings.STUDENT_PHOTO_DIR, str(student_id), settings.MAX_SELFIE_SIZE_KB)
+def save_student_photo(base64_data: str) -> bytes:
+    return _compress_image(base64_data, settings.MAX_SELFIE_SIZE_KB)
 
 
-def save_class_photo(base64_data: str, class_id: int) -> str:
-    return _save_compressed_image(base64_data, settings.CLASS_PHOTO_DIR, str(class_id), settings.MAX_SELFIE_SIZE_KB)
-
-
-def _read_image(filepath: str, allowed_dir: str) -> bytes:
-    if not filepath or not os.path.abspath(filepath).startswith(os.path.abspath(allowed_dir)):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image not found")
-    if not os.path.exists(filepath):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image not found")
-    with open(filepath, "rb") as f:
-        return f.read()
-
-
-def read_selfie(filepath: str) -> bytes:
-    return _read_image(filepath, settings.UPLOAD_DIR)
-
-
-def read_student_photo(filepath: str) -> bytes:
-    return _read_image(filepath, settings.STUDENT_PHOTO_DIR)
-
-
-def read_class_photo(filepath: str) -> bytes:
-    return _read_image(filepath, settings.CLASS_PHOTO_DIR)
+def save_class_photo(base64_data: str) -> bytes:
+    return _compress_image(base64_data, settings.MAX_SELFIE_SIZE_KB)

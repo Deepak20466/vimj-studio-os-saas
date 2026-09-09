@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Column, Integer, ForeignKey, DateTime, Enum, Numeric, String, Date, Time
+from sqlalchemy import Column, Integer, ForeignKey, DateTime, Enum, Numeric, LargeBinary, Date, Time
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -31,13 +31,17 @@ class StudentAttendance(Base):
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
     location_lat = Column(Numeric(9, 6), nullable=True)
     location_lng = Column(Numeric(9, 6), nullable=True)
-    selfie_photo = Column(String(500), nullable=True)
+    selfie_photo = Column(LargeBinary, nullable=True)
     marked_manually = Column(Numeric, default=0)  # 0/1 flag: admin manual entry vs coach geofenced entry
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     student = relationship("User", foreign_keys=[student_id])
     coach = relationship("User", foreign_keys=[coach_id])
     class_session = relationship("ClassSession", back_populates="student_attendance")
+
+    @property
+    def has_selfie(self) -> bool:
+        return self.selfie_photo is not None
 
 
 class CoachAttendance(Base):
