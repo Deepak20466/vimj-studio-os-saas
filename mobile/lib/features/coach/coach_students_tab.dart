@@ -65,15 +65,17 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
   }
 
   Future<void> _capturePhoto(RosterStudent s) async {
-    final picker = ImagePicker();
-    final photo = await picker.pickImage(source: ImageSource.camera, imageQuality: 70, preferredCameraDevice: CameraDevice.front);
-    if (photo == null) return;
     try {
+      final picker = ImagePicker();
+      final photo = await picker.pickImage(source: ImageSource.camera, imageQuality: 70, preferredCameraDevice: CameraDevice.front);
+      if (photo == null) return;
       final bytes = await photo.readAsBytes();
       await ApiClient.instance.post('/students/${s.id}/photo', body: {'photo_base64': base64Encode(bytes)});
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Photo saved')));
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open camera — check camera permission')));
     }
   }
 
@@ -187,7 +189,7 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
                                         contentPadding: EdgeInsets.zero,
                                         leading: const Icon(Icons.person_outline),
                                         title: Text(s.name),
-                                        subtitle: Text(s.email),
+                                        subtitle: Text(s.email.endsWith('@no-login.internal') ? '-' : s.email),
                                         trailing: PopupMenuButton<String>(
                                           onSelected: (v) {
                                             if (v == 'copy') _copyFeeReminder();

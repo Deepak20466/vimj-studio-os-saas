@@ -133,7 +133,7 @@ class _AdminStudentsTabState extends State<AdminStudentsTab> {
                                 margin: const EdgeInsets.only(bottom: 10),
                                 child: ListTile(
                                   title: Text(s.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  subtitle: Text('${s.email}\n${s.phone ?? "-"}'),
+                                  subtitle: Text('${s.email.endsWith("@no-login.internal") ? "-" : s.email}\n${s.phone ?? "-"}'),
                                   isThreeLine: true,
                                   leading: CircleAvatar(
                                     backgroundColor: s.isActive ? AppColors.success.withOpacity(0.15) : AppColors.danger.withOpacity(0.15),
@@ -204,7 +204,13 @@ class _StudentProfileSheetState extends State<_StudentProfileSheet> {
   }
 
   Future<void> _uploadPhoto() async {
-    final photo = await _picker.pickImage(source: ImageSource.camera, imageQuality: 70, preferredCameraDevice: CameraDevice.front);
+    XFile? photo;
+    try {
+      photo = await _picker.pickImage(source: ImageSource.camera, imageQuality: 70, preferredCameraDevice: CameraDevice.front);
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open camera — check camera permission')));
+      return;
+    }
     if (photo == null) return;
     setState(() => _uploading = true);
     try {

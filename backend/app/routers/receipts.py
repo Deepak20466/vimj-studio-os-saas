@@ -69,14 +69,15 @@ def create_receipt(
     return receipt
 
 
-@router.get("/my", response_model=List[FeeReceiptOut])
+@router.get("/my", response_model=List[FeeReceiptAdminOut])
 def my_receipts(db: Session = Depends(get_db), current_user: User = Depends(require_coach)):
-    return (
+    receipts = (
         db.query(FeeReceipt)
         .filter(FeeReceipt.coach_id == current_user.id)
         .order_by(FeeReceipt.created_at.desc())
         .all()
     )
+    return _to_admin_out(db, receipts)
 
 
 @router.get("/pending", response_model=List[FeeReceiptAdminOut])

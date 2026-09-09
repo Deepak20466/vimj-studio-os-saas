@@ -71,14 +71,15 @@ def create_draft(
     return draft
 
 
-@router.get("/my", response_model=List[FeeReminderDraftOut])
+@router.get("/my", response_model=List[FeeReminderDraftAdminOut])
 def my_drafts(db: Session = Depends(get_db), current_user: User = Depends(require_coach)):
-    return (
+    drafts = (
         db.query(FeeReminderDraft)
         .filter(FeeReminderDraft.coach_id == current_user.id)
         .order_by(FeeReminderDraft.created_at.desc())
         .all()
     )
+    return _to_admin_out(db, drafts)
 
 
 @router.get("/pending", response_model=List[FeeReminderDraftAdminOut])

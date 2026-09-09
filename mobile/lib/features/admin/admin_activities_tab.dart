@@ -395,7 +395,7 @@ class _ManageActivityScreenState extends State<_ManageActivityScreen> with Singl
                               margin: const EdgeInsets.only(bottom: 8),
                               child: ListTile(
                                 title: Text(s.name),
-                                subtitle: Text(s.email),
+                                subtitle: Text(s.email.endsWith('@no-login.internal') ? '-' : s.email),
                                 trailing: IconButton(icon: const Icon(Icons.person_remove_outlined, color: AppColors.danger), onPressed: () => _unenroll(s)),
                               ),
                             );
