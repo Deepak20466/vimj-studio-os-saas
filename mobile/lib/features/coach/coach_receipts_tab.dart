@@ -97,7 +97,9 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _load,
-              child: _receipts.isEmpty
+              child: _students.isEmpty
+                  ? ListView(children: const [Padding(padding: EdgeInsets.all(32), child: Center(child: Text("You don't have any students yet — add one under My Students before recording a payment.")))])
+                  : _receipts.isEmpty
                   ? ListView(children: const [Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No fee receipts submitted yet.')))])
                   : ListView.builder(
                       padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),

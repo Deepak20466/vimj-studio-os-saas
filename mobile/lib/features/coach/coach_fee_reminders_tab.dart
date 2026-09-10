@@ -89,7 +89,9 @@ class _CoachFeeRemindersTabState extends State<CoachFeeRemindersTab> {
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _load,
-              child: _drafts.isEmpty
+              child: _students.isEmpty
+                  ? ListView(children: const [Padding(padding: EdgeInsets.all(32), child: Center(child: Text("You don't have any students yet — add one under My Students before drafting a fee reminder.")))])
+                  : _drafts.isEmpty
                   ? ListView(children: const [Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No fee reminders drafted yet.')))])
                   : ListView.builder(
                       padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
