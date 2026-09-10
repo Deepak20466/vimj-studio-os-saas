@@ -4,6 +4,7 @@ import '../../core/app_theme.dart';
 import '../../core/auth_storage.dart';
 import '../../core/export_helper.dart';
 import '../../core/models.dart';
+import '../shared/notification_bell_action.dart';
 
 class CoachReceiptsTab extends StatefulWidget {
   const CoachReceiptsTab({super.key});
@@ -50,6 +51,21 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
     }
   }
 
+  void _handleRecordPaymentTap() {
+    if (_students.isEmpty) {
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('No students yet'),
+          content: const Text("You don't have any students yet — add one under My Students before recording a payment."),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
+        ),
+      );
+      return;
+    }
+    _openForm();
+  }
+
   Future<void> _openForm() async {
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -86,10 +102,10 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Fee Receipts')),
+      appBar: AppBar(title: const Text('Fee Receipts'), actions: const [NotificationBellAction(), SizedBox(width: 4)]),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'coach-receipts-fab',
-        onPressed: _students.isEmpty ? null : _openForm,
+        onPressed: _handleRecordPaymentTap,
         icon: const Icon(Icons.add),
         label: const Text('Record Payment'),
       ),
@@ -145,16 +161,20 @@ class _ReceiptFormState extends State<_ReceiptForm> {
   final _noteCtrl = TextEditingController();
   String _paymentMode = 'CASH';
   bool _saving = false;
+  String? _error;
   final _now = DateTime.now();
   late final _monthCtrl = TextEditingController(text: _now.month.toString());
   late final _yearCtrl = TextEditingController(text: _now.year.toString());
 
   Future<void> _submit() async {
     if (_studentId == null || _amountCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Student and amount are required')));
+      setState(() => _error = 'Student and amount are required');
       return;
     }
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
       await ApiClient.instance.post('/receipts', body: {
         'student_id': _studentId,
@@ -166,7 +186,7 @@ class _ReceiptFormState extends State<_ReceiptForm> {
       });
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -234,6 +254,10 @@ class _ReceiptFormState extends State<_ReceiptForm> {
             ),
             const SizedBox(height: 12),
             TextField(controller: _noteCtrl, decoration: const InputDecoration(labelText: 'Note (optional)'), maxLines: 2),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(_error!, style: const TextStyle(color: AppColors.danger)),
+            ],
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _saving ? null : _submit,

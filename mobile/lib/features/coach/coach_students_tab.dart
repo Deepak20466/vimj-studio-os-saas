@@ -6,6 +6,7 @@ import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/auth_storage.dart';
 import '../../core/models.dart';
+import '../shared/notification_bell_action.dart';
 
 const _feeReminderMessage = "Hi this is VIMJ Studio and it is an reminder for fee payment is pending for the sos "
     "month and kindly pay as before the deadline of 5th of every month as cash or upi number - 6361174605  to "
@@ -49,6 +50,24 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
     }
   }
 
+  void _handleAddStudentTap() {
+    if (_activities.isEmpty) {
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('No activity assigned'),
+          content: const Text(
+            "You're not assigned to any activity yet, so there's nowhere to add a student under. "
+            'Ask your admin to assign you to an activity first.',
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
+        ),
+      );
+      return;
+    }
+    _openForm();
+  }
+
   Future<void> _openForm() async {
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -83,41 +102,60 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
     final nameCtrl = TextEditingController(text: s.name);
     final phoneCtrl = TextEditingController();
     final phoneSecondaryCtrl = TextEditingController();
+    String? error;
+    bool saving = false;
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('Edit Student — ${s.name}', style: Theme.of(ctx).textTheme.titleLarge),
-              const SizedBox(height: 16),
-              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
-              const SizedBox(height: 12),
-              TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Primary Phone'), keyboardType: TextInputType.phone),
-              const SizedBox(height: 12),
-              TextField(controller: phoneSecondaryCtrl, decoration: const InputDecoration(labelText: 'Emergency Contact'), keyboardType: TextInputType.phone),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () async {
-                  try {
-                    await ApiClient.instance.put('/students/${s.id}', body: {
-                      'name': nameCtrl.text.trim(),
-                      'phone': phoneCtrl.text.trim(),
-                      'phone_secondary': phoneSecondaryCtrl.text.trim(),
-                    });
-                    if (ctx.mounted) Navigator.of(ctx).pop(true);
-                  } on ApiException catch (e) {
-                    if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(e.message)));
-                  }
-                },
-                child: const Text('Save'),
-              ),
-            ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocalState) => Padding(
+          padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Edit Student — ${s.name}', style: Theme.of(ctx).textTheme.titleLarge),
+                const SizedBox(height: 16),
+                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
+                const SizedBox(height: 12),
+                TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Primary Phone'), keyboardType: TextInputType.phone),
+                const SizedBox(height: 12),
+                TextField(controller: phoneSecondaryCtrl, decoration: const InputDecoration(labelText: 'Emergency Contact'), keyboardType: TextInputType.phone),
+                if (error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(error!, style: const TextStyle(color: AppColors.danger)),
+                ],
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          setLocalState(() {
+                            saving = true;
+                            error = null;
+                          });
+                          try {
+                            await ApiClient.instance.put('/students/${s.id}', body: {
+                              'name': nameCtrl.text.trim(),
+                              'phone': phoneCtrl.text.trim(),
+                              'phone_secondary': phoneSecondaryCtrl.text.trim(),
+                            });
+                            if (ctx.mounted) Navigator.of(ctx).pop(true);
+                          } on ApiException catch (e) {
+                            setLocalState(() {
+                              saving = false;
+                              error = e.message;
+                            });
+                          }
+                        },
+                  child: saving
+                      ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Save'),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -156,10 +194,10 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('My Students')),
+      appBar: AppBar(title: const Text('My Students'), actions: const [NotificationBellAction(), SizedBox(width: 4)]),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'coach-students-fab',
-        onPressed: _activities.isEmpty ? null : _openForm,
+        onPressed: _handleAddStudentTap,
         icon: const Icon(Icons.add),
         label: const Text('Add Student'),
       ),
@@ -168,7 +206,18 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
           : RefreshIndicator(
               onRefresh: _load,
               child: _activities.isEmpty
-                  ? ListView(children: const [Padding(padding: EdgeInsets.all(32), child: Center(child: Text('You are not assigned to any activity yet.')))])
+                  ? ListView(children: const [
+                      Padding(
+                        padding: EdgeInsets.all(32),
+                        child: Center(
+                          child: Text(
+                            "You're not assigned to any activity yet — your admin needs to assign you one "
+                            'before students show up here.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      )
+                    ])
                   : ListView(
                       padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
                       children: _activities.map((a) {
@@ -232,13 +281,17 @@ class _AddStudentFormState extends State<_AddStudentForm> {
   final _phoneSecondaryCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   bool _saving = false;
+  String? _error;
 
   Future<void> _submit() async {
     if (_nameCtrl.text.trim().isEmpty || _phoneCtrl.text.trim().isEmpty || _phoneSecondaryCtrl.text.trim().isEmpty || _activityId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Name, both phone numbers, and activity are required')));
+      setState(() => _error = 'Name, both phone numbers, and activity are required');
       return;
     }
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
       await ApiClient.instance.post('/students', body: {
         'name': _nameCtrl.text.trim(),
@@ -250,7 +303,7 @@ class _AddStudentFormState extends State<_AddStudentForm> {
       });
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -301,6 +354,10 @@ class _AddStudentFormState extends State<_AddStudentForm> {
               obscureText: true,
               decoration: const InputDecoration(labelText: "Password (optional — students don't log in)"),
             ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(_error!, style: const TextStyle(color: AppColors.danger)),
+            ],
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _saving ? null : _submit,

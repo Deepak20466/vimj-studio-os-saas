@@ -4,6 +4,7 @@ import '../../core/app_theme.dart';
 import '../../core/auth_storage.dart';
 import '../../core/export_helper.dart';
 import '../../core/models.dart';
+import '../shared/notification_bell_action.dart';
 
 const _monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -153,7 +154,7 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Attendance')),
+      appBar: AppBar(title: const Text('Attendance'), actions: const [NotificationBellAction(), SizedBox(width: 4)]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -242,7 +243,17 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
           if (_recordsLoading)
             const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
           else if (_records.isEmpty)
-            const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('No attendance records marked in this range.')))
+            const Padding(
+              padding: EdgeInsets.all(20),
+              child: Center(
+                child: Text(
+                  'No attendance records marked in this range. Records appear here once you mark student '
+                  "attendance for a class — if you don't have any classes yet, ask your admin to assign you one.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppColors.textMuted),
+                ),
+              ),
+            )
           else
             ..._records.map((r) => Card(
                   margin: const EdgeInsets.only(bottom: 8),

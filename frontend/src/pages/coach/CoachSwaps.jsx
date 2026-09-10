@@ -13,7 +13,7 @@ export default function CoachSwaps() {
   const [loading, setLoading] = useState(true);
   const [coaches, setCoaches] = useState([]);
   const [myClasses, setMyClasses] = useState([]);
-  const [form, setForm] = useState({ class_id: "", covering_coach_id: "", date: todayStr(), reason: "" });
+  const [form, setForm] = useState({ class_id: "", covering_coach_id: "", reason: "" });
   const [submitting, setSubmitting] = useState(false);
   const [declining, setDeclining] = useState(null);
   const [declineReason, setDeclineReason] = useState("");
@@ -30,21 +30,36 @@ export default function CoachSwaps() {
   useEffect(() => {
     load();
     CoachSelfAPI.directory().then((r) => setCoaches(r.data.filter((c) => c.id !== user.id)));
-    CoachSelfAPI.myClasses(todayStr()).then((r) => setMyClasses(r.data));
+    // No class_date filter: pulls every class assigned to this coach, then we keep only
+    // today-or-later below. A hardcoded "today only" filter here used to mean a coach could
+    // only ever request a swap for today's classes, no matter what date they picked.
+    CoachSelfAPI.myClasses().then((r) => {
+      const today = todayStr();
+      const upcoming = r.data
+        .filter((c) => c.date >= today)
+        .sort((a, b) => (a.date === b.date ? a.start_time.localeCompare(b.start_time) : a.date.localeCompare(b.date)));
+      setMyClasses(upcoming);
+    });
   }, []);
+
+  const selectedClass = myClasses.find((c) => c.id === Number(form.class_id));
 
   const submit = async (e) => {
     e.preventDefault();
+    if (!selectedClass) {
+      toast.error("Select a class");
+      return;
+    }
     setSubmitting(true);
     try {
       await SwapAPI.request({
         class_id: Number(form.class_id),
         covering_coach_id: Number(form.covering_coach_id),
-        date: form.date,
+        date: selectedClass.date,
         reason: form.reason,
       });
       toast.success("Swap request submitted — awaiting admin approval");
-      setForm({ class_id: "", covering_coach_id: "", date: todayStr(), reason: "" });
+      setForm({ class_id: "", covering_coach_id: "", reason: "" });
       load();
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to submit request");
@@ -102,19 +117,34 @@ export default function CoachSwaps() {
         <form onSubmit={submit}>
           <div className="field">
             <label>Your class</label>
-            <select value={form.class_id} onChange={(e) => setForm({ ...form, class_id: e.target.value })} required>
+            <select
+              value={form.class_id}
+              onChange={(e) => setForm({ ...form, class_id: e.target.value })}
+              required
+              disabled={myClasses.length === 0}
+            >
               <option value="">Select class</option>
               {myClasses.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.start_time} - {c.end_time} (Activity #{c.activity_id})
+                  {c.date} · {c.start_time} - {c.end_time} (Activity #{c.activity_id})
                 </option>
               ))}
             </select>
+            {myClasses.length === 0 && (
+              <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                You have no upcoming classes to swap. Once your admin assigns you a schedule, they&apos;ll show up here.
+              </p>
+            )}
           </div>
           <div className="form-grid">
             <div>
               <label>Covering coach</label>
-              <select value={form.covering_coach_id} onChange={(e) => setForm({ ...form, covering_coach_id: e.target.value })} required>
+              <select
+                value={form.covering_coach_id}
+                onChange={(e) => setForm({ ...form, covering_coach_id: e.target.value })}
+                required
+                disabled={coaches.length === 0}
+              >
                 <option value="">Select coach</option>
                 {coaches.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -122,17 +152,20 @@ export default function CoachSwaps() {
                   </option>
                 ))}
               </select>
+              {coaches.length === 0 && (
+                <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>No other active coaches are available yet.</p>
+              )}
             </div>
             <div>
               <label>Date</label>
-              <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />
+              <input type="text" value={selectedClass ? selectedClass.date : ""} disabled placeholder="Select a class first" />
             </div>
           </div>
           <div className="field">
             <label>Reason</label>
             <textarea rows={2} value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
           </div>
-          <button className="btn btn-primary" disabled={submitting}>
+          <button className="btn btn-primary" disabled={submitting || myClasses.length === 0 || coaches.length === 0}>
             {submitting ? "Submitting..." : "Submit Request"}
           </button>
         </form>

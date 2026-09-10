@@ -145,11 +145,3 @@ and installed from it.
   setup outside this codebase's scope. SMS/WhatsApp reminders are sent
   directly by the backend and don't depend on this.
 
-## Known gap vs. the spec text
-
-The spec lists "Swaps: accept/reject" as a coach action, but the backend API
-only exposes swap *approval* to admins (`PUT /swap/{id}/approve`) — there's no
-endpoint for the covering coach to accept/reject directly. The app reflects
-what the backend actually supports: coaches request a swap and see its status;
-admins approve or reject it (mirroring the Leave approval flow). If a coach-side
-accept/reject is wanted, it needs a corresponding backend endpoint added first.

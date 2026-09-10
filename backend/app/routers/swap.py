@@ -32,6 +32,12 @@ def request_swap(
     if not covering_coach:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Covering coach not found")
 
+    if payload.date != class_session.date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"That class is on {class_session.date}, not {payload.date} — pick the matching date",
+        )
+
     swap = CoachSwap(
         original_coach_id=current_user.id,
         covering_coach_id=payload.covering_coach_id,

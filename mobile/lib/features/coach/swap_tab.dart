@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/api_client.dart';
+import '../../core/app_theme.dart';
 import '../../core/auth_storage.dart';
 import '../../core/models.dart';
 import '../shared/notification_bell_action.dart';
@@ -170,9 +171,10 @@ class _NewSwapFormState extends State<_NewSwapForm> {
   List<ClassSession> _myClasses = [];
   int? _selectedCoachId;
   int? _selectedClassId;
-  DateTime? _date;
   bool _loadingOptions = true;
   bool _submitting = false;
+  String? _error;
+  String? _loadError;
 
   @override
   void initState() {
@@ -183,35 +185,62 @@ class _NewSwapFormState extends State<_NewSwapForm> {
   Future<void> _loadOptions() async {
     try {
       final coachData = await ApiClient.instance.get('/coaches/directory') as List;
+      // No class_date filter: pulls every class ever assigned to this coach, past and
+      // future — filtered/sorted below to just the upcoming ones. A single hardcoded
+      // "today" filter here previously meant a coach could only ever swap today's
+      // classes, no matter what date they later picked for the swap itself.
+      final classData = await ApiClient.instance.get('/activities/classes/my') as List;
       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      final classData = await ApiClient.instance.get('/activities/classes/my', query: {'class_date': today}) as List;
+      final upcoming = classData
+          .map((e) => ClassSession.fromJson(e as Map<String, dynamic>))
+          .where((c) => c.date.compareTo(today) >= 0)
+          .toList()
+        ..sort((a, b) {
+          final byDate = a.date.compareTo(b.date);
+          return byDate != 0 ? byDate : a.startTime.compareTo(b.startTime);
+        });
       _coaches = coachData.map((e) => _CoachOption(e['id'] as int, e['name'] as String)).toList();
-      _myClasses = classData.map((e) => ClassSession.fromJson(e as Map<String, dynamic>)).toList();
+      _myClasses = upcoming.take(60).toList();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      _loadError = e.message;
     } finally {
       if (mounted) setState(() => _loadingOptions = false);
     }
   }
 
+  ClassSession? get _selectedClass => _selectedClassId == null ? null : _myClasses.firstWhere((c) => c.id == _selectedClassId);
+
   Future<void> _submit() async {
-    if (_selectedCoachId == null || _selectedClassId == null || _date == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select a class, covering coach, and date')));
+    if (_selectedCoachId == null || _selectedClassId == null) {
+      setState(() => _error = 'Select a class and a covering coach');
       return;
     }
-    setState(() => _submitting = true);
+    final cls = _selectedClass;
+    if (cls == null) {
+      setState(() => _error = 'Select a class and a covering coach');
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
     try {
       await ApiClient.instance.post('/swap/request', body: {
         'covering_coach_id': _selectedCoachId,
         'class_id': _selectedClassId,
-        'date': DateFormat('yyyy-MM-dd').format(_date!),
+        'date': cls.date,
       });
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  String _classLabel(ClassSession c) {
+    final date = DateFormat('MMM d').format(DateTime.parse(c.date));
+    return '$date · ${c.startTime} - ${c.endTime}';
   }
 
   @override
@@ -231,38 +260,49 @@ class _NewSwapFormState extends State<_NewSwapForm> {
               children: [
                 Text('Request Class Swap', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 16),
+                if (_loadError != null) ...[
+                  Text(_loadError!, style: const TextStyle(color: AppColors.danger)),
+                  const SizedBox(height: 12),
+                ],
                 DropdownButtonFormField<int>(
-                  decoration: const InputDecoration(labelText: 'Your class today'),
+                  decoration: const InputDecoration(labelText: 'Your class'),
                   value: _selectedClassId,
-                  items: _myClasses
-                      .map((c) => DropdownMenuItem(value: c.id, child: Text('${c.startTime} - ${c.endTime}')))
-                      .toList(),
-                  onChanged: (v) => setState(() => _selectedClassId = v),
+                  items: _myClasses.map((c) => DropdownMenuItem(value: c.id, child: Text(_classLabel(c)))).toList(),
+                  onChanged: _myClasses.isEmpty ? null : (v) => setState(() => _selectedClassId = v),
                 ),
+                if (_myClasses.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 6),
+                    child: Text(
+                      "You have no upcoming classes to swap. Once your admin assigns you a schedule, they'll show up here.",
+                      style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<int>(
                   decoration: const InputDecoration(labelText: 'Covering coach'),
                   value: _selectedCoachId,
                   items: _coaches.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
-                  onChanged: (v) => setState(() => _selectedCoachId = v),
+                  onChanged: _coaches.isEmpty ? null : (v) => setState(() => _selectedCoachId = v),
                 ),
-                const SizedBox(height: 12),
-                OutlinedButton(
-                  onPressed: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: DateTime.now(),
-                      firstDate: DateTime.now(),
-                      lastDate: DateTime.now().add(const Duration(days: 30)),
-                    );
-                    if (picked != null) setState(() => _date = picked);
-                  },
-                  child: Text(_date == null ? 'Select date' : DateFormat('MMM d, yyyy').format(_date!)),
-                ),
+                if (_coaches.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 6),
+                    child: Text(
+                      'No other active coaches are available to cover for you yet.',
+                      style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                    ),
+                  ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(_error!, style: const TextStyle(color: AppColors.danger)),
+                ],
                 const SizedBox(height: 16),
                 ElevatedButton(
-                  onPressed: _submitting ? null : _submit,
-                  child: _submitting ? const CircularProgressIndicator(color: Colors.white) : const Text('Submit Request'),
+                  onPressed: _submitting || _myClasses.isEmpty || _coaches.isEmpty ? null : _submit,
+                  child: _submitting
+                      ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Submit Request'),
                 ),
               ],
             ),

@@ -4,6 +4,7 @@ import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/auth_storage.dart';
 import '../../core/models.dart';
+import '../shared/notification_bell_action.dart';
 
 class CoachFeeRemindersTab extends StatefulWidget {
   const CoachFeeRemindersTab({super.key});
@@ -49,6 +50,21 @@ class _CoachFeeRemindersTabState extends State<CoachFeeRemindersTab> {
     }
   }
 
+  void _handleNewReminderTap() {
+    if (_students.isEmpty) {
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('No students yet'),
+          content: const Text("You don't have any students yet — add one under My Students before drafting a fee reminder."),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
+        ),
+      );
+      return;
+    }
+    _openForm();
+  }
+
   Future<void> _openForm() async {
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -78,10 +94,10 @@ class _CoachFeeRemindersTabState extends State<CoachFeeRemindersTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Fee Reminders')),
+      appBar: AppBar(title: const Text('Fee Reminders'), actions: const [NotificationBellAction(), SizedBox(width: 4)]),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'coach-reminders-fab',
-        onPressed: _students.isEmpty ? null : _openForm,
+        onPressed: _handleNewReminderTap,
         icon: const Icon(Icons.add),
         label: const Text('New Reminder'),
       ),
@@ -142,16 +158,20 @@ class _ReminderFormState extends State<_ReminderForm> {
   late int? _studentId = widget.students.isNotEmpty ? widget.students.first.id : null;
   final _messageCtrl = TextEditingController();
   bool _saving = false;
+  String? _error;
   final _now = DateTime.now();
   late final _monthCtrl = TextEditingController(text: _now.month.toString());
   late final _yearCtrl = TextEditingController(text: _now.year.toString());
 
   Future<void> _submit() async {
     if (_studentId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select a student')));
+      setState(() => _error = 'Select a student');
       return;
     }
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
       await ApiClient.instance.post('/fee-reminders', body: {
         'student_id': _studentId,
@@ -161,7 +181,7 @@ class _ReminderFormState extends State<_ReminderForm> {
       });
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -218,6 +238,10 @@ class _ReminderFormState extends State<_ReminderForm> {
               decoration: const InputDecoration(labelText: 'Message (optional — auto-filled from fee record if left blank)'),
               maxLines: 3,
             ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(_error!, style: const TextStyle(color: AppColors.danger)),
+            ],
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _saving ? null : _submit,

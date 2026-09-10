@@ -131,7 +131,17 @@ class _ClassesTabState extends State<ClassesTab> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _classes.isEmpty
-                    ? const Center(child: Text('No classes on this date.'))
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 32),
+                        child: Center(
+                          child: Text(
+                            'No classes on this date. If your admin has assigned you a schedule, classes will '
+                            "show up here automatically — if you don't expect to see anything soon, check with "
+                            'your admin that a schedule has been set up for you.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      )
                     : ListView.builder(
                         itemCount: _classes.length,
                         itemBuilder: (context, i) {
