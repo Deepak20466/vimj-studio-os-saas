@@ -1,7 +1,7 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -110,7 +110,13 @@ def logout(current_user: User = Depends(get_current_user), db: Session = Depends
 
 
 @router.post("/forgot-password")
-def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+@limiter.limit(settings.LOGIN_RATE_LIMIT)
+def forgot_password(
+    request: Request,
+    payload: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+    x_recovery_secret: str | None = Header(default=None),
+):
     user = db.query(User).filter(User.email == payload.email).first()
     # Always return 200 to avoid leaking which emails are registered.
     if not user:
@@ -126,9 +132,15 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
     db.commit()
 
     if user.phone:
-        notify(user.phone, f"Your VIMJ Studio password reset code is: {token[:8]}")
+        # Full token, not a prefix — reset-password matches it exactly, so sending
+        # only part of it here would make a delivered code unusable.
+        notify(user.phone, f"Your VIMJ Studio password reset code is: {token}")
 
-    return {"detail": "If the email exists, a reset link has been sent", "reset_token": token if settings.ENV != "production" else None}
+    is_recovery_request = bool(settings.ADMIN_RECOVERY_SECRET) and x_recovery_secret is not None and secrets.compare_digest(
+        x_recovery_secret, settings.ADMIN_RECOVERY_SECRET
+    )
+    reveal_token = is_recovery_request or settings.ENV != "production"
+    return {"detail": "If the email exists, a reset link has been sent", "reset_token": token if reveal_token else None}
 
 
 @router.post("/reset-password")
