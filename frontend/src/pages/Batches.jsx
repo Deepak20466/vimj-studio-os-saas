@@ -206,6 +206,13 @@ export default function Batches() {
       toast.success("Batch deleted");
       load();
     } catch (err) {
+      if (err.response?.status === 404) {
+        // Already gone (deleted elsewhere, or a duplicate click raced this same
+        // request) — refresh instead of leaving a stale row with a dead-end error.
+        toast("Already deleted — refreshing list");
+        load();
+        return;
+      }
       toast.error(err.response?.data?.detail || "Delete failed");
     }
   };

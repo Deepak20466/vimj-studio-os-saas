@@ -28,6 +28,7 @@ from app.routers import (
     fee_reminders,
     notifications,
     chat,
+    reset,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -84,6 +85,7 @@ app.include_router(academy.router)
 app.include_router(fee_reminders.router)
 app.include_router(notifications.router)
 app.include_router(chat.router)
+app.include_router(reset.router)
 
 
 @app.get("/health")

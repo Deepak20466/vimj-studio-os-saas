@@ -96,24 +96,34 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
   }
 
   Future<void> _downloadReceiptPdf(int receiptId) async {
+    if (_downloadingReceiptId == receiptId) return; // already in flight — ignore a double tap
     setState(() => _downloadingReceiptId = receiptId);
     try {
       final bytes = await ApiClient.instance.getBytes('/receipts/$receiptId/pdf');
       await shareExportedFile(bytes, 'receipt_$receiptId.pdf');
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted) {
+        // A 404 means this receipt no longer exists (deleted/changed elsewhere) —
+        // refresh so the stale row disappears instead of repeatedly 404ing.
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        if (e.statusCode == 404) _load();
+      }
     } finally {
       if (mounted) setState(() => _downloadingReceiptId = null);
     }
   }
 
   Future<void> _downloadFeeReceiptPdf(AdminFeeRecord f) async {
+    if (_downloadingReceiptId == f.id) return; // already in flight — ignore a double tap
     setState(() => _downloadingReceiptId = f.id);
     try {
       final bytes = await ApiClient.instance.getBytes('/fees/${f.id}/receipt');
       await shareExportedFile(bytes, 'receipt_${f.id}.pdf');
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        if (e.statusCode == 404) _load();
+      }
     } finally {
       if (mounted) setState(() => _downloadingReceiptId = null);
     }

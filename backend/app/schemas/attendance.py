@@ -55,6 +55,7 @@ class StudentAttendanceAdminOut(BaseModel):
     class_date: date
     timestamp: datetime
     marked_manually: bool
+    has_selfie: bool = False
 
 
 class CoachEntryExitRequest(BaseModel):

@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
@@ -22,6 +23,7 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
   String? _filterStatus;
   DateTime? _filterDateFrom;
   DateTime? _filterDateTo;
+  int? _removingId;
 
   @override
   void initState() {
@@ -182,6 +184,7 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
   }
 
   Future<void> _removeRecord(AdminAttendanceRecord r) async {
+    if (_removingId == r.id) return; // already in flight — ignore a double tap
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -194,13 +197,50 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
       ),
     );
     if (confirmed != true) return;
+    setState(() => _removingId = r.id);
     try {
       await ApiClient.instance.delete('/attendance/students/${r.id}');
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Attendance record deleted')));
       _refreshAll();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted) {
+        // A 404 here means the record is already gone (deleted from another
+        // session/device, or a duplicate tap raced this same request) — the
+        // end state the admin wanted is already true, so refresh instead of
+        // leaving a stale row on screen with a confusing permanent error.
+        final message = e.statusCode == 404 ? 'Already deleted — refreshing list' : e.message;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        if (e.statusCode == 404) _refreshAll();
+      }
+    } finally {
+      if (mounted) setState(() => _removingId = null);
     }
+  }
+
+  Future<void> _viewSelfie(AdminAttendanceRecord r) async {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Selfie — ${r.studentName}'),
+        content: SizedBox(
+          width: 280,
+          height: 280,
+          child: FutureBuilder<Uint8List>(
+            future: ApiClient.instance.getBytes('/attendance/selfie/${r.id}').then((b) => Uint8List.fromList(b)),
+            builder: (ctx, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError || !snapshot.hasData) {
+                return const Center(child: Text('Selfie not available.'));
+              }
+              return ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.memory(snapshot.data!, fit: BoxFit.contain));
+            },
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+      ),
+    );
   }
 
   Future<void> _pickFilterDate(bool isFrom) async {
@@ -317,8 +357,12 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                                           : AppColors.warning,
                                   visualDensity: VisualDensity.compact,
                                 ),
+                                if (r.hasSelfie)
+                                  IconButton(icon: const Icon(Icons.photo_camera_outlined, size: 20), tooltip: 'View Selfie', onPressed: () => _viewSelfie(r)),
                                 IconButton(icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _openEditRecord(r)),
-                                IconButton(icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.danger), onPressed: () => _removeRecord(r)),
+                                _removingId == r.id
+                                    ? const Padding(padding: EdgeInsets.all(10), child: SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)))
+                                    : IconButton(icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.danger), onPressed: () => _removeRecord(r)),
                               ],
                             ),
                           ),

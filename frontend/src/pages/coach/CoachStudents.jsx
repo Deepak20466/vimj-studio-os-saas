@@ -13,8 +13,18 @@ export default function CoachStudents() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", phone: "", phone_secondary: "", password: "", activity_id: "" });
   const [photoFor, setPhotoFor] = useState(null); // student object
+  const [photos, setPhotos] = useState({}); // studentId -> blobUrl | null
   const [editing, setEditing] = useState(null); // student object
   const [editForm, setEditForm] = useState({ name: "", phone: "", phone_secondary: "" });
+
+  const loadPhoto = async (studentId) => {
+    try {
+      const { data } = await StudentsAPI.photoBlob(studentId);
+      setPhotos((prev) => ({ ...prev, [studentId]: URL.createObjectURL(data) }));
+    } catch {
+      setPhotos((prev) => ({ ...prev, [studentId]: null }));
+    }
+  };
 
   const load = () => {
     setLoading(true);
@@ -25,6 +35,7 @@ export default function CoachStudents() {
           r.data.map((a) => ActivitiesAPI.roster(a.activity_id).then((res) => [a.activity_id, res.data]))
         );
         setRosterByActivity(Object.fromEntries(entries));
+        entries.flatMap(([, roster]) => roster).forEach((s) => loadPhoto(s.id));
       })
       .catch((err) => toast.error(err.response?.data?.detail || "Failed to load your students"))
       .finally(() => setLoading(false));
@@ -95,9 +106,11 @@ export default function CoachStudents() {
   };
 
   const uploadPhoto = async (base64) => {
+    const studentId = photoFor.id;
     try {
-      await StudentsAPI.uploadPhoto(photoFor.id, base64);
+      await StudentsAPI.uploadPhoto(studentId, base64);
       toast.success("Photo saved");
+      loadPhoto(studentId);
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to save photo");
     } finally {
@@ -130,6 +143,7 @@ export default function CoachStudents() {
               <table>
                 <thead>
                   <tr>
+                    <th>Photo</th>
                     <th>Name</th>
                     <th>Email</th>
                     <th>Actions</th>
@@ -138,6 +152,27 @@ export default function CoachStudents() {
                 <tbody>
                   {rosterByActivity[a.activity_id].map((s) => (
                     <tr key={s.id}>
+                      <td>
+                        {photos[s.id] ? (
+                          <img src={photos[s.id]} alt={s.name} style={{ width: 36, height: 36, objectFit: "cover", borderRadius: "50%" }} />
+                        ) : (
+                          <div
+                            style={{
+                              width: 36,
+                              height: 36,
+                              borderRadius: "50%",
+                              background: "var(--border)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: "0.7rem",
+                              color: "var(--text-muted)",
+                            }}
+                          >
+                            {s.name?.[0]?.toUpperCase() || "?"}
+                          </div>
+                        )}
+                      </td>
                       <td>{s.name}</td>
                       <td>{displayEmail(s.email)}</td>
                       <td className="table-actions">

@@ -20,6 +20,10 @@ export default function Attendance() {
   const [editing, setEditing] = useState(null); // record being edited
   const [editStatus, setEditStatus] = useState("PRESENT");
 
+  const [selfieFor, setSelfieFor] = useState(null); // record whose selfie is shown
+  const [selfieUrl, setSelfieUrl] = useState(null);
+  const [selfieLoading, setSelfieLoading] = useState(false);
+
   const [coaches, setCoaches] = useState([]);
   const [reassigning, setReassigning] = useState(null); // missing-row being reassigned
   const [reassignForm, setReassignForm] = useState({ covering_coach_id: "", reason: "" });
@@ -110,8 +114,35 @@ export default function Attendance() {
       loadRecords();
       loadMissing();
     } catch (err) {
+      if (err.response?.status === 404) {
+        // Already gone (deleted elsewhere, or a duplicate click raced this same
+        // request) — refresh instead of leaving a stale row with a dead-end error.
+        toast("Already deleted — refreshing list");
+        loadRecords();
+        loadMissing();
+        return;
+      }
       toast.error(err.response?.data?.detail || "Delete failed");
     }
+  };
+
+  const viewSelfie = async (r) => {
+    setSelfieFor(r);
+    setSelfieUrl(null);
+    setSelfieLoading(true);
+    try {
+      const { data } = await AttendanceAPI.selfieBlob(r.id);
+      setSelfieUrl(URL.createObjectURL(data));
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to load selfie");
+    } finally {
+      setSelfieLoading(false);
+    }
+  };
+
+  const closeSelfie = () => {
+    setSelfieFor(null);
+    setSelfieUrl(null);
   };
 
   const openReassign = (m) => {
@@ -282,6 +313,11 @@ export default function Attendance() {
                   </td>
                   <td>{r.marked_manually ? "Manual" : "Coach"}</td>
                   <td className="table-actions">
+                    {r.has_selfie && (
+                      <button className="btn btn-secondary btn-sm" onClick={() => viewSelfie(r)}>
+                        View Selfie
+                      </button>
+                    )}
                     <button className="btn btn-secondary btn-sm" onClick={() => openEdit(r)}>
                       Edit
                     </button>
@@ -354,6 +390,18 @@ export default function Attendance() {
               <button className="btn btn-primary">Reassign</button>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {selfieFor && (
+        <Modal title={`Selfie — ${selfieFor.student_name}`} onClose={closeSelfie}>
+          {selfieLoading ? (
+            <div className="empty-state">Loading...</div>
+          ) : selfieUrl ? (
+            <img src={selfieUrl} alt={`${selfieFor.student_name} selfie`} style={{ width: "100%", maxWidth: 360, display: "block", margin: "0 auto", borderRadius: 8 }} />
+          ) : (
+            <div className="empty-state">Selfie not available.</div>
+          )}
         </Modal>
       )}
     </div>

@@ -65,6 +65,50 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
     _loadCoaches();
   }
 
+  Future<void> _openResetAll() async {
+    final confirmCtrl = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Reset All Data?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'This permanently erases all attendance, fee, leave, salary, swap, compliance, '
+                'and notification records for every student and coach. Users, activities, and '
+                'batches are kept so the app keeps working right after. This cannot be undone.',
+              ),
+              const SizedBox(height: 16),
+              const Text('Type RESET to confirm', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              TextField(controller: confirmCtrl, autofocus: true, onChanged: (_) => setDialogState(() {})),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            TextButton(
+              onPressed: confirmCtrl.text.trim().toUpperCase() == 'RESET' ? () => Navigator.pop(ctx, true) : null,
+              child: const Text('Reset All Data', style: TextStyle(color: AppColors.danger)),
+            ),
+          ],
+        ),
+      ),
+    );
+    confirmCtrl.dispose();
+    if (confirmed != true) return;
+    try {
+      final data = await ApiClient.instance.post('/reset/all') as Map<String, dynamic>;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['detail'] as String? ?? 'All data has been reset')));
+      }
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   Future<void> _openAddCoach() async {
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -195,6 +239,33 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
                             ))
                         .toList(),
                   ),
+        const SizedBox(height: 24),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.danger.withOpacity(0.4)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Danger Zone', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.danger)),
+              const SizedBox(height: 4),
+              const Text(
+                'Reset all attendance, fee, leave, salary, swap, compliance, and notification history '
+                'back to a clean slate. Users, students, coaches, activities, and batches are kept.',
+                style: TextStyle(color: AppColors.textMuted),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: _openResetAll,
+                style: OutlinedButton.styleFrom(foregroundColor: AppColors.danger),
+                child: const Text('Reset All Data'),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }

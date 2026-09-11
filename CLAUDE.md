@@ -204,6 +204,20 @@ UserDetails (id, user_id, address, phone, dob, profile_photo, created_at)
 - `GET /swap/pending` - Coach-initiated requests awaiting admin decision (admin)
 - `GET /swap/recent` - Most recent swaps of any status/initiator (admin)
 
+### Notifications
+- `GET /notifications` - List the caller's own notifications + unread count
+- `PUT /notifications/{id}/read` / `PUT /notifications/read-all` - Mark read
+- `DELETE /notifications/{id}` / `DELETE /notifications` - Delete one / clear all
+  (2026-09-11). In-app bell/notification-center only — mobile deliberately does
+  not mirror new items as OS-level notifications (see MOBILE below).
+
+### Reset (2026-09-11)
+- `POST /reset/all` - Admin-only: wipes attendance/fee/leave/salary/swap/
+  compliance/receipt/notification history system-wide. Keeps Users, Activities,
+  Batches, and generated ClassSessions intact.
+- `POST /reset/mine` - Coach-only: wipes only the caller's own attendance/leave/
+  swap history. Never touches another coach's data or any fee/salary/receipt record.
+
 ### Reports
 - `GET /reports/student/{id}` - Detailed student report
 - `GET /reports/coach/{id}` - Detailed coach report
@@ -293,20 +307,27 @@ Chat, and Profile. Full parity with the web coach dashboard's 9 sections
 - **Offline:** Queue marking offline, sync when online
 - Biometric login (fingerprint)
 - Dark/light theme
-- **Notifications (2026-09-09):** a bell icon + full notification-center screen
-  (`features/shared/notification_bell_action.dart` / `notification_center_screen.dart`)
-  on the Dashboard/Classes/Leave/Swaps tabs, backed by a single app-wide poller
-  (`core/notification_polling_service.dart`, mirrors `SyncService`'s one-service
-  pattern — do NOT let individual screens poll `/notifications` themselves again,
-  every `IndexedStack` tab stays alive at once and duplicate pollers means
-  duplicate popped notifications). New items also pop as a real OS notification
-  (phone's notification shade/lock screen) via `flutter_local_notifications` while
-  the app process is alive — requires the Android 13+ runtime permission request
-  in `notification_service.dart`'s `init()`, which is easy to accidentally drop if
-  this file gets rewritten. This is NOT push (does not survive the app being fully
-  closed for hours/days, unlike WhatsApp) — that needs Firebase Cloud Messaging,
-  which needs a real Firebase project (the academy's own Google account) and
-  hasn't been started; see the mobile `CHANGELOG.md` entry for what's needed.
+- **Notifications (2026-09-09, revised 2026-09-11):** a bell icon + full
+  notification-center screen (`features/shared/notification_bell_action.dart` /
+  `notification_center_screen.dart`) on the Dashboard/Classes/Leave/Swaps tabs,
+  backed by a single app-wide poller (`core/notification_polling_service.dart`,
+  mirrors `SyncService`'s one-service pattern — do NOT let individual screens
+  poll `/notifications` themselves again, every `IndexedStack` tab stays alive
+  at once and duplicate pollers means duplicate in-app notifications). Supports
+  deleting one or all (2026-09-11). In-app only by explicit client decision as
+  of 2026-09-11: new items do NOT pop as an OS notification (phone's
+  notification shade/lock screen) anymore — `NotificationService`
+  (`flutter_local_notifications`) is no longer called from anywhere
+  (`main.dart` no longer calls its `init()` either, so the Android 13+ runtime
+  notification-permission prompt is also gone). `notification_service.dart`
+  itself is unused but left in the tree in case OS-level popups are wanted back
+  — re-wiring it is a small, contained change (call `.init()` from `main.dart`
+  and `.show()` from the poller), not a rebuild. True push (survives the app
+  being fully closed, like WhatsApp) still needs Firebase Cloud Messaging and a
+  real Firebase project — that's a separate, bigger effort, not what this toggle
+  is: a `firebase_messaging`/`firebase_core` integration needing the academy's
+  own Firebase project, a `google-services.json` file, and a backend-side
+  sender using that project's credentials — none of which exists yet.
 
 ### Admin App
 Same login screen, routed by role. Bottom-nav shell (`lib/features/admin/admin_home.dart`)
@@ -359,6 +380,89 @@ AppBar (covers all 14 sections, unlike the coach app's per-tab placement).
   disk-based file storage for anything that needs to persist without first
   confirming the hosting plan has a real persistent disk.
 - Systemd service file for auto-start (for a non-Render deployment target)
+
+---
+
+## 2026-09-11 CLIENT FEEDBACK ROUND — 10 fixes
+
+1. **Mobile auto-logout, take 3**: `mobile/lib/core/api_client.dart`'s `_tryRefresh()`
+   had a real concurrency bug the two earlier auto-logout fixes (see the 2026-09-09
+   round below) didn't touch. It guarded against concurrent refreshes with a bare
+   `bool _isRefreshing`, so when a screen fires several parallel GETs via
+   `Future.wait` (most admin/coach tabs do) right as the 30-minute access token
+   expires, only the FIRST 401'd request actually refreshed — every other
+   concurrent one saw "a refresh is already in progress," immediately treated
+   that as a failed refresh, cleared the stored session, and threw "Session
+   expired." That silently logged the user out mid-session even though the real
+   refresh was seconds from succeeding. Fixed by sharing one `Future<bool>?
+   _refreshFuture` that every concurrent caller awaits instead of racing.
+2. **Notifications**: added `DELETE /notifications/{id}` and `DELETE
+   /notifications` (clear all) — wired into the web bell (`NotificationBell.jsx`)
+   and the mobile notification center (`notification_center_screen.dart`). Also,
+   per an explicit client request, mobile notifications are now in-app only:
+   `NotificationPollingService` no longer calls `NotificationService.show()` (no
+   more OS notification-shade/lock-screen popups), and `main.dart` no longer
+   calls `NotificationService.init()` (no more runtime notification-permission
+   prompt either). The in-app bell/badge/notification-center keep working
+   exactly as before — only the "outside the app" OS popup was removed.
+3.-6. **"Record/receipt not found" on delete/download (Attendance, Batches,
+   Leave, Fees)**: every backend delete/PDF endpoint was verified correct via
+   direct curl testing (valid IDs delete/download with 200/204 every time) — no
+   server-side bug found in any of the four. The reported "not found" errors are
+   consistent with acting on a stale row: the admin dashboard's lists are loaded
+   once and don't self-heal if the same record is deleted/changed from another
+   session (web + mobile used side by side) or by a duplicate tap during a slow
+   response. Hardened defensively on mobile and web: each delete/download
+   handler now guards against double-submission (disables the specific
+   row's control while its request is in flight) and, on a 404 specifically,
+   shows a neutral "already gone — refreshing" message and reloads the list
+   instead of leaving a dead-end error on a stale row. Also fixed a real bug
+   found while doing this: mobile's `ApiClient.getBytes()` (used for every
+   PDF/CSV download) discarded the backend's actual error `detail` and always
+   showed a generic "Download failed (404)", and the web equivalent had the same
+   problem for any request made with `responseType: "blob"` (the error body
+   decodes as a Blob, not JSON, so `err.response.data.detail` was always
+   undefined) — see `frontend/src/utils/download.js`'s new `blobErrorDetail()`.
+   Both now surface the real reason (e.g. "Fee must be marked paid..." instead
+   of a bare status code).
+7. **Reset Data**: new `POST /reset/all` (admin) and `POST /reset/mine` (coach)
+   endpoints (`backend/app/routers/reset.py`). Admin's wipes attendance, fees,
+   salary, leave, swaps, compliance (submissions/skip-reasons/class photos), fee
+   receipts, fee-reminder drafts, and notifications system-wide — but
+   deliberately KEEPS Users/Students/Coaches, Activities, Batches, and generated
+   ClassSessions, so the app is immediately usable right after (nothing needs
+   re-creating). Coach's only wipes their own attendance/leave/swap history,
+   never another coach's data or any fee/salary/receipt record (those stay
+   admin-controlled financial records per DATA ISOLATION). Both require the
+   caller to type `RESET` to confirm on web and mobile (Settings.jsx /
+   admin_settings_tab.dart for admin; CoachSalary.jsx / coach_profile_tab.dart
+   for coach, under a "Danger Zone").
+8. **Coach "Capture Photo" (My Students)**: the upload always worked
+   (`POST /students/{id}/photo`) but nothing ever displayed the result — the
+   roster row was a static person icon regardless of whether a photo existed,
+   and the screen never refreshed after a successful capture. Coach mobile
+   (`coach_students_tab.dart`) and coach web (`CoachStudents.jsx`) now fetch and
+   show each student's photo as a small thumbnail next to their name, and
+   refresh just that student's thumbnail immediately after a new capture
+   succeeds — no full-roster reload needed.
+9. **Admin visibility into coach-submitted photos**: student profile photos were
+   already viewable by admin (`admin_students_tab.dart`'s `_StudentProfileSheet`,
+   web `Students.jsx`) — no gap there. Attendance **selfies** were the real gap:
+   the backend (`GET /attendance/selfie/{id}`) always worked, but nothing in
+   either UI ever called it — web's `AttendanceAPI.selfieUrl` was dead,
+   unreachable code (a plain `<img src>` can't attach the Bearer token this API
+   requires, so it could never have worked even if used) and mobile had no
+   selfie button at all. Added `has_selfie` to `StudentAttendanceAdminOut`
+   (`GET /attendance/students`) and a "View Selfie" action on both the web
+   Attendance page (blob fetch, matching `StudentsAPI.photoBlob`'s pattern) and
+   `admin_attendance_tab.dart` (`ApiClient.getBytes` + `Image.memory`).
+10. **Coach batch/group photos**: same "uploads but never shows" gap as #8, in
+   both coach Classes screens (`classes_tab.dart`, `CoachClasses.jsx`) — fixed
+   the same way, with a small thumbnail strip next to each ended class,
+   refreshed immediately after a new batch photo is captured. Admin's
+   Compliance view already displayed these correctly on both platforms
+   (`admin_compliance_tab.dart`'s `_viewPhotos`, web `Compliance.jsx`) — no
+   changes needed there.
 
 ---
 

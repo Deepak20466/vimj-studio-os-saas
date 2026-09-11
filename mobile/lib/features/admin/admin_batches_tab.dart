@@ -26,6 +26,7 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
   Map<String, dynamic>? _coverage;
   bool _coverageLoading = true;
   DateTime _coverageDate = DateTime.now();
+  int? _removingId;
 
   @override
   void initState() {
@@ -256,6 +257,7 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
   }
 
   Future<void> _remove(Batch b) async {
+    if (_removingId == b.id) return; // already in flight — ignore a double tap
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -268,11 +270,21 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
       ),
     );
     if (confirmed != true) return;
+    setState(() => _removingId = b.id);
     try {
       await ApiClient.instance.delete('/batches/${b.id}');
       _load();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted) {
+        // A 404 means this batch is already gone (deleted elsewhere, or a
+        // duplicate tap raced this same request) — refresh instead of leaving
+        // a stale card on screen with a confusing permanent error.
+        final message = e.statusCode == 404 ? 'Already deleted — refreshing list' : e.message;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        if (e.statusCode == 404) _load();
+      }
+    } finally {
+      if (mounted) setState(() => _removingId = null);
     }
   }
 
@@ -474,18 +486,20 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
                                     Expanded(
                                       child: Text('${_activityName(b.activityId)} · ${b.location}', style: const TextStyle(fontWeight: FontWeight.bold)),
                                     ),
-                                    PopupMenuButton<String>(
-                                      onSelected: (v) {
-                                        if (v == 'edit') _openForm(batch: b);
-                                        if (v == 'generate') _generateSessions(b);
-                                        if (v == 'delete') _remove(b);
-                                      },
-                                      itemBuilder: (_) => [
-                                        const PopupMenuItem(value: 'generate', child: Text('Generate Sessions')),
-                                        const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                                        const PopupMenuItem(value: 'delete', child: Text('Delete')),
-                                      ],
-                                    ),
+                                    _removingId == b.id
+                                        ? const Padding(padding: EdgeInsets.all(10), child: SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)))
+                                        : PopupMenuButton<String>(
+                                            onSelected: (v) {
+                                              if (v == 'edit') _openForm(batch: b);
+                                              if (v == 'generate') _generateSessions(b);
+                                              if (v == 'delete') _remove(b);
+                                            },
+                                            itemBuilder: (_) => [
+                                              const PopupMenuItem(value: 'generate', child: Text('Generate Sessions')),
+                                              const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                                              const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                                            ],
+                                          ),
                                   ],
                                 ),
                                 Text('${b.sessionPeriod} · ${b.startTime} - ${b.endTime}', style: const TextStyle(color: AppColors.textMuted)),

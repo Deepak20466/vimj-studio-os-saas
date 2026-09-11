@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
+import '../../core/app_theme.dart';
 import '../../core/auth_api.dart';
 import '../../core/auth_storage.dart';
 import '../../core/models.dart';
@@ -54,6 +55,50 @@ class _CoachProfileTabState extends State<CoachProfileTab> {
     }
   }
 
+  Future<void> _openResetMine() async {
+    final confirmCtrl = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Reset My Data?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'This permanently erases your own attendance, leave, and swap history. It does '
+                'not touch any other coach\'s data. This cannot be undone.',
+              ),
+              const SizedBox(height: 16),
+              const Text('Type RESET to confirm', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              TextField(controller: confirmCtrl, autofocus: true, onChanged: (_) => setDialogState(() {})),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            TextButton(
+              onPressed: confirmCtrl.text.trim().toUpperCase() == 'RESET' ? () => Navigator.pop(ctx, true) : null,
+              child: const Text('Reset My Data', style: TextStyle(color: AppColors.danger)),
+            ),
+          ],
+        ),
+      ),
+    );
+    confirmCtrl.dispose();
+    if (confirmed != true) return;
+    try {
+      final data = await ApiClient.instance.post('/reset/mine') as Map<String, dynamic>;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['detail'] as String? ?? 'Your history has been reset')));
+      }
+      _load();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   Future<void> _logout() async {
     await AuthApi.logout();
     if (!mounted) return;
@@ -101,6 +146,32 @@ class _CoachProfileTabState extends State<CoachProfileTab> {
                     ),
                   const SizedBox(height: 16),
                   const Card(child: ThemeToggleTile()),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).cardColor,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.danger.withOpacity(0.4)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Danger Zone', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.danger)),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Reset your own attendance, leave, and swap history back to a clean slate.',
+                          style: TextStyle(color: AppColors.textMuted),
+                        ),
+                        const SizedBox(height: 12),
+                        OutlinedButton(
+                          onPressed: _openResetMine,
+                          style: OutlinedButton.styleFrom(foregroundColor: AppColors.danger),
+                          child: const Text('Reset My Data'),
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 12),
                   OutlinedButton.icon(onPressed: _logout, icon: const Icon(Icons.logout), label: const Text('Log out')),
                 ],

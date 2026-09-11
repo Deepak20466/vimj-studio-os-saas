@@ -35,6 +35,7 @@ export default function CoachClasses() {
   const [skipReasonFor, setSkipReasonFor] = useState(null); // class object
   const [skipReasonText, setSkipReasonText] = useState("");
   const [photoFor, setPhotoFor] = useState(null); // class object
+  const [photosByClass, setPhotosByClass] = useState({}); // classId -> [blobUrl, ...]
 
   const load = () => {
     setLoading(true);
@@ -42,12 +43,23 @@ export default function CoachClasses() {
       .then(([classesRes, activitiesRes]) => {
         setClasses(classesRes.data);
         setActivityNames(Object.fromEntries(activitiesRes.data.map((a) => [a.id, a.name])));
+        classesRes.data.filter(classHasEnded).forEach((c) => loadClassPhotos(c.id));
       })
       .catch((err) => toast.error(err.response?.data?.detail || "Failed to load classes"))
       .finally(() => setLoading(false));
   };
 
   useEffect(load, [date]);
+
+  const loadClassPhotos = async (classId) => {
+    try {
+      const { data: photos } = await ComplianceAPI.classPhotos(classId);
+      const blobs = await Promise.all(photos.map((p) => ComplianceAPI.classPhotoBlob(p.id)));
+      setPhotosByClass((prev) => ({ ...prev, [classId]: blobs.map((b) => URL.createObjectURL(b.data)) }));
+    } catch {
+      // non-fatal — the Batch Photo button still works without a preview
+    }
+  };
 
   const openRoster = (cls) => {
     setRosterFor(cls);
@@ -148,9 +160,11 @@ export default function CoachClasses() {
   };
 
   const capturePhoto = async (base64) => {
+    const classId = photoFor.id;
     try {
-      await ComplianceAPI.uploadClassPhoto(photoFor.id, base64);
+      await ComplianceAPI.uploadClassPhoto(classId, base64);
       toast.success("Photo saved");
+      loadClassPhotos(classId);
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to save photo");
     } finally {
@@ -198,6 +212,13 @@ export default function CoachClasses() {
                         <button className="btn btn-danger btn-sm" onClick={() => openSkipReason(c)}>
                           Not Conducted
                         </button>
+                        {photosByClass[c.id]?.length > 0 && (
+                          <span style={{ display: "inline-flex", gap: 4, verticalAlign: "middle" }}>
+                            {photosByClass[c.id].map((url, i) => (
+                              <img key={i} src={url} alt="Batch" style={{ width: 32, height: 32, objectFit: "cover", borderRadius: 6 }} />
+                            ))}
+                          </span>
+                        )}
                       </>
                     )}
                   </td>

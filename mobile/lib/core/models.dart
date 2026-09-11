@@ -357,6 +357,7 @@ class AdminAttendanceRecord {
   final String classDate;
   final String timestamp;
   final bool markedManually;
+  final bool hasSelfie;
 
   AdminAttendanceRecord({
     required this.id,
@@ -371,6 +372,7 @@ class AdminAttendanceRecord {
     required this.classDate,
     required this.timestamp,
     required this.markedManually,
+    required this.hasSelfie,
   });
 
   factory AdminAttendanceRecord.fromJson(Map<String, dynamic> json) => AdminAttendanceRecord(
@@ -386,6 +388,7 @@ class AdminAttendanceRecord {
         classDate: json['class_date'] as String,
         timestamp: json['timestamp'] as String,
         markedManually: json['marked_manually'] as bool? ?? false,
+        hasSelfie: json['has_selfie'] as bool? ?? false,
       );
 }
 

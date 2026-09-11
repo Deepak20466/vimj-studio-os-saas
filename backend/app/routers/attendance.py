@@ -353,6 +353,7 @@ def list_student_attendance(
                 class_date=r.class_session.date,
                 timestamp=r.timestamp,
                 marked_manually=bool(r.marked_manually),
+                has_selfie=bool(r.selfie_photo),
             )
         )
     return result

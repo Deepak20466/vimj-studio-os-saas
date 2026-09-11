@@ -70,6 +70,13 @@ export default function Leave() {
       toast.success("Leave request deleted");
       load();
     } catch (err) {
+      if (err.response?.status === 404) {
+        // Already gone (deleted/decided elsewhere, or a duplicate click raced this
+        // same request) — refresh instead of leaving a stale row with a dead-end error.
+        toast("Already gone — refreshing list");
+        load();
+        return;
+      }
       toast.error(err.response?.data?.detail || "Delete failed");
     }
   };

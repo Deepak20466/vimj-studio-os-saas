@@ -3,7 +3,7 @@ import toast from "react-hot-toast";
 import { FeesAPI, StudentsAPI, ReceiptsAPI, FeeRemindersAPI } from "../api/endpoints";
 import Modal from "../components/Modal";
 import StatusBadge from "../components/StatusBadge";
-import { downloadBlob } from "../utils/download";
+import { downloadBlob, blobErrorDetail } from "../utils/download";
 
 export default function Fees() {
   const [fees, setFees] = useState([]);
@@ -38,7 +38,8 @@ export default function Fees() {
       const res = await ReceiptsAPI.pdf(receipt.id);
       downloadBlob(res.data, `receipt_${receipt.id}.pdf`);
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to download receipt");
+      toast.error((await blobErrorDetail(err)) || "Failed to download receipt");
+      if (err.response?.status === 404) loadReceipts();
     }
   };
 
@@ -146,7 +147,8 @@ export default function Fees() {
       const res = await FeesAPI.receiptPdf(fee.id);
       downloadBlob(res.data, `receipt_${fee.id}.pdf`);
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to download receipt");
+      toast.error((await blobErrorDetail(err)) || "Failed to download receipt");
+      if (err.response?.status === 404) load();
     }
   };
 

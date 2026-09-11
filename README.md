@@ -37,27 +37,29 @@ cd frontend
 npm install
 npm run dev   # http://localhost:5173, proxies /api to the backend
 
-# 3. Mobile (new terminal, requires the Flutter SDK — see mobile/README.md for
-#    one-time native project setup, since android/ and ios/ aren't checked in)
+# 3. Mobile (new terminal, requires the Flutter SDK — android/ and ios/ are
+#    committed with real customizations, see mobile/README.md; no `flutter
+#    create` step needed)
 cd mobile
-flutter create --org com.vimjstudio --project-name vimj_attendance .
 flutter pub get
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
 ```
 
-## What's been verified in this environment
-
-This environment has no Python, Node, or Flutter SDK installed, so nothing below has been
-executed — every change is a manual, careful read-through against the existing code and
-conventions. Before trusting this in production, actually run:
-
-- **Backend**: `alembic upgrade head` against a real Postgres DB, then `uvicorn app.main:app --reload`
-  and exercise the endpoints via `/docs`.
-- **Frontend**: `npm install && npm run dev`, then click through every admin and coach page
-  with real admin/coach accounts.
-- **Mobile**: generate the native projects per `mobile/README.md` and run on a device/emulator.
-
 ## Production deployment
 
-No Docker, per the spec. See `backend/README.md` for gunicorn + systemd + Nginx, and
+No Docker, per the spec. Currently deployed on Render's free tier:
+- Backend: `https://vimj-backend.onrender.com` (cold starts after ~15min idle take 20-40s —
+  see `render.yaml` and CLAUDE.md's DEPLOYMENT section)
+- Mobile builds ship as sideloaded APKs (`mobile-vX.Y.Z` GitHub releases), not the Play Store
+
+For a non-Render target, see `backend/README.md` for gunicorn + systemd + Nginx, and
 `backend/nginx.conf.example` for reverse-proxying the API and serving the built React app.
+
+## Where to look for more detail
+
+- **CLAUDE.md** — the living spec: full requirements, API reference, and a dated history of
+  every real bug found and fixed (root cause + what changed), including the most recent
+  2026-09-11 client-feedback round. Read this before touching auth, notifications, photo
+  storage, or the swap/geofence logic — each has non-obvious history worth knowing first.
+  This is also the file to update whenever a fix's root cause or a new endpoint is worth
+  leaving a note for the next person working on this repo.

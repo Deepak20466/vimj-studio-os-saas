@@ -67,6 +67,28 @@ export default function NotificationBell() {
     }
   };
 
+  const remove = async (n, e) => {
+    e.stopPropagation();
+    try {
+      await NotificationsAPI.remove(n.id);
+      setItems((list) => list.filter((i) => i.id !== n.id));
+      if (!n.is_read) setUnreadCount((c) => Math.max(0, c - 1));
+    } catch {
+      // best-effort
+    }
+  };
+
+  const removeAll = async () => {
+    if (!confirm("Delete all notifications?")) return;
+    try {
+      await NotificationsAPI.removeAll();
+      setItems([]);
+      setUnreadCount(0);
+    } catch {
+      // best-effort
+    }
+  };
+
   return (
     <div style={{ position: "relative" }} ref={boxRef}>
       <button className="icon-btn" title="Notifications" onClick={toggle} style={{ position: "relative" }}>
@@ -111,11 +133,18 @@ export default function NotificationBell() {
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <strong style={{ fontSize: "0.9rem" }}>Notifications</strong>
-            {unreadCount > 0 && (
-              <button className="link-btn" onClick={markAllRead}>
-                Mark all read
-              </button>
-            )}
+            <div style={{ display: "flex", gap: 10 }}>
+              {unreadCount > 0 && (
+                <button className="link-btn" onClick={markAllRead}>
+                  Mark all read
+                </button>
+              )}
+              {items.length > 0 && (
+                <button className="link-btn" onClick={removeAll}>
+                  Clear all
+                </button>
+              )}
+            </div>
           </div>
           {items.length === 0 ? (
             <div className="empty-state" style={{ padding: "20px 8px" }}>
@@ -136,8 +165,16 @@ export default function NotificationBell() {
               >
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                   <span style={{ fontWeight: 700, fontSize: "0.82rem" }}>{n.title}</span>
-                  <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
-                    {timeAgo(n.created_at)}
+                  <span style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+                    <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{timeAgo(n.created_at)}</span>
+                    <button
+                      className="icon-btn"
+                      title="Delete notification"
+                      onClick={(e) => remove(n, e)}
+                      style={{ padding: "0 4px", fontSize: "0.85rem", lineHeight: 1, color: "var(--text-muted)" }}
+                    >
+                      ✕
+                    </button>
                   </span>
                 </div>
                 <div style={{ fontSize: "0.8rem", color: "var(--text)", marginTop: 2 }}>{n.message}</div>

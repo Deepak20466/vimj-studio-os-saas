@@ -14,6 +14,7 @@ class _AdminLeaveTabState extends State<AdminLeaveTab> {
   bool _loading = true;
   bool _pendingOnly = true;
   List<AdminLeaveRequest> _leaves = [];
+  int? _busyId;
 
   @override
   void initState() {
@@ -63,14 +64,20 @@ class _AdminLeaveTabState extends State<AdminLeaveTab> {
       noteCtrl.dispose();
       return;
     }
+    setState(() => _busyId = l.id);
     try {
       final path = approve ? '/leave/${l.id}/approve' : '/leave/${l.id}/reject';
       await ApiClient.instance.put(path, body: {'note': noteCtrl.text.trim()});
       _load();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted) {
+        final message = e.statusCode == 404 ? 'This request no longer exists — refreshing list' : e.message;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        if (e.statusCode == 404) _load();
+      }
     } finally {
       noteCtrl.dispose();
+      if (mounted) setState(() => _busyId = null);
     }
   }
 
@@ -153,6 +160,7 @@ class _AdminLeaveTabState extends State<AdminLeaveTab> {
   }
 
   Future<void> _remove(AdminLeaveRequest l) async {
+    if (_busyId == l.id) return; // already in flight — ignore a double tap
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -165,12 +173,22 @@ class _AdminLeaveTabState extends State<AdminLeaveTab> {
       ),
     );
     if (confirmed != true) return;
+    setState(() => _busyId = l.id);
     try {
       await ApiClient.instance.delete('/leave/${l.id}');
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Leave request deleted')));
       _load();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted) {
+        // A 404 means the request is already gone (deleted/decided elsewhere,
+        // or a duplicate tap raced this same request) — refresh instead of
+        // leaving a stale card on screen with a confusing permanent error.
+        final message = e.statusCode == 404 ? 'Already gone — refreshing list' : e.message;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        if (e.statusCode == 404) _load();
+      }
+    } finally {
+      if (mounted) setState(() => _busyId = null);
     }
   }
 
@@ -245,7 +263,7 @@ class _AdminLeaveTabState extends State<AdminLeaveTab> {
                                         children: [
                                           Expanded(
                                             child: OutlinedButton(
-                                              onPressed: () => _decide(l, false),
+                                              onPressed: _busyId == l.id ? null : () => _decide(l, false),
                                               style: OutlinedButton.styleFrom(foregroundColor: AppColors.danger),
                                               child: const Text('Reject'),
                                             ),
@@ -253,8 +271,10 @@ class _AdminLeaveTabState extends State<AdminLeaveTab> {
                                           const SizedBox(width: 10),
                                           Expanded(
                                             child: ElevatedButton(
-                                              onPressed: () => _decide(l, true),
-                                              child: const Text('Approve'),
+                                              onPressed: _busyId == l.id ? null : () => _decide(l, true),
+                                              child: _busyId == l.id
+                                                  ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                                  : const Text('Approve'),
                                             ),
                                           ),
                                         ],
@@ -262,12 +282,14 @@ class _AdminLeaveTabState extends State<AdminLeaveTab> {
                                     const SizedBox(height: 8),
                                     Row(
                                       children: [
-                                        Expanded(child: TextButton(onPressed: () => _openEdit(l), child: const Text('Edit'))),
+                                        Expanded(child: TextButton(onPressed: _busyId == l.id ? null : () => _openEdit(l), child: const Text('Edit'))),
                                         Expanded(
                                           child: TextButton(
-                                            onPressed: () => _remove(l),
+                                            onPressed: _busyId == l.id ? null : () => _remove(l),
                                             style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-                                            child: const Text('Delete'),
+                                            child: _busyId == l.id
+                                                ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                                                : const Text('Delete'),
                                           ),
                                         ),
                                       ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/models.dart';
+import '../../core/notification_polling_service.dart';
 
 class NotificationCenterScreen extends StatefulWidget {
   const NotificationCenterScreen({super.key});
@@ -61,6 +62,42 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     }
   }
 
+  Future<void> _remove(AppNotification n) async {
+    try {
+      await ApiClient.instance.delete('/notifications/${n.id}');
+      if (mounted) {
+        setState(() => _items.removeWhere((x) => x.id == n.id));
+      }
+      if (!n.isRead) {
+        NotificationPollingService.unreadCount.value = (NotificationPollingService.unreadCount.value - 1).clamp(0, 1 << 30);
+      }
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<void> _removeAll() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete all notifications?'),
+        content: const Text('This clears your entire notification list.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete all', style: TextStyle(color: AppColors.danger))),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ApiClient.instance.delete('/notifications');
+      if (mounted) setState(() => _items = []);
+      NotificationPollingService.unreadCount.value = 0;
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   String _timeAgo(String iso) {
     final dt = DateTime.tryParse(iso);
     if (dt == null) return '';
@@ -79,6 +116,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
         title: const Text('Notifications'),
         actions: [
           if (hasUnread) TextButton(onPressed: _markAllRead, child: const Text('Mark all read', style: TextStyle(color: Colors.white))),
+          if (_items.isNotEmpty) TextButton(onPressed: _removeAll, child: const Text('Clear all', style: TextStyle(color: Colors.white))),
         ],
       ),
       body: _loading
@@ -99,7 +137,17 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
                             onTap: () => _markRead(n),
                             title: Text(n.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                             subtitle: Text(n.message, style: const TextStyle(fontSize: 12.5)),
-                            trailing: Text(_timeAgo(n.createdAt), style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(_timeAgo(n.createdAt), style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.textMuted),
+                                  tooltip: 'Delete',
+                                  onPressed: () => _remove(n),
+                                ),
+                              ],
+                            ),
                           ),
                         );
                       },

@@ -22,6 +22,7 @@ class CoachStudentsTab extends StatefulWidget {
 class _CoachStudentsTabState extends State<CoachStudentsTab> {
   List<CoachActivityLink> _activities = [];
   final Map<int, List<RosterStudent>> _rosterByActivity = {};
+  final Map<int, Uint8List?> _photos = {};
   bool _loading = true;
 
   @override
@@ -47,6 +48,21 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+    _loadPhotos();
+  }
+
+  Future<void> _loadPhotos() async {
+    final studentIds = _rosterByActivity.values.expand((list) => list.map((s) => s.id)).toSet();
+    await Future.wait(studentIds.map((id) => _loadPhoto(id)));
+  }
+
+  Future<void> _loadPhoto(int studentId) async {
+    try {
+      final bytes = await ApiClient.instance.getBytes('/students/$studentId/photo');
+      if (mounted) setState(() => _photos[studentId] = Uint8List.fromList(bytes));
+    } on ApiException {
+      if (mounted) setState(() => _photos[studentId] = null);
     }
   }
 
@@ -84,17 +100,24 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
   }
 
   Future<void> _capturePhoto(RosterStudent s) async {
+    XFile? photo;
     try {
       final picker = ImagePicker();
-      final photo = await picker.pickImage(source: ImageSource.camera, imageQuality: 70, preferredCameraDevice: CameraDevice.front);
-      if (photo == null) return;
+      photo = await picker.pickImage(source: ImageSource.camera, imageQuality: 70, preferredCameraDevice: CameraDevice.front);
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open camera — check camera permission')));
+      return;
+    }
+    if (photo == null) return;
+    try {
       final bytes = await photo.readAsBytes();
       await ApiClient.instance.post('/students/${s.id}/photo', body: {'photo_base64': base64Encode(bytes)});
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Photo saved')));
+      // Refresh just this student's thumbnail so it shows next to their name
+      // immediately, without re-fetching the whole roster.
+      await _loadPhoto(s.id);
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
-    } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open camera — check camera permission')));
     }
   }
 
@@ -236,7 +259,11 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
                                 else
                                   ...roster.map((s) => ListTile(
                                         contentPadding: EdgeInsets.zero,
-                                        leading: const Icon(Icons.person_outline),
+                                        leading: CircleAvatar(
+                                          radius: 20,
+                                          backgroundImage: _photos[s.id] != null ? MemoryImage(_photos[s.id]!) : null,
+                                          child: _photos[s.id] == null ? const Icon(Icons.person_outline) : null,
+                                        ),
                                         title: Text(s.name),
                                         subtitle: Text(s.email.endsWith('@no-login.internal') ? '-' : s.email),
                                         trailing: PopupMenuButton<String>(

@@ -48,7 +48,10 @@ export const ActivitiesAPI = {
 export const AttendanceAPI = {
   markManual: (payload) => client.post("/attendance/mark-student/manual", payload),
   dailyMissing: () => client.get("/attendance/daily-missing"),
-  selfieUrl: (id) => `/api/attendance/selfie/${id}`,
+  // A plain <img src> can't attach the Bearer token this API requires, so the
+  // selfie has to be fetched as an authenticated blob (like StudentsAPI.photoBlob)
+  // rather than linked to directly.
+  selfieBlob: (id) => client.get(`/attendance/selfie/${id}`, { responseType: "blob" }),
   list: (params) => client.get("/attendance/students", { params }),
   update: (id, payload) => client.put(`/attendance/students/${id}`, payload),
   remove: (id) => client.delete(`/attendance/students/${id}`),
@@ -97,6 +100,8 @@ export const NotificationsAPI = {
   list: () => client.get("/notifications"),
   markRead: (id) => client.put(`/notifications/${id}/read`),
   markAllRead: () => client.put("/notifications/read-all"),
+  remove: (id) => client.delete(`/notifications/${id}`),
+  removeAll: () => client.delete("/notifications"),
 };
 
 export const ChatAPI = {
@@ -192,4 +197,12 @@ export const ReportsAPI = {
   activityDetail: (id) => client.get(`/reports/activity/${id}`),
   exportMonthlyAnalysis: (month, year, fmt) =>
     client.get("/reports/export/monthly-analysis", { params: { month, year, fmt }, responseType: "blob" }),
+};
+
+export const ResetAPI = {
+  // Admin-only: wipes attendance/fee/leave/salary/swap/compliance/notification
+  // history system-wide. Keeps Users, Activities, and Batches intact.
+  all: () => client.post("/reset/all"),
+  // Coach-only: wipes only the caller's own attendance/leave/swap history.
+  mine: () => client.post("/reset/mine"),
 };

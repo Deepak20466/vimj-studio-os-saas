@@ -17,7 +17,14 @@ class ApiClient {
   static final ApiClient instance = ApiClient._();
 
   final http.Client _http = http.Client();
-  bool _isRefreshing = false;
+  // Shared by every concurrent caller that hits a 401 at the same time (e.g. a screen
+  // that fires several parallel GETs via Future.wait right as the access token expires).
+  // Without sharing this future, only the first caller would actually refresh — every
+  // other concurrent caller used to see a refresh "already in progress" and immediately
+  // treat that as a failed refresh, clearing the session and logging the user out even
+  // though the real refresh was about to succeed a moment later. That race was the actual
+  // cause of "gets logged out on its own" during normal use, not the token lifetime itself.
+  Future<bool>? _refreshFuture;
 
   Uri _uri(String path, [Map<String, dynamic>? query]) {
     Map<String, String>? cleanQuery;
@@ -50,9 +57,13 @@ class ApiClient {
     return Future.value(jsonDecode(response.body));
   }
 
-  Future<bool> _tryRefresh() async {
-    if (_isRefreshing) return false;
-    _isRefreshing = true;
+  Future<bool> _tryRefresh() {
+    // If a refresh is already in flight, piggyback on it instead of racing a second
+    // one — see the comment on _refreshFuture above.
+    return _refreshFuture ??= _performRefresh().whenComplete(() => _refreshFuture = null);
+  }
+
+  Future<bool> _performRefresh() async {
     try {
       final session = await AuthStorage.load();
       if (session == null) return false;
@@ -70,8 +81,6 @@ class ApiClient {
       return true;
     } catch (_) {
       return false;
-    } finally {
-      _isRefreshing = false;
     }
   }
 
@@ -154,7 +163,17 @@ class ApiClient {
       throw ApiException(401, 'Session expired. Please log in again.');
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiException(response.statusCode, 'Download failed (${response.statusCode})');
+      String message = 'Download failed (${response.statusCode})';
+      try {
+        final data = jsonDecode(response.body);
+        if (data is Map && data['detail'] != null) {
+          final detail = data['detail'];
+          message = detail is String ? detail : jsonEncode(detail);
+        }
+      } catch (_) {
+        // keep default message — body wasn't JSON
+      }
+      throw ApiException(response.statusCode, message);
     }
     return response.bodyBytes;
   }

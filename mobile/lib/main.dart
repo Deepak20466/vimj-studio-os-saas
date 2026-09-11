@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'core/app_theme.dart';
-import 'core/notification_service.dart';
 import 'core/notification_polling_service.dart';
 import 'core/sync_service.dart';
 import 'core/theme_controller.dart';
@@ -9,7 +8,9 @@ import 'features/auth/splash_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await ThemeController.load();
-  await NotificationService.init();
+  // Notifications are in-app only (bell + notification center) — no OS-level
+  // popups outside the app, so NotificationService (flutter_local_notifications)
+  // is intentionally not initialized here. See notification_polling_service.dart.
   SyncService.start();
   NotificationPollingService.start();
   runApp(const VimjApp());
