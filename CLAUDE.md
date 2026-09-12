@@ -909,6 +909,66 @@ with this project's standing mobile-testing caveat.
 
 ---
 
+## 2026-09-13 CLIENT FEEDBACK — deadline removed, Locked label dropped, receipts downloadable pre-approval
+
+Third small round, reported directly from the coach's real phone (screenshots showed real
+student names, not demo data). Three items, all confirmed as genuine client asks (not just
+missing test data) and fixed:
+
+1. **The 60-minute post-class `MARK_DEADLINE_MINUTES` cutoff on `POST /attendance/mark-student`
+   is now removed entirely**, not just relaxed. Previously a coach hitting Submit on a class more
+   than 60 minutes past its end time got a hard 400 ("Attendance marking deadline has passed for
+   this class") and the mark never reached admin at all. The client's own words — "once if i
+   press submit then it should [go] to admin" — made clear this was read as a dead-end bug, not
+   a guardrail. A mark now always submits (as `PENDING`, same as before) no matter how late,
+   whether it's the coach marking a student or a coach's own facility `coach-mark`. Coach
+   self-editing is **still** locked from the moment of submission (`PUT`/`DELETE
+   /attendance/students/{id}` remain `require_admin`-only, unchanged from the 2026-09-13 GPS/
+   selfie-removal round above) — only the submission-time cutoff was removed, not the lock.
+   `MARK_DEADLINE_MINUTES` and the now-unused `timedelta` import were deleted from
+   `backend/app/routers/attendance.py` rather than left dead. **If a future round ever wants a
+   deadline back, that is a new decision — don't resurrect this constant by copying old code.**
+2. **The "Locked" text badge removed** from every screen that showed it next to an
+   already-submitted, un-editable attendance row — mobile `mark_attendance_screen.dart`, web
+   `CoachClasses.jsx` and `CoachAttendance.jsx`. Purely cosmetic: the underlying lock (item 1's
+   admin-only edit/delete) is completely unchanged, only the visible word "Locked" is gone.
+3. **Fee receipt PDF/CSV no longer requires admin approval first.** `GET /receipts/{id}/pdf`
+   used to 400 ("Receipt must be approved by admin before a PDF can be issued") for any
+   `PENDING`/`REJECTED` `FeeReceipt`, and both coach UIs (web `CoachReceipts.jsx`, mobile
+   `coach_receipts_tab.dart`) hid the View/PDF/CSV buttons entirely unless `status == APPROVED`
+   — this is what the client meant by "i dont see pdf/csv download option in fees section."
+   Explicitly confirmed with the client this should allow download for **any** receipt status,
+   not just surface already-approved ones sitting unseen. To avoid a pending/rejected receipt's
+   PDF misrepresenting itself as an official confirmed payment, `build_fee_receipt_pdf` (
+   `backend/app/services/receipt_pdf.py`) gained a `receipt_status` param: the header reads
+   "RECEIPT (PENDING)"/"RECEIPT (REJECTED)" instead of a bare "RECEIPT", and the signature line
+   says "Pending admin approval — not yet confirmed" / "Rejected by admin — not a valid payment
+   confirmation" instead of ever claiming "Approved by academy admin" for a receipt that wasn't.
+   The CSV export gained a `Status` column for the same reason. `approved_by`/"Approved By" is
+   now only ever populated when `status == APPROVED` (previously `approved_by_admin_id` is set on
+   both approve *and* reject, which would have mislabeled a rejected receipt as admin-approved
+   had the gate simply been deleted without this guard). `paid_date` for a not-yet-decided
+   receipt now falls back to `receipt.created_at` (when the coach recorded it) instead of
+   `date.today()` (the day someone happens to download it) — `decided_at` is still preferred once
+   set. Admin's `Fees.jsx` "Pending"/"Approved" receipt sections are unchanged (admin already had
+   a working approve/reject flow; this round only touched what a **coach** can already do with
+   their own receipts).
+
+**Verified live** against a local backend + Postgres: marked a class dated 2026-08-24 (weeks
+past any deadline) — succeeded as `PENDING`; confirmed the coach still gets 403 trying to edit
+it. Created a fresh `PENDING` receipt as a coach and downloaded both its PDF and CSV successfully
+(CSV showed `Status=PENDING`, `Approved By=-`); approved it as admin and re-downloaded — CSV
+flipped to `Status=APPROVED`, `Approved By=Admin User`. Web `npm run build` clean. `flutter
+analyze` clean (0 errors/warnings, same pre-existing info-level notices as prior rounds — none
+introduced by this change). **Not done this round**: no Playwright/browser-automation tool was
+available in this session (unlike several prior rounds), so the actual rendered screens
+(mobile and web) were not click-tested — only verified via direct API calls, `flutter analyze`,
+and a production build. Released as `mobile-v1.17.0` (superseding `mobile-v1.16.0`), built
+against `https://vimj-backend.onrender.com`. Worth a real-device check of the three fixed
+screens before assuming it's flawless, on top of this project's standing mobile-testing caveat.
+
+---
+
 ## SUCCESS CHECKLIST
 ✅ All 15 requirements implemented
 ✅ Coaches see only their own data (API enforced)
