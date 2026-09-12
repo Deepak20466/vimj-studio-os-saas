@@ -50,13 +50,14 @@ class QueuedAttendance {
         createdAt: DateTime.parse(map['created_at'] as String),
       );
 
+  /// Marking is manual entry now (no GPS/selfie) — [lat]/[lng]/[selfieBase64]
+  /// are unused legacy fields kept only so the persisted queue table's schema
+  /// doesn't need a migration; the API body sends just the three fields the
+  /// backend actually accepts.
   Map<String, dynamic> toApiBody() => {
         'student_id': studentId,
         'class_id': classId,
         'status': status,
-        'location_lat': lat,
-        'location_lng': lng,
-        'selfie_base64': selfieBase64,
       };
 }
 

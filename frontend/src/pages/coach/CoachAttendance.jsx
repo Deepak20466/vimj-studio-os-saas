@@ -15,7 +15,6 @@ export default function CoachAttendance() {
   const [loading, setLoading] = useState(true);
   const [dateFrom, setDateFrom] = useState(todayStr());
   const [dateTo, setDateTo] = useState(todayStr());
-  const [busyId, setBusyId] = useState(null);
   const [selfieUrl, setSelfieUrl] = useState(null);
 
   const [myAttendance, setMyAttendance] = useState([]);
@@ -40,35 +39,6 @@ export default function CoachAttendance() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const canEdit = (r) => String(r.class_date).slice(0, 10) === todayStr() && r.approval_status === "PENDING";
-
-  const changeStatus = async (record, status) => {
-    setBusyId(record.id);
-    try {
-      await CoachSelfAPI.updateStudentAttendance(record.id, { status });
-      toast.success("Attendance updated");
-      load();
-    } catch (err) {
-      toast.error(err.response?.data?.detail || "Update failed");
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const remove = async (record) => {
-    if (!confirm(`Remove the attendance record for ${record.student_name}?`)) return;
-    setBusyId(record.id);
-    try {
-      await CoachSelfAPI.deleteStudentAttendance(record.id);
-      toast.success("Attendance record deleted");
-      load();
-    } catch (err) {
-      toast.error(err.response?.data?.detail || "Delete failed");
-    } finally {
-      setBusyId(null);
-    }
-  };
-
   const viewSelfie = async (record) => {
     try {
       const { data } = await AttendanceAPI.selfieBlob(record.id);
@@ -92,8 +62,8 @@ export default function CoachAttendance() {
       <div className="card" style={{ marginBottom: 16 }}>
         <h3 style={{ marginTop: 0 }}>My Facility Attendance</h3>
         <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: -8 }}>
-          Your own geofenced check-in/check-out history. This is an audit trail set only by Check In / Check Out on
-          your Dashboard — it can't be edited here.
+          Your own manual attendance history — one entry per day, set from your Dashboard. Once
+          submitted it can't be changed here; only admin can correct it.
         </p>
         {myAttendanceLoading ? (
           <div className="empty-state">Loading...</div>
@@ -104,8 +74,7 @@ export default function CoachAttendance() {
             <thead>
               <tr>
                 <th>Date</th>
-                <th>Entry</th>
-                <th>Exit</th>
+                <th>Marked At</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -114,7 +83,6 @@ export default function CoachAttendance() {
                 <tr key={a.id}>
                   <td>{a.date}</td>
                   <td>{a.entry_time ? new Date(a.entry_time).toLocaleTimeString() : "-"}</td>
-                  <td>{a.exit_time ? new Date(a.exit_time).toLocaleTimeString() : "-"}</td>
                   <td>
                     <StatusBadge status={a.status} />
                   </td>
@@ -129,7 +97,7 @@ export default function CoachAttendance() {
         <h1>Student Attendance</h1>
       </div>
       <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: -12 }}>
-        Once admin approves or rejects a record you marked, it locks and can no longer be changed from here.
+        Manual entry only — once submitted, a mark cannot be changed from here. Only admin can correct it.
       </p>
 
       <div className="card">
@@ -158,7 +126,7 @@ export default function CoachAttendance() {
                 <th>Status</th>
                 <th>Admin Review</th>
                 <th>Marked At</th>
-                <th>Actions</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -173,34 +141,13 @@ export default function CoachAttendance() {
                   <td>{approvalBadge(r.approval_status)}</td>
                   <td>{new Date(r.timestamp).toLocaleString()}</td>
                   <td>
-                    <div className="table-actions" style={{ flexWrap: "wrap" }}>
-                      {r.has_selfie && (
-                        <button className="btn btn-secondary btn-sm" onClick={() => viewSelfie(r)}>
-                          View Photo
-                        </button>
-                      )}
-                      {canEdit(r) ? (
-                        <>
-                          {["PRESENT", "ABSENT", "LEAVE"].filter((s) => s !== r.status).map((s) => (
-                            <button
-                              key={s}
-                              className="btn btn-secondary btn-sm"
-                              disabled={busyId === r.id}
-                              onClick={() => changeStatus(r, s)}
-                            >
-                              Mark {s.charAt(0) + s.slice(1).toLowerCase()}
-                            </button>
-                          ))}
-                          <button className="btn btn-danger btn-sm" disabled={busyId === r.id} onClick={() => remove(r)}>
-                            Delete
-                          </button>
-                        </>
-                      ) : (
-                        <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                          {r.approval_status === "PENDING" ? "Locked (past class)" : "Locked (reviewed by admin)"}
-                        </span>
-                      )}
-                    </div>
+                    {r.has_selfie ? (
+                      <button className="btn btn-secondary btn-sm" onClick={() => viewSelfie(r)}>
+                        View Photo
+                      </button>
+                    ) : (
+                      <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Locked</span>
+                    )}
                   </td>
                 </tr>
               ))}

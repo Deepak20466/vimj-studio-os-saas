@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { CoachSelfAPI, ActivitiesAPI, AttendanceAPI } from "../../api/endpoints";
-import { getCurrentPosition } from "../../utils/geo";
 import Modal from "../../components/Modal";
-import SelfieCapture from "../../components/SelfieCapture";
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -12,6 +10,8 @@ function todayStr() {
 function classHasEnded(cls) {
   return new Date(`${cls.date}T${cls.end_time}`) < new Date();
 }
+
+const STATUS_LABELS = { PRESENT: "Present", ABSENT: "Absent", LEAVE: "Leave", NOT_CONFIRM: "Not Confirm" };
 
 export default function CoachClasses() {
   const [date, setDate] = useState(todayStr());
@@ -22,7 +22,6 @@ export default function CoachClasses() {
   const [roster, setRoster] = useState([]);
   const [rosterLoading, setRosterLoading] = useState(false);
   const [done, setDone] = useState({}); // studentId -> {status, id, approval_status, has_selfie}
-  const [pendingPresent, setPendingPresent] = useState(null); // student object awaiting selfie
   const [markingId, setMarkingId] = useState(null);
   const [selfieUrl, setSelfieUrl] = useState(null);
 
@@ -58,60 +57,21 @@ export default function CoachClasses() {
       .finally(() => setRosterLoading(false));
   };
 
-  const submitAttendance = async (studentId, status, selfieBase64) => {
+  const handleMark = async (studentId, status) => {
     setMarkingId(studentId);
     try {
-      const { lat, lng } = await getCurrentPosition();
       const { data } = await CoachSelfAPI.markAttendance({
         student_id: studentId,
         class_id: rosterFor.id,
         status,
-        location_lat: lat,
-        location_lng: lng,
-        selfie_base64: selfieBase64 || undefined,
       });
-      toast.success(`Marked ${status.toLowerCase()}`);
+      toast.success(`Marked ${STATUS_LABELS[status]} — submitted, awaiting admin`);
       setDone((d) => ({
         ...d,
         [studentId]: { status, id: data.id, approval_status: data.approval_status, has_selfie: data.has_selfie },
       }));
     } catch (err) {
-      toast.error(err.response?.data?.detail || err.message || "Failed to mark attendance");
-    } finally {
-      setMarkingId(null);
-    }
-  };
-
-  const editAttendance = async (studentId, newStatus) => {
-    const record = done[studentId];
-    if (!record) return;
-    setMarkingId(studentId);
-    try {
-      await CoachSelfAPI.updateStudentAttendance(record.id, { status: newStatus });
-      toast.success(`Updated to ${newStatus.toLowerCase()}`);
-      setDone((d) => ({ ...d, [studentId]: { ...record, status: newStatus } }));
-    } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to update attendance");
-    } finally {
-      setMarkingId(null);
-    }
-  };
-
-  const deleteAttendance = async (studentId) => {
-    const record = done[studentId];
-    if (!record) return;
-    if (!confirm("Delete this attendance record?")) return;
-    setMarkingId(studentId);
-    try {
-      await CoachSelfAPI.deleteStudentAttendance(record.id);
-      toast.success("Attendance record deleted");
-      setDone((d) => {
-        const next = { ...d };
-        delete next[studentId];
-        return next;
-      });
-    } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to delete attendance");
+      toast.error(err.response?.data?.detail || "Failed to mark attendance");
     } finally {
       setMarkingId(null);
     }
@@ -124,14 +84,6 @@ export default function CoachClasses() {
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to load selfie");
     }
-  };
-
-  const handleMark = (student, status) => {
-    if (status === "PRESENT") {
-      setPendingPresent(student);
-      return;
-    }
-    submitAttendance(student.id, status);
   };
 
   return (
@@ -179,6 +131,10 @@ export default function CoachClasses() {
 
       {rosterFor && (
         <Modal title={`Mark Attendance — ${activityNames[rosterFor.activity_id] || ""}`} onClose={() => setRosterFor(null)}>
+          <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginTop: -8 }}>
+            Manual entry — no location or photo needed. Once submitted, a mark cannot be changed;
+            only admin can correct it.
+          </p>
           {rosterLoading ? (
             <div className="empty-state">Loading roster...</div>
           ) : roster.length === 0 ? (
@@ -204,7 +160,7 @@ export default function CoachClasses() {
                     <td>
                       {done[s.id] ? (
                         <div className="table-actions" style={{ flexWrap: "wrap" }}>
-                          <span className={`badge badge-${done[s.id].status.toLowerCase()}`}>{done[s.id].status}</span>
+                          <span className={`badge badge-${done[s.id].status.toLowerCase()}`}>{STATUS_LABELS[done[s.id].status]}</span>
                           <span
                             className={`badge ${done[s.id].approval_status === "APPROVED" ? "badge-paid" : done[s.id].approval_status === "REJECTED" ? "badge-overdue" : "badge-unpaid"}`}
                             title="Admin review status"
@@ -216,49 +172,20 @@ export default function CoachClasses() {
                               View Photo
                             </button>
                           )}
-                          {done[s.id].approval_status === "PENDING" ? (
-                            <>
-                              <select
-                                value={done[s.id].status}
-                                disabled={markingId === s.id}
-                                onChange={(e) => editAttendance(s.id, e.target.value)}
-                                style={{ width: "auto", padding: "4px 8px" }}
-                              >
-                                <option value="PRESENT">Present</option>
-                                <option value="ABSENT">Absent</option>
-                                <option value="LEAVE">Leave</option>
-                              </select>
-                              <button className="btn btn-danger btn-sm" disabled={markingId === s.id} onClick={() => deleteAttendance(s.id)}>
-                                Delete
-                              </button>
-                            </>
-                          ) : (
-                            <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Locked</span>
-                          )}
+                          <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Locked</span>
                         </div>
                       ) : (
                         <div className="table-actions">
-                          <button
-                            className="btn btn-primary btn-sm"
-                            disabled={markingId === s.id}
-                            onClick={() => handleMark(s, "PRESENT")}
-                          >
-                            Present
-                          </button>
-                          <button
-                            className="btn btn-secondary btn-sm"
-                            disabled={markingId === s.id}
-                            onClick={() => handleMark(s, "ABSENT")}
-                          >
-                            Absent
-                          </button>
-                          <button
-                            className="btn btn-secondary btn-sm"
-                            disabled={markingId === s.id}
-                            onClick={() => handleMark(s, "LEAVE")}
-                          >
-                            Leave
-                          </button>
+                          {Object.keys(STATUS_LABELS).map((st) => (
+                            <button
+                              key={st}
+                              className={st === "PRESENT" ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
+                              disabled={markingId === s.id}
+                              onClick={() => handleMark(s.id, st)}
+                            >
+                              {STATUS_LABELS[st]}
+                            </button>
+                          ))}
                         </div>
                       )}
                     </td>
@@ -268,17 +195,6 @@ export default function CoachClasses() {
             </table>
           )}
         </Modal>
-      )}
-
-      {pendingPresent && (
-        <SelfieCapture
-          onClose={() => setPendingPresent(null)}
-          onCapture={(base64) => {
-            const student = pendingPresent;
-            setPendingPresent(null);
-            submitAttendance(student.id, "PRESENT", base64);
-          }}
-        />
       )}
 
       {selfieUrl && (

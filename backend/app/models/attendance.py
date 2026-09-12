@@ -11,13 +11,15 @@ class AttendanceStatus(str, enum.Enum):
     PRESENT = "PRESENT"
     ABSENT = "ABSENT"
     LEAVE = "LEAVE"
+    NOT_CONFIRM = "NOT_CONFIRM"
 
 
 class CoachAttendanceStatus(str, enum.Enum):
     PRESENT = "PRESENT"
     ABSENT = "ABSENT"
     LEAVE = "LEAVE"
-    INCOMPLETE = "INCOMPLETE"  # entered but never exited / never marked
+    NOT_CONFIRM = "NOT_CONFIRM"
+    INCOMPLETE = "INCOMPLETE"  # entered but never exited / never marked — legacy GPS-era rows only
 
 
 class AttendanceApprovalStatus(str, enum.Enum):

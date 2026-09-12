@@ -139,12 +139,9 @@ export const CoachSelfAPI = {
   classSummary: (classId) => client.get(`/activities/classes/${classId}/summary`),
   roster: (activityId) => client.get(`/activities/${activityId}/roster`),
   markAttendance: (payload) => client.post("/attendance/mark-student", payload),
-  coachEntry: (payload) => client.post("/attendance/coach-entry", payload),
-  coachExit: (payload) => client.post("/attendance/coach-exit", payload),
+  coachMark: (payload) => client.post("/attendance/coach-mark", payload),
   myAttendance: (coachId) => client.get(`/coaches/${coachId}/attendance`),
   myStudentAttendance: (params) => client.get("/attendance/students", { params }),
-  updateStudentAttendance: (id, payload) => client.put(`/attendance/students/${id}`, payload),
-  deleteStudentAttendance: (id) => client.delete(`/attendance/students/${id}`),
   myActivities: (coachId) => client.get(`/coaches/${coachId}/activities`),
   directory: () => client.get("/coaches/directory"),
 };

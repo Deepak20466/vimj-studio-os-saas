@@ -2,14 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/api_client.dart';
 import '../../core/auth_storage.dart';
-import '../../core/location_service.dart';
-import '../../core/geofence.dart';
-import '../../core/api_config.dart';
 import '../../core/models.dart';
 import '../../core/offline_queue.dart';
 import '../../core/sync_service.dart';
 import 'mark_attendance_screen.dart';
 import '../shared/notification_bell_action.dart';
+
+const _myAttendanceStatusLabels = {'PRESENT': 'Present', 'ABSENT': 'Absent', 'NOT_CONFIRM': 'Not Confirm'};
 
 class CoachDashboardTab extends StatefulWidget {
   const CoachDashboardTab({super.key});
@@ -24,8 +23,7 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
   bool _loading = true;
   String? _error;
   String _coachName = '';
-  bool _entryDone = false;
-  bool _exitDone = false;
+  String? _myStatus;
   bool _actionLoading = false;
   int _pendingSync = 0;
 
@@ -58,8 +56,7 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
           break;
         }
       }
-      _entryDone = todayRecord?['entry_time'] != null;
-      _exitDone = todayRecord?['exit_time'] != null;
+      _myStatus = todayRecord?['status'] as String?;
       _pendingSync = await OfflineQueue.pendingCount();
       final summaryPairs = await Future.wait(_classes.map((c) async {
         try {
@@ -79,40 +76,14 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
     }
   }
 
-  Future<void> _handleEntry() async {
-    await _handleGeofencedAction('/attendance/coach-entry', isEntry: true);
-  }
-
-  Future<void> _handleExit() async {
-    await _handleGeofencedAction('/attendance/coach-exit', isEntry: false);
-  }
-
-  Future<void> _handleGeofencedAction(String path, {required bool isEntry}) async {
+  Future<void> _markMyAttendance(String mstatus) async {
     setState(() => _actionLoading = true);
     try {
-      final position = await LocationService.getCurrentPosition();
-      final distance = Geofence.distanceMeters(position.latitude, position.longitude, FacilityConfig.lat, FacilityConfig.lng);
-      if (distance > FacilityConfig.radiusMeters && mounted) {
-        _showSnack(
-          'You are ${distance.toStringAsFixed(0)}m from the facility (limit ${FacilityConfig.radiusMeters.toStringAsFixed(0)}m). The server will reject this.',
-        );
-      }
-      await ApiClient.instance.post(path, body: {
-        'location_lat': position.latitude,
-        'location_lng': position.longitude,
-      });
-      setState(() {
-        if (isEntry) {
-          _entryDone = true;
-        } else {
-          _exitDone = true;
-        }
-      });
-      if (mounted) _showSnack(isEntry ? 'Checked in successfully' : 'Checked out successfully');
+      await ApiClient.instance.post('/attendance/coach-mark', body: {'status': mstatus});
+      setState(() => _myStatus = mstatus);
+      if (mounted) _showSnack('Marked ${_myAttendanceStatusLabels[mstatus]} — submitted, awaiting admin');
     } on ApiException catch (e) {
       if (mounted) _showSnack(e.message, isError: true);
-    } catch (e) {
-      if (mounted) _showSnack('Could not get your location. Enable GPS and try again.', isError: true);
     } finally {
       if (mounted) setState(() => _actionLoading = false);
     }
@@ -154,25 +125,29 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
                 padding: const EdgeInsets.all(16),
                 children: [
                   if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _actionLoading || _entryDone ? null : _handleEntry,
-                          icon: const Icon(Icons.login),
-                          label: Text(_entryDone ? 'Checked In' : 'Check In'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _actionLoading || !_entryDone || _exitDone ? null : _handleExit,
-                          icon: const Icon(Icons.logout),
-                          label: Text(_exitDone ? 'Checked Out' : 'Check Out'),
-                        ),
-                      ),
-                    ],
+                  Text('My Attendance Today', style: Theme.of(context).textTheme.titleMedium),
+                  const Text(
+                    'Manual entry — no location needed. Once submitted it can\'t be changed; only admin can correct it.',
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
                   ),
+                  const SizedBox(height: 8),
+                  if (_myStatus != null)
+                    Chip(label: Text('${_myAttendanceStatusLabels[_myStatus] ?? _myStatus} — locked'))
+                  else
+                    Wrap(
+                      spacing: 8,
+                      children: _myAttendanceStatusLabels.entries
+                          .map((e) => e.key == 'PRESENT'
+                              ? ElevatedButton(
+                                  onPressed: _actionLoading ? null : () => _markMyAttendance(e.key),
+                                  child: Text(e.value),
+                                )
+                              : OutlinedButton(
+                                  onPressed: _actionLoading ? null : () => _markMyAttendance(e.key),
+                                  child: Text(e.value),
+                                ))
+                          .toList(),
+                    ),
                   if (_pendingSync > 0)
                     Card(
                       color: Colors.amber.shade50,

@@ -11,9 +11,6 @@ class MarkStudentAttendanceRequest(BaseModel):
     student_id: int
     class_id: int
     status: AttendanceStatus
-    location_lat: Decimal
-    location_lng: Decimal
-    selfie_base64: Optional[str] = None
 
 
 class ManualAttendanceRequest(BaseModel):
@@ -63,9 +60,8 @@ class StudentAttendanceAdminOut(BaseModel):
     approval_status: AttendanceApprovalStatus
 
 
-class CoachEntryExitRequest(BaseModel):
-    location_lat: Decimal
-    location_lng: Decimal
+class CoachMarkRequest(BaseModel):
+    status: CoachAttendanceStatus
     activity_id: Optional[int] = None
 
 

@@ -15,6 +15,18 @@ Act as a senior developer and build a complete Production-ready Attendance Manag
 > Coach Swapping, Chat, and Compliance remain deleted and are NOT coming back
 > as part of this round. Do not "fix" old broken calls by resurrecting deleted
 > backend without an explicit decision to do so.
+>
+> **⚠️ 2026-09-13 — follow-up correction, same client.** Two more changes, see
+> "2026-09-13 CLIENT FEEDBACK" near the end of this file: (1) attendance
+> marking (both a coach marking a student, and a coach's own facility
+> check-in) dropped GPS/selfie verification entirely for plain manual entry —
+> Present/Absent/Leave/**Not Confirm** (a genuine new 4th status) — and a
+> coach can no longer self-edit a mark at all once submitted, not even
+> same-day (tighter than the coach-round's approval-lock). (2) Activities and
+> Batches were removed from the admin dashboard entirely (they had been kept,
+> folded together, in the 2026-09-12 admin rebuild) — admin now has no UI to
+> create a new Activity/Batch/manually generate sessions; the underlying data
+> model and every read usage elsewhere is untouched and still works.
 
 # VIMJ Studio Attendance System -
 
@@ -733,6 +745,118 @@ repeated test logins across curl + two separate Playwright passes (web and
 mobile) — bumped it to `200/15minutes`, restarted the backend, and **restored
 it to `5/15minutes` + restarted again** before finishing, per the existing
 gotcha noted in the admin-round section above.
+
+---
+
+## 2026-09-13 CLIENT FEEDBACK — GPS/selfie removed from marking, Activities/Batches cut
+
+Third round from the same client, same day-after the coach rebuild above. Two
+items, both implemented exactly as specified (no incidental changes):
+
+1. **Attendance marking is now pure manual entry — no GPS, no selfie, and
+   locked the instant it's submitted.** This applies to BOTH surfaces that
+   used to be geofenced: a coach marking a student in "My Classes" AND a
+   coach's own facility check-in on their Dashboard. The status options are
+   now **Present / Absent / Leave / Not Confirm** — `NOT_CONFIRM` is a
+   genuinely new 4th enum value (client's explicit choice over relabeling
+   Leave), added to both `AttendanceStatus` and `CoachAttendanceStatus` via
+   Alembic `0015` (`ALTER TYPE ... ADD VALUE` — Postgres 12+ allows this
+   inside a normal transaction as long as the new value isn't *used* in that
+   same transaction, which this migration doesn't do, so no autocommit/
+   `transaction_per_migration` workaround was needed).
+
+   - `POST /attendance/mark-student` no longer takes or validates
+     `location_lat`/`location_lng`/`selfie_base64` — `MarkStudentAttendanceRequest`
+     is now just `{student_id, class_id, status}`. The 60-minute post-class
+     marking deadline is unchanged (not asked to be removed).
+   - The old two-step `POST /attendance/coach-entry` / `POST /attendance/coach-exit`
+     (GPS-gated, `entry_time`/`exit_time` pair) were **replaced outright** by
+     a single `POST /attendance/coach-mark` (`{status, activity_id?}`, no
+     location) — one manual mark per coach per day, 400 if already marked
+     today. `CoachAttendance.entry_time` is still set (as a plain "marked at"
+     timestamp, not a check-in), `exit_time` is simply never populated by this
+     new flow (still nullable, still settable by admin's manual tools).
+   - **Coach self-editing is gone entirely** — not just locked after admin
+     review like the previous round, but locked from the moment of
+     submission. `PUT /attendance/students/{id}` and
+     `DELETE /attendance/students/{id}` are now `require_admin`-only (the old
+     `_authorize_own_attendance_edit` coach branch, and the same-day exception
+     it granted, no longer exist). This was an explicit client tightening
+     ("once submit it cannot be changed further, if any changes required then
+     only admin should approve") beyond what the coach-dashboard round shipped
+     the day before.
+   - `services/geofence.py` and `services/storage.py`'s `save_selfie` are
+     **left in the tree, unused** by this flow — `get_selfie`/viewing a
+     historical selfie on old records still works (has_selfie/View Photo
+     stay functional for anything marked before this change), and nothing
+     else currently calls geofence_check, but neither file was deleted since
+     that wasn't asked and doing so would be a one-way door if a future round
+     ever wants location data back.
+   - Web: `CoachClasses.jsx`'s roster modal now shows 4 buttons instead of
+     the old Present/Absent/Leave + camera flow, and marked rows show a
+     permanent "Locked" state (no more same-day edit dropdown). `CoachDashboard.jsx`'s
+     Check In/Check Out card became a single "My Attendance Today" pick.
+     `CoachAttendance.jsx` dropped its edit/delete controls entirely (dead
+     now that the backend 403s them) but keeps View Photo for legacy selfies.
+     Admin's `Attendance.jsx` status dropdowns/filters gained `NOT_CONFIRM`
+     everywhere `LEAVE` already appeared. New `--info` color token
+     (`#4f46e5` light / `#818cf8` dark) and `.badge-not_confirm` class in
+     `theme.css` — the first status not slotted into the existing
+     success/warning/danger three-color system, since the client's whole
+     point was a status genuinely distinct from Leave/Pending's existing
+     yellow.
+   - Mobile: `mark_attendance_screen.dart` mirrors the same 4-button/no-camera/
+     locked-forever pattern (offline queueing still works for genuine network
+     failures — `QueuedAttendance`'s `lat`/`lng` fields are now unused
+     placeholders rather than a schema migration, since the local SQLite
+     queue table's `NOT NULL` columns aren't worth a migration for a value
+     nobody reads anymore). `coach_dashboard_tab.dart`'s check-in/out
+     replaced with the same single manual pick. `coach_facility_attendance_tab.dart`
+     and `admin_attendance_tab.dart` updated to match (dropdowns gained
+     `NOT_CONFIRM`, coach-side edit/delete controls removed).
+
+2. **Activities and Batches removed from the admin dashboard entirely** —
+   client's explicit follow-up correction: the 2026-09-12 admin rebuild kept
+   Activities (with Batches folded into it) as one of the 7 sections; this
+   round says remove it, full stop. `frontend/src/pages/Activities.jsx`
+   deleted, its route/nav entry removed from `App.jsx` (admin nav is now
+   Dashboard/Students/Coaches/Attendance/Fees/Leave/Settings — 7 items became
+   6 plus the Leave item added the day before). Mobile: `admin_activities_tab.dart`
+   and `admin_batches_tab.dart` deleted, removed from `admin_home.dart`'s
+   nav list.
+
+   **Deliberately NOT touched**: the underlying `Activity`/`Batch`/
+   `ClassSession` backend models, routers, and every *read* usage elsewhere
+   (coach's own classes/roster, admin's manual attendance entry forms, the
+   dashboard's activity-attendance chart, student enrollment, coach-activity
+   assignment) — deleting those would cascade-break the entire attendance
+   system, which is clearly not what "remove Activities section and Batches"
+   meant. The practical consequence, told to the client: **admin now has no
+   UI anywhere to create a new Activity, a new Batch, or manually trigger
+   "Generate Sessions"** — the nightly `job_auto_generate_batch_sessions` cron
+   still runs against whatever Batches already exist, but a brand-new
+   activity/schedule needs direct database access until a future round
+   decides to bring some UI back for it. `ActivitiesAPI`'s create/update/
+   remove/enroll/unenroll methods and the entire `BatchesAPI` object in
+   `frontend/src/api/endpoints.js` are now unreachable dead exports (left in
+   place, same precedent as `academy.py`/`coaches.py`'s directory endpoint —
+   harmless, not deleted since nothing asked for it).
+
+**Verified live** (same techniques as every prior round): backend curl-tested
+directly (mark-student with no location/selfie fields succeeds; NOT_CONFIRM
+accepted; coach PUT/DELETE on their own record now 403s unconditionally;
+admin PUT still works; `coach-mark` succeeds once then 400s on a same-day
+retry). Web build clean (`npm run build`). Mobile `flutter analyze` clean (0
+errors/warnings, 12 pre-existing info-level notices — 2 fewer than the prior
+round because deleting `admin_batches_tab.dart` removed 2 of its own
+pre-existing lint infos). Full click-through via the Flutter web-server +
+Playwright/Firefox technique: confirmed no GPS/camera prompt fires anywhere
+in the new marking flow, a Not-Confirm mark submits and instantly shows
+"Locked" with zero edit controls, the coach Dashboard's "My Attendance Today"
+correctly reflects a mark made earlier via curl (real cross-session state),
+admin's Attendance tab shows the NOT_CONFIRM badge and approve/reject icons
+correctly (icons disappear once decided), and admin's "More" sheet no longer
+lists Activities or Batches.
 
 ---
 

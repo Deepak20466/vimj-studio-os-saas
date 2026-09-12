@@ -23,7 +23,7 @@ from app.schemas.attendance import (
     StudentAttendanceUpdate,
     StudentAttendanceAdminOut,
     AttendanceReviewRequest,
-    CoachEntryExitRequest,
+    CoachMarkRequest,
     CoachAttendanceOut,
     CoachAttendanceAdminOut,
     CoachAttendanceManualCreate,
@@ -31,8 +31,6 @@ from app.schemas.attendance import (
     MissingCoachOut,
 )
 from app.security import get_current_user, require_admin, require_coach, require_admin_or_coach
-from app.services.geofence import geofence_check
-from app.services.storage import save_selfie
 from app.services.audit import log_action
 from app.services.notifications import notify_and_push
 
@@ -79,13 +77,6 @@ def mark_student_attendance(
     if not enrolled:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Student is not enrolled in this activity")
 
-    within, distance, radius = geofence_check(float(payload.location_lat), float(payload.location_lng))
-    if not within:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"You are {distance:.0f}m from the facility — must be within {radius:.0f}m to mark attendance",
-        )
-
     existing = (
         db.query(StudentAttendance)
         .filter(
@@ -97,20 +88,11 @@ def mark_student_attendance(
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Attendance already marked for this student")
 
-    selfie_bytes = None
-    if payload.status == AttendanceStatus.PRESENT:
-        if not payload.selfie_base64:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Selfie is required to mark present")
-        selfie_bytes = save_selfie(payload.selfie_base64)
-
     record = StudentAttendance(
         student_id=payload.student_id,
         class_id=payload.class_id,
         status=payload.status,
         coach_id=coach_id,
-        location_lat=payload.location_lat,
-        location_lng=payload.location_lng,
-        selfie_photo=selfie_bytes,
     )
     db.add(record)
     db.flush()
@@ -162,65 +144,34 @@ def mark_student_attendance_manual(
     return record
 
 
-@router.post("/coach-entry", response_model=CoachAttendanceOut, status_code=status.HTTP_201_CREATED)
-def coach_entry(
-    payload: CoachEntryExitRequest,
+@router.post("/coach-mark", response_model=CoachAttendanceOut, status_code=status.HTTP_201_CREATED)
+def coach_mark(
+    payload: CoachMarkRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_coach),
 ):
+    """Coach marks their own facility attendance for today — manual entry, no GPS. Once
+    submitted it cannot be changed by the coach; only admin's own tools can correct it."""
     today = datetime.now().date()
 
-    within, distance, radius = geofence_check(float(payload.location_lat), float(payload.location_lng))
-    if not within:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"You are {distance:.0f}m from the facility — must be within {radius:.0f}m to check in",
-        )
+    existing = (
+        db.query(CoachAttendance)
+        .filter(CoachAttendance.coach_id == current_user.id, CoachAttendance.date == today)
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You have already marked your attendance for today")
 
-    record = db.query(CoachAttendance).filter(CoachAttendance.coach_id == current_user.id, CoachAttendance.date == today).first()
-    if record and record.entry_time:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Entry already recorded for today")
-
-    if not record:
-        record = CoachAttendance(coach_id=current_user.id, date=today, activity_id=payload.activity_id)
-        db.add(record)
-
-    record.entry_time = datetime.now()
-    record.entry_lat = payload.location_lat
-    record.entry_lng = payload.location_lng
-    record.status = CoachAttendanceStatus.INCOMPLETE
+    record = CoachAttendance(
+        coach_id=current_user.id,
+        date=today,
+        activity_id=payload.activity_id,
+        entry_time=datetime.now(),
+        status=payload.status,
+    )
+    db.add(record)
     db.flush()
-    log_action(db, current_user.id, "COACH_ENTRY", "CoachAttendance", record.id)
-    db.commit()
-    db.refresh(record)
-    return record
-
-
-@router.post("/coach-exit", response_model=CoachAttendanceOut)
-def coach_exit(
-    payload: CoachEntryExitRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_coach),
-):
-    today = datetime.now().date()
-    within, distance, radius = geofence_check(float(payload.location_lat), float(payload.location_lng))
-    if not within:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"You are {distance:.0f}m from the facility — must be within {radius:.0f}m to check out",
-        )
-
-    record = db.query(CoachAttendance).filter(CoachAttendance.coach_id == current_user.id, CoachAttendance.date == today).first()
-    if not record or not record.entry_time:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No entry recorded for today")
-    if record.exit_time:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Exit already recorded for today")
-
-    record.exit_time = datetime.now()
-    record.exit_lat = payload.location_lat
-    record.exit_lng = payload.location_lng
-    record.status = CoachAttendanceStatus.PRESENT
-    log_action(db, current_user.id, "COACH_EXIT", "CoachAttendance", record.id)
+    log_action(db, current_user.id, "COACH_MARK_ATTENDANCE", "CoachAttendance", record.id)
     db.commit()
     db.refresh(record)
     return record
@@ -287,38 +238,18 @@ def list_student_attendance(
     return result
 
 
-def _authorize_own_attendance_edit(db: Session, current_user: User, record: StudentAttendance) -> None:
-    """Coaches may only correct records they marked themselves, on the same day the class was
-    held, and only while admin hasn't reviewed the record yet. Once admin approves or rejects a
-    record, it is locked from the coach's side — only admin's own tools can change it further."""
-    if current_user.role == UserRole.COACH:
-        if record.coach_id != current_user.id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-        if record.approval_status != AttendanceApprovalStatus.PENDING:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="This record has already been reviewed by admin and can no longer be changed",
-            )
-        if record.class_session.date != datetime.now().date():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Only today's attendance records can be corrected",
-            )
-    elif current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-
-
 @router.put("/students/{attendance_id}", response_model=StudentAttendanceOut)
 def update_student_attendance(
     attendance_id: int,
     payload: StudentAttendanceUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin_or_coach),
+    current_user: User = Depends(require_admin),
 ):
+    """Admin-only: once a coach submits an attendance mark it cannot be changed by the coach —
+    only admin's own tools (this endpoint, or approve/reject) can correct it."""
     record = db.query(StudentAttendance).filter(StudentAttendance.id == attendance_id).first()
     if not record:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attendance record not found")
-    _authorize_own_attendance_edit(db, current_user, record)
 
     record.status = payload.status
     log_action(db, current_user.id, "UPDATE", "StudentAttendance", record.id)
@@ -331,12 +262,12 @@ def update_student_attendance(
 def delete_student_attendance(
     attendance_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin_or_coach),
+    current_user: User = Depends(require_admin),
 ):
+    """Admin-only — see update_student_attendance."""
     record = db.query(StudentAttendance).filter(StudentAttendance.id == attendance_id).first()
     if not record:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attendance record not found")
-    _authorize_own_attendance_edit(db, current_user, record)
 
     log_action(db, current_user.id, "DELETE", "StudentAttendance", record.id)
     db.delete(record)

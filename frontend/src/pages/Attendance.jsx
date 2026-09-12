@@ -335,6 +335,7 @@ export default function Attendance() {
               <option value="PRESENT">Present</option>
               <option value="ABSENT">Absent</option>
               <option value="LEAVE">Leave</option>
+              <option value="NOT_CONFIRM">Not Confirm</option>
             </select>
           </div>
           <div style={{ alignSelf: "end" }}>
@@ -359,6 +360,7 @@ export default function Attendance() {
             <option value="PRESENT">Present</option>
             <option value="ABSENT">Absent</option>
             <option value="LEAVE">Leave</option>
+            <option value="NOT_CONFIRM">Not Confirm</option>
           </select>
           <select value={filters.approval_status} onChange={(e) => setFilters({ ...filters, approval_status: e.target.value })}>
             <option value="">All review states</option>
@@ -481,6 +483,7 @@ export default function Attendance() {
               <option value="PRESENT">Present</option>
               <option value="ABSENT">Absent</option>
               <option value="LEAVE">Leave</option>
+              <option value="NOT_CONFIRM">Not Confirm</option>
               <option value="INCOMPLETE">Incomplete</option>
             </select>
           </div>
@@ -555,6 +558,7 @@ export default function Attendance() {
                 <option value="PRESENT">Present</option>
                 <option value="ABSENT">Absent</option>
                 <option value="LEAVE">Leave</option>
+                <option value="NOT_CONFIRM">Not Confirm</option>
               </select>
             </div>
             <div className="modal-actions">
@@ -586,6 +590,7 @@ export default function Attendance() {
                 <option value="PRESENT">Present</option>
                 <option value="ABSENT">Absent</option>
                 <option value="LEAVE">Leave</option>
+                <option value="NOT_CONFIRM">Not Confirm</option>
                 <option value="INCOMPLETE">Incomplete</option>
               </select>
             </div>

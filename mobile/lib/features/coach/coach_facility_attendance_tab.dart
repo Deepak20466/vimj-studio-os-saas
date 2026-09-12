@@ -7,7 +7,6 @@ import '../../core/models.dart';
 import '../shared/notification_bell_action.dart';
 
 String _isoDate(DateTime d) => d.toIso8601String().substring(0, 10);
-String _todayStr() => _isoDate(DateTime.now());
 
 class CoachFacilityAttendanceTab extends StatefulWidget {
   const CoachFacilityAttendanceTab({super.key});
@@ -26,7 +25,6 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
   DateTime _dateTo = DateTime.now();
   List<AdminAttendanceRecord> _records = [];
   bool _recordsLoading = true;
-  int? _busyId;
 
   @override
   void initState() {
@@ -81,47 +79,12 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
     _loadRecords();
   }
 
-  bool _canEdit(AdminAttendanceRecord r) => r.classDate == _todayStr() && r.approvalStatus == 'PENDING';
-
-  Future<void> _changeStatus(AdminAttendanceRecord r, String status) async {
-    setState(() => _busyId = r.id);
-    try {
-      await ApiClient.instance.put('/attendance/students/${r.id}', body: {'status': status});
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Attendance updated')));
-      _loadRecords();
-    } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
-    } finally {
-      if (mounted) setState(() => _busyId = null);
-    }
+  Color _statusColor(String status) {
+    if (status == 'PRESENT') return AppColors.success;
+    if (status == 'ABSENT') return AppColors.danger;
+    if (status == 'NOT_CONFIRM') return Colors.indigo;
+    return AppColors.warning;
   }
-
-  Future<void> _remove(AdminAttendanceRecord r) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Remove attendance record?'),
-        content: Text('Remove the attendance record for ${r.studentName}?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove', style: TextStyle(color: AppColors.danger))),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    setState(() => _busyId = r.id);
-    try {
-      await ApiClient.instance.delete('/attendance/students/${r.id}');
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Attendance record deleted')));
-      _loadRecords();
-    } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
-    } finally {
-      if (mounted) setState(() => _busyId = null);
-    }
-  }
-
-  Color _statusColor(String status) => status == 'PRESENT' ? AppColors.success : (status == 'ABSENT' ? AppColors.danger : AppColors.warning);
 
   Color _approvalColor(String status) {
     switch (status) {
@@ -186,7 +149,7 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('My Facility Attendance', style: Theme.of(context).textTheme.titleMedium),
-                  const Text('Your own geofenced check-in/check-out history. Set only by Check In / Check Out on your Dashboard.', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                  const Text('Your own manual attendance history — one entry per day, set from your Dashboard. Once submitted it can\'t be changed; only admin can correct it.', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
                   const SizedBox(height: 10),
                   if (_myAttendanceLoading)
                     const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator()))
@@ -199,10 +162,10 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text((a['date'] as String).substring(0, 10), style: const TextStyle(fontSize: 12)),
-                              Text('In: ${_fmtTime(a['entry_time'] as String?)} · Out: ${_fmtTime(a['exit_time'] as String?)}', style: const TextStyle(fontSize: 12)),
+                              Text('Marked at ${_fmtTime(a['entry_time'] as String?)}', style: const TextStyle(fontSize: 12)),
                               Chip(
                                 label: Text(a['status'] as String, style: const TextStyle(fontSize: 10, color: Colors.white)),
-                                backgroundColor: a['status'] == 'PRESENT' ? AppColors.success : AppColors.danger,
+                                backgroundColor: _statusColor(a['status'] as String),
                                 visualDensity: VisualDensity.compact,
                               ),
                             ],
@@ -268,36 +231,19 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
                         ),
                         Text('${r.activityName} · ${r.classDate}', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
                         const SizedBox(height: 8),
-                        if (_busyId == r.id)
-                          const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
-                        else
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              if (r.hasSelfie)
-                                OutlinedButton(
-                                  onPressed: () => _viewPhoto(r),
-                                  child: const Text('View Photo'),
-                                ),
-                              if (_canEdit(r)) ...[
-                                ...['PRESENT', 'ABSENT', 'LEAVE'].where((s) => s != r.status).map((s) => OutlinedButton(
-                                      onPressed: () => _changeStatus(r, s),
-                                      child: Text('Mark ${s[0]}${s.substring(1).toLowerCase()}'),
-                                    )),
-                                OutlinedButton(
-                                  onPressed: () => _remove(r),
-                                  style: OutlinedButton.styleFrom(foregroundColor: AppColors.danger),
-                                  child: const Text('Delete'),
-                                ),
-                              ] else
-                                Text(
-                                  r.approvalStatus == 'PENDING' ? 'Locked (past class)' : 'Locked (reviewed by admin)',
-                                  style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                                ),
-                            ],
-                          ),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            if (r.hasSelfie)
+                              OutlinedButton(
+                                onPressed: () => _viewPhoto(r),
+                                child: const Text('View Photo'),
+                              ),
+                            const Text('Locked', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                          ],
+                        ),
                       ],
                     ),
                   ),

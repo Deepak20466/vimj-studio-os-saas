@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/AuthContext";
 import { CoachSelfAPI, ActivitiesAPI } from "../../api/endpoints";
-import { getCurrentPosition } from "../../utils/geo";
 
 const POLL_MS = 30000;
+const STATUS_LABELS = { PRESENT: "Present", ABSENT: "Absent", NOT_CONFIRM: "Not Confirm" };
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -47,29 +47,14 @@ export default function CoachDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const checkIn = async () => {
+  const markMyAttendance = async (mstatus) => {
     setBusy(true);
     try {
-      const { lat, lng } = await getCurrentPosition();
-      await CoachSelfAPI.coachEntry({ location_lat: lat, location_lng: lng });
-      toast.success("Checked in");
+      await CoachSelfAPI.coachMark({ status: mstatus });
+      toast.success(`Marked ${STATUS_LABELS[mstatus]} — submitted, awaiting admin`);
       load();
     } catch (err) {
-      toast.error(err.response?.data?.detail || err.message || "Check-in failed");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const checkOut = async () => {
-    setBusy(true);
-    try {
-      const { lat, lng } = await getCurrentPosition();
-      await CoachSelfAPI.coachExit({ location_lat: lat, location_lng: lng });
-      toast.success("Checked out");
-      load();
-    } catch (err) {
-      toast.error(err.response?.data?.detail || err.message || "Check-out failed");
+      toast.error(err.response?.data?.detail || err.message || "Failed to mark attendance");
     } finally {
       setBusy(false);
     }
@@ -84,20 +69,28 @@ export default function CoachDashboard() {
       </div>
 
       <div className="card">
-        <h3 style={{ marginTop: 0 }}>Facility Check-in</h3>
-        {todayAttendance?.exit_time ? (
-          <div className="empty-state">You've completed check-in and check-out for today.</div>
-        ) : todayAttendance?.entry_time ? (
-          <>
-            <p>Checked in at {new Date(todayAttendance.entry_time).toLocaleTimeString()}.</p>
-            <button className="btn btn-primary" disabled={busy} onClick={checkOut}>
-              {busy ? "Working..." : "Check Out"}
-            </button>
-          </>
+        <h3 style={{ marginTop: 0 }}>My Attendance Today</h3>
+        <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: -8 }}>
+          Manual entry — no location needed. Once submitted it can't be changed; only admin can correct it.
+        </p>
+        {todayAttendance ? (
+          <div className="table-actions">
+            <span className={`badge badge-${todayAttendance.status.toLowerCase()}`}>{STATUS_LABELS[todayAttendance.status] || todayAttendance.status}</span>
+            <span style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Marked for today — locked</span>
+          </div>
         ) : (
-          <button className="btn btn-primary" disabled={busy} onClick={checkIn}>
-            {busy ? "Working..." : "Check In"}
-          </button>
+          <div className="table-actions">
+            {Object.keys(STATUS_LABELS).map((st) => (
+              <button
+                key={st}
+                className={st === "PRESENT" ? "btn btn-primary" : "btn btn-secondary"}
+                disabled={busy}
+                onClick={() => markMyAttendance(st)}
+              >
+                {STATUS_LABELS[st]}
+              </button>
+            ))}
+          </div>
         )}
       </div>
 

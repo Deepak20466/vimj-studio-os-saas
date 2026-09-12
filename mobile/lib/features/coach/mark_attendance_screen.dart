@@ -1,20 +1,17 @@
-import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import '../../core/api_client.dart';
-import '../../core/api_config.dart';
 import '../../core/app_theme.dart';
-import '../../core/geofence.dart';
-import '../../core/location_service.dart';
 import '../../core/models.dart';
 import '../../core/offline_queue.dart';
 
+const _statusLabels = {'PRESENT': 'Present', 'ABSENT': 'Absent', 'LEAVE': 'Leave', 'NOT_CONFIRM': 'Not Confirm'};
+
 class _MarkedRecord {
   final int attendanceId;
-  String status;
-  String approvalStatus;
-  bool hasSelfie;
+  final String status;
+  final String approvalStatus;
+  final bool hasSelfie;
   _MarkedRecord({
     required this.attendanceId,
     required this.status,
@@ -36,7 +33,6 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
   final Map<int, _MarkedRecord> _marked = {};
   bool _loading = true;
   int? _busyStudentId;
-  final _picker = ImagePicker();
 
   @override
   void initState() {
@@ -78,115 +74,35 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
 
   Future<void> _markStudent(RosterStudent student, String status) async {
     setState(() => _busyStudentId = student.id);
-    double? lat;
-    double? lng;
-    String? selfieBase64;
     try {
-      final position = await LocationService.getCurrentPosition();
-      lat = position.latitude;
-      lng = position.longitude;
-      final distance = Geofence.distanceMeters(lat, lng, FacilityConfig.lat, FacilityConfig.lng);
-      if (distance > FacilityConfig.radiusMeters) {
-        _showSnack(
-          'You are ${distance.toStringAsFixed(0)}m from the facility (limit ${FacilityConfig.radiusMeters.toStringAsFixed(0)}m). The server will reject this.',
-          isError: true,
-        );
-      }
-
-      if (status == 'PRESENT') {
-        final photo = await _picker.pickImage(source: ImageSource.camera, imageQuality: 70, preferredCameraDevice: CameraDevice.front);
-        if (photo == null) {
-          setState(() => _busyStudentId = null);
-          return; // coach cancelled the selfie
-        }
-        final bytes = await photo.readAsBytes();
-        selfieBase64 = base64Encode(bytes);
-      }
-
-      final body = {
+      final result = await ApiClient.instance.post('/attendance/mark-student', body: {
         'student_id': student.id,
         'class_id': widget.classSession.id,
         'status': status,
-        'location_lat': lat,
-        'location_lng': lng,
-        'selfie_base64': selfieBase64,
-      };
-
-      try {
-        final result = await ApiClient.instance.post('/attendance/mark-student', body: body) as Map<String, dynamic>;
-        _showSnack('${student.name}: $status recorded');
-        setState(() => _marked[student.id] = _MarkedRecord(
-              attendanceId: result['id'] as int,
-              status: status,
-              approvalStatus: result['approval_status'] as String? ?? 'PENDING',
-              hasSelfie: result['has_selfie'] as bool? ?? false,
-            ));
-      } on ApiException catch (e) {
-        // The server responded definitively (validation error, deadline passed,
-        // duplicate, etc.) — nothing to gain by queuing this for a retry.
-        _showSnack(e.message, isError: true);
-        return;
-      }
+      }) as Map<String, dynamic>;
+      _showSnack('${student.name}: ${_statusLabels[status]} submitted, awaiting admin');
+      setState(() => _marked[student.id] = _MarkedRecord(
+            attendanceId: result['id'] as int,
+            status: status,
+            approvalStatus: result['approval_status'] as String? ?? 'PENDING',
+            hasSelfie: result['has_selfie'] as bool? ?? false,
+          ));
+    } on ApiException catch (e) {
+      // The server responded definitively (validation error, deadline passed,
+      // duplicate, etc.) — nothing to gain by queuing this for a retry.
+      _showSnack(e.message, isError: true);
     } catch (e) {
-      // Network-level failure (no connectivity): queue for later sync, reusing
-      // whatever location/selfie we already captured above.
-      if (lat == null || lng == null) {
-        _showSnack('Could not mark attendance for ${student.name}. Enable GPS and try again.', isError: true);
-      } else {
-        await OfflineQueue.enqueue(QueuedAttendance(
-          studentId: student.id,
-          classId: widget.classSession.id,
-          status: status,
-          lat: lat,
-          lng: lng,
-          selfieBase64: selfieBase64,
-          createdAt: DateTime.now(),
-        ));
-        setState(() => _marked[student.id] = _MarkedRecord(attendanceId: -1, status: status));
-        _showSnack('No connection — queued ${student.name} for sync.');
-      }
-    } finally {
-      if (mounted) setState(() => _busyStudentId = null);
-    }
-  }
-
-  Future<void> _editStatus(RosterStudent student, String newStatus) async {
-    final record = _marked[student.id];
-    if (record == null || record.attendanceId < 0) return;
-    setState(() => _busyStudentId = student.id);
-    try {
-      await ApiClient.instance.put('/attendance/students/${record.attendanceId}', body: {'status': newStatus});
-      _showSnack('Updated to ${newStatus.toLowerCase()}');
-      setState(() => record.status = newStatus);
-    } on ApiException catch (e) {
-      _showSnack(e.message, isError: true);
-    } finally {
-      if (mounted) setState(() => _busyStudentId = null);
-    }
-  }
-
-  Future<void> _deleteAttendance(RosterStudent student) async {
-    final record = _marked[student.id];
-    if (record == null || record.attendanceId < 0) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Delete attendance record?'),
-        content: const Text('Delete this attendance record?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete', style: TextStyle(color: AppColors.danger))),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    setState(() => _busyStudentId = student.id);
-    try {
-      await ApiClient.instance.delete('/attendance/students/${record.attendanceId}');
-      _showSnack('Attendance record deleted');
-      setState(() => _marked.remove(student.id));
-    } on ApiException catch (e) {
-      _showSnack(e.message, isError: true);
+      // Network-level failure (no connectivity): queue for later sync.
+      await OfflineQueue.enqueue(QueuedAttendance(
+        studentId: student.id,
+        classId: widget.classSession.id,
+        status: status,
+        lat: 0,
+        lng: 0,
+        createdAt: DateTime.now(),
+      ));
+      setState(() => _marked[student.id] = _MarkedRecord(attendanceId: -1, status: status));
+      _showSnack('No connection — queued ${student.name} for sync.');
     } finally {
       if (mounted) setState(() => _busyStudentId = null);
     }
@@ -235,6 +151,8 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
         return AppColors.success;
       case 'ABSENT':
         return AppColors.danger;
+      case 'NOT_CONFIRM':
+        return Colors.indigo;
       default:
         return AppColors.warning;
     }
@@ -259,102 +177,97 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
       appBar: AppBar(title: Text('Mark Attendance — Class #${widget.classSession.id}')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _roster.isEmpty
-              ? const Center(child: Text('No students enrolled in this activity.'))
-              : ListView.builder(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: _roster.length,
-                  itemBuilder: (context, i) {
-                    final student = _roster[i];
-                    final busy = _busyStudentId == student.id;
-                    final record = _marked[student.id];
-                    return Card(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ListTile(
-                              title: Text(student.name),
-                              subtitle: Row(
-                                children: [
-                                  Chip(
-                                    label: Text(student.feeStatus ?? 'UNPAID', style: const TextStyle(fontSize: 10, color: Colors.white)),
-                                    backgroundColor: _feeColor(student.feeStatus),
-                                    visualDensity: VisualDensity.compact,
-                                  ),
-                                ],
-                              ),
-                              trailing: busy ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : null,
-                            ),
-                            if (!busy)
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                                child: record != null
-                                    ? Wrap(
-                                        spacing: 6,
-                                        runSpacing: 6,
-                                        crossAxisAlignment: WrapCrossAlignment.center,
+          : Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(12, 12, 12, 0),
+                  child: Text(
+                    'Manual entry — no location or photo needed. Once submitted, a mark cannot be changed; only admin can correct it.',
+                    style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                  ),
+                ),
+                Expanded(
+                  child: _roster.isEmpty
+                      ? const Center(child: Text('No students enrolled in this activity.'))
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: _roster.length,
+                          itemBuilder: (context, i) {
+                            final student = _roster[i];
+                            final busy = _busyStudentId == student.id;
+                            final record = _marked[student.id];
+                            return Card(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    ListTile(
+                                      title: Text(student.name),
+                                      subtitle: Row(
                                         children: [
                                           Chip(
-                                            label: Text(record.status, style: const TextStyle(fontSize: 11, color: Colors.white)),
-                                            backgroundColor: _statusColor(record.status),
+                                            label: Text(student.feeStatus ?? 'UNPAID', style: const TextStyle(fontSize: 10, color: Colors.white)),
+                                            backgroundColor: _feeColor(student.feeStatus),
                                             visualDensity: VisualDensity.compact,
                                           ),
-                                          if (record.attendanceId >= 0)
-                                            Chip(
-                                              label: Text(_approvalLabel(record.approvalStatus), style: const TextStyle(fontSize: 11, color: Colors.white)),
-                                              backgroundColor: _approvalColor(record.approvalStatus),
-                                              visualDensity: VisualDensity.compact,
-                                            ),
-                                          if (record.hasSelfie)
-                                            OutlinedButton(
-                                              onPressed: () => _viewPhoto(record),
-                                              child: const Text('View Photo'),
-                                            ),
-                                          if (record.attendanceId >= 0)
-                                            if (record.approvalStatus == 'PENDING') ...[
-                                              DropdownButton<String>(
-                                                value: record.status,
-                                                items: const [
-                                                  DropdownMenuItem(value: 'PRESENT', child: Text('Present')),
-                                                  DropdownMenuItem(value: 'ABSENT', child: Text('Absent')),
-                                                  DropdownMenuItem(value: 'LEAVE', child: Text('Leave')),
-                                                ],
-                                                onChanged: (v) => v == null ? null : _editStatus(student, v),
-                                              ),
-                                              OutlinedButton(
-                                                onPressed: () => _deleteAttendance(student),
-                                                style: OutlinedButton.styleFrom(foregroundColor: AppColors.danger),
-                                                child: const Text('Delete'),
-                                              ),
-                                            ] else
-                                              const Text('Locked', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
-                                        ],
-                                      )
-                                    : Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          _statusButton(student, 'PRESENT', Icons.check, Colors.green),
-                                          _statusButton(student, 'ABSENT', Icons.close, Colors.red),
-                                          _statusButton(student, 'LEAVE', Icons.beach_access, Colors.orange),
                                         ],
                                       ),
+                                      trailing: busy ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : null,
+                                    ),
+                                    if (!busy)
+                                      Padding(
+                                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                                        child: record != null
+                                            ? Wrap(
+                                                spacing: 6,
+                                                runSpacing: 6,
+                                                crossAxisAlignment: WrapCrossAlignment.center,
+                                                children: [
+                                                  Chip(
+                                                    label: Text(_statusLabels[record.status] ?? record.status, style: const TextStyle(fontSize: 11, color: Colors.white)),
+                                                    backgroundColor: _statusColor(record.status),
+                                                    visualDensity: VisualDensity.compact,
+                                                  ),
+                                                  if (record.attendanceId >= 0)
+                                                    Chip(
+                                                      label: Text(_approvalLabel(record.approvalStatus), style: const TextStyle(fontSize: 11, color: Colors.white)),
+                                                      backgroundColor: _approvalColor(record.approvalStatus),
+                                                      visualDensity: VisualDensity.compact,
+                                                    ),
+                                                  if (record.hasSelfie)
+                                                    OutlinedButton(
+                                                      onPressed: () => _viewPhoto(record),
+                                                      child: const Text('View Photo'),
+                                                    ),
+                                                  const Text('Locked', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                                                ],
+                                              )
+                                            : Wrap(
+                                                spacing: 6,
+                                                runSpacing: 6,
+                                                children: _statusLabels.entries
+                                                    .map((e) => e.key == 'PRESENT'
+                                                        ? ElevatedButton(
+                                                            onPressed: () => _markStudent(student, e.key),
+                                                            child: Text(e.value),
+                                                          )
+                                                        : OutlinedButton(
+                                                            onPressed: () => _markStudent(student, e.key),
+                                                            child: Text(e.value),
+                                                          ))
+                                                    .toList(),
+                                              ),
+                                      ),
+                                  ],
+                                ),
                               ),
-                          ],
+                            );
+                          },
                         ),
-                      ),
-                    );
-                  },
                 ),
-    );
-  }
-
-  Widget _statusButton(RosterStudent student, String status, IconData icon, Color color) {
-    return IconButton(
-      icon: Icon(icon, color: color),
-      tooltip: status,
-      onPressed: () => _markStudent(student, status),
+              ],
+            ),
     );
   }
 }
