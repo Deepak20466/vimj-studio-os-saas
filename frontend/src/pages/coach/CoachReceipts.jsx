@@ -4,7 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import { ReceiptsAPI, CoachSelfAPI, ActivitiesAPI } from "../../api/endpoints";
 import Modal from "../../components/Modal";
 import StatusBadge from "../../components/StatusBadge";
-import { downloadBlob } from "../../utils/download";
+import { downloadBlob, blobErrorDetail } from "../../utils/download";
 
 export default function CoachReceipts() {
   const { user } = useAuth();
@@ -67,12 +67,23 @@ export default function CoachReceipts() {
 
   const statusFor = (r) => (r.status === "APPROVED" ? "approved" : r.status === "REJECTED" ? "rejected" : "pending");
 
-  const downloadReceipt = async (receipt) => {
+  const viewReceipt = async (receipt) => {
     try {
-      const res = await ReceiptsAPI.pdf(receipt.id);
-      downloadBlob(res.data, `receipt_${receipt.id}.pdf`);
+      const res = await ReceiptsAPI.pdf(receipt.id, "pdf", "inline");
+      window.open(URL.createObjectURL(new Blob([res.data], { type: "application/pdf" })), "_blank");
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to download receipt");
+      toast.error((await blobErrorDetail(err)) || "Failed to open receipt");
+      if (err.response?.status === 404) load();
+    }
+  };
+
+  const downloadReceipt = async (receipt, fmt = "pdf") => {
+    try {
+      const res = await ReceiptsAPI.pdf(receipt.id, fmt, "attachment");
+      downloadBlob(res.data, `receipt_${receipt.id}.${fmt}`, fmt === "csv" ? "text/csv" : "application/pdf");
+    } catch (err) {
+      toast.error((await blobErrorDetail(err)) || "Failed to download receipt");
+      if (err.response?.status === 404) load();
     }
   };
 
@@ -114,11 +125,19 @@ export default function CoachReceipts() {
                     <StatusBadge status={statusFor(r)} />
                   </td>
                   <td>{r.decision_note || "-"}</td>
-                  <td>
+                  <td className="table-actions">
                     {r.status === "APPROVED" ? (
-                      <button className="btn btn-primary" onClick={() => downloadReceipt(r)}>
-                        Receipt (PDF)
-                      </button>
+                      <>
+                        <button className="btn btn-secondary btn-sm" onClick={() => viewReceipt(r)}>
+                          View
+                        </button>
+                        <button className="btn btn-primary btn-sm" onClick={() => downloadReceipt(r, "pdf")}>
+                          PDF
+                        </button>
+                        <button className="btn btn-primary btn-sm" onClick={() => downloadReceipt(r, "csv")}>
+                          CSV
+                        </button>
+                      </>
                     ) : (
                       "-"
                     )}

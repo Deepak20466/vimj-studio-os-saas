@@ -499,7 +499,8 @@ tbody tr:hover {
 
 .badge-leave,
 .badge-unpaid,
-.badge-pending {
+.badge-pending,
+.badge-incomplete {
   background: #fef3c7;
   color: var(--warning);
 }

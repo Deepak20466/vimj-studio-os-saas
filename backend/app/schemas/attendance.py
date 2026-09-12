@@ -1,10 +1,10 @@
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Optional
 
 from pydantic import BaseModel
 
-from app.models.attendance import AttendanceStatus, CoachAttendanceStatus
+from app.models.attendance import AttendanceStatus, CoachAttendanceStatus, AttendanceApprovalStatus
 
 
 class MarkStudentAttendanceRequest(BaseModel):
@@ -14,7 +14,6 @@ class MarkStudentAttendanceRequest(BaseModel):
     location_lat: Decimal
     location_lng: Decimal
     selfie_base64: Optional[str] = None
-    late_reason: Optional[str] = None
 
 
 class ManualAttendanceRequest(BaseModel):
@@ -33,6 +32,7 @@ class StudentAttendanceOut(BaseModel):
     location_lat: Optional[Decimal]
     location_lng: Optional[Decimal]
     has_selfie: bool = False
+    approval_status: AttendanceApprovalStatus
 
     class Config:
         from_attributes = True
@@ -40,6 +40,10 @@ class StudentAttendanceOut(BaseModel):
 
 class StudentAttendanceUpdate(BaseModel):
     status: AttendanceStatus
+
+
+class AttendanceReviewRequest(BaseModel):
+    note: Optional[str] = None
 
 
 class StudentAttendanceAdminOut(BaseModel):
@@ -56,6 +60,7 @@ class StudentAttendanceAdminOut(BaseModel):
     timestamp: datetime
     marked_manually: bool
     has_selfie: bool = False
+    approval_status: AttendanceApprovalStatus
 
 
 class CoachEntryExitRequest(BaseModel):
@@ -74,6 +79,30 @@ class CoachAttendanceOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class CoachAttendanceAdminOut(BaseModel):
+    id: int
+    coach_id: int
+    coach_name: str
+    date: date
+    entry_time: Optional[datetime]
+    exit_time: Optional[datetime]
+    status: CoachAttendanceStatus
+
+
+class CoachAttendanceManualCreate(BaseModel):
+    coach_id: int
+    date: date
+    entry_time: Optional[time] = None
+    exit_time: Optional[time] = None
+    status: CoachAttendanceStatus = CoachAttendanceStatus.PRESENT
+
+
+class CoachAttendanceManualUpdate(BaseModel):
+    entry_time: Optional[time] = None
+    exit_time: Optional[time] = None
+    status: Optional[CoachAttendanceStatus] = None
 
 
 class MissingCoachOut(BaseModel):

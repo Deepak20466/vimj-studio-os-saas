@@ -2,12 +2,10 @@ import 'package:flutter/material.dart';
 import 'coach_dashboard_tab.dart';
 import 'classes_tab.dart';
 import 'leave_tab.dart';
-import 'swap_tab.dart';
 import 'coach_profile_tab.dart';
 import 'coach_students_tab.dart';
 import 'coach_receipts_tab.dart';
 import 'coach_fee_reminders_tab.dart';
-import 'coach_chat_tab.dart';
 import 'coach_facility_attendance_tab.dart';
 
 class CoachHome extends StatefulWidget {
@@ -30,25 +28,21 @@ class _CoachHomeState extends State<CoachHome> {
   final _tabs = const [
     CoachDashboardTab(),
     ClassesTab(),
-    LeaveTab(),
-    SwapTab(),
+    CoachStudentsTab(),
+    CoachFacilityAttendanceTab(),
   ];
 
   final _moreItems = const [
-    _MoreItem('My Students', Icons.groups_outlined, _buildStudents),
-    _MoreItem('Attendance', Icons.fact_check_outlined, _buildAttendance),
-    _MoreItem('Fee Receipts', Icons.receipt_long_outlined, _buildReceipts),
+    _MoreItem('Leave', Icons.beach_access_outlined, _buildLeave),
+    _MoreItem('Receipts', Icons.receipt_long_outlined, _buildReceipts),
     _MoreItem('Fee Reminders', Icons.notifications_active_outlined, _buildReminders),
-    _MoreItem('Chat', Icons.chat_bubble_outline, _buildChat),
-    _MoreItem('Profile', Icons.person_outline, _buildProfile),
+    _MoreItem('Settings', Icons.settings_outlined, _buildSettings),
   ];
 
-  static Widget _buildStudents(BuildContext context) => const CoachStudentsTab();
-  static Widget _buildAttendance(BuildContext context) => const CoachFacilityAttendanceTab();
+  static Widget _buildLeave(BuildContext context) => const LeaveTab();
   static Widget _buildReceipts(BuildContext context) => const CoachReceiptsTab();
   static Widget _buildReminders(BuildContext context) => const CoachFeeRemindersTab();
-  static Widget _buildChat(BuildContext context) => const CoachChatTab();
-  static Widget _buildProfile(BuildContext context) => const CoachProfileTab();
+  static Widget _buildSettings(BuildContext context) => const CoachProfileTab();
 
   void _openMore() {
     showModalBottomSheet(
@@ -91,8 +85,8 @@ class _CoachHomeState extends State<CoachHome> {
         destinations: const [
           NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Dashboard'),
           NavigationDestination(icon: Icon(Icons.event_note_outlined), selectedIcon: Icon(Icons.event_note), label: 'Classes'),
-          NavigationDestination(icon: Icon(Icons.beach_access_outlined), selectedIcon: Icon(Icons.beach_access), label: 'Leave'),
-          NavigationDestination(icon: Icon(Icons.swap_horiz), label: 'Swaps'),
+          NavigationDestination(icon: Icon(Icons.groups_outlined), selectedIcon: Icon(Icons.groups), label: 'Students'),
+          NavigationDestination(icon: Icon(Icons.fact_check_outlined), selectedIcon: Icon(Icons.fact_check), label: 'Attendance'),
           NavigationDestination(icon: Icon(Icons.more_horiz), label: 'More'),
         ],
       ),

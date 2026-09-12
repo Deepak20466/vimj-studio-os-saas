@@ -20,6 +20,12 @@ class CoachAttendanceStatus(str, enum.Enum):
     INCOMPLETE = "INCOMPLETE"  # entered but never exited / never marked
 
 
+class AttendanceApprovalStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
 class StudentAttendance(Base):
     __tablename__ = "student_attendance"
 
@@ -33,6 +39,9 @@ class StudentAttendance(Base):
     location_lng = Column(Numeric(9, 6), nullable=True)
     selfie_photo = Column(LargeBinary, nullable=True)
     marked_manually = Column(Numeric, default=0)  # 0/1 flag: admin manual entry vs coach geofenced entry
+    approval_status = Column(
+        Enum(AttendanceApprovalStatus), nullable=False, default=AttendanceApprovalStatus.PENDING
+    )
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     student = relationship("User", foreign_keys=[student_id])

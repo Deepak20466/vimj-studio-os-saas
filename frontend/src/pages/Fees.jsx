@@ -33,10 +33,20 @@ export default function Fees() {
 
   useEffect(loadReceipts, []);
 
-  const downloadReceiptPdf = async (receipt) => {
+  const viewReceipt = async (receipt) => {
     try {
-      const res = await ReceiptsAPI.pdf(receipt.id);
-      downloadBlob(res.data, `receipt_${receipt.id}.pdf`);
+      const res = await ReceiptsAPI.pdf(receipt.id, "pdf", "inline");
+      window.open(URL.createObjectURL(new Blob([res.data], { type: "application/pdf" })), "_blank");
+    } catch (err) {
+      toast.error((await blobErrorDetail(err)) || "Failed to open receipt");
+      if (err.response?.status === 404) loadReceipts();
+    }
+  };
+
+  const downloadReceiptPdf = async (receipt, fmt = "pdf") => {
+    try {
+      const res = await ReceiptsAPI.pdf(receipt.id, fmt, "attachment");
+      downloadBlob(res.data, `receipt_${receipt.id}.${fmt}`, fmt === "csv" ? "text/csv" : "application/pdf");
     } catch (err) {
       toast.error((await blobErrorDetail(err)) || "Failed to download receipt");
       if (err.response?.status === 404) loadReceipts();
@@ -142,10 +152,20 @@ export default function Fees() {
     }
   };
 
-  const downloadReceipt = async (fee) => {
+  const viewFeeReceipt = async (fee) => {
     try {
-      const res = await FeesAPI.receiptPdf(fee.id);
-      downloadBlob(res.data, `receipt_${fee.id}.pdf`);
+      const res = await FeesAPI.receipt(fee.id, "pdf", "inline");
+      window.open(URL.createObjectURL(new Blob([res.data], { type: "application/pdf" })), "_blank");
+    } catch (err) {
+      toast.error((await blobErrorDetail(err)) || "Failed to open receipt");
+      if (err.response?.status === 404) load();
+    }
+  };
+
+  const downloadReceipt = async (fee, fmt = "pdf") => {
+    try {
+      const res = await FeesAPI.receipt(fee.id, fmt, "attachment");
+      downloadBlob(res.data, `receipt_${fee.id}.${fmt}`, fmt === "csv" ? "text/csv" : "application/pdf");
     } catch (err) {
       toast.error((await blobErrorDetail(err)) || "Failed to download receipt");
       if (err.response?.status === 404) load();
@@ -287,8 +307,14 @@ export default function Fees() {
                   </td>
                   <td>₹{r.amount}</td>
                   <td className="table-actions">
-                    <button className="btn btn-primary btn-sm" onClick={() => downloadReceiptPdf(r)}>
-                      Receipt (PDF)
+                    <button className="btn btn-secondary btn-sm" onClick={() => viewReceipt(r)}>
+                      View
+                    </button>
+                    <button className="btn btn-primary btn-sm" onClick={() => downloadReceiptPdf(r, "pdf")}>
+                      PDF
+                    </button>
+                    <button className="btn btn-primary btn-sm" onClick={() => downloadReceiptPdf(r, "csv")}>
+                      CSV
                     </button>
                   </td>
                 </tr>
@@ -400,9 +426,17 @@ export default function Fees() {
                         </button>
                       </>
                     ) : (
-                      <button className="btn btn-primary btn-sm" onClick={() => downloadReceipt(f)}>
-                        Receipt (PDF)
-                      </button>
+                      <>
+                        <button className="btn btn-secondary btn-sm" onClick={() => viewFeeReceipt(f)}>
+                          View
+                        </button>
+                        <button className="btn btn-primary btn-sm" onClick={() => downloadReceipt(f, "pdf")}>
+                          PDF
+                        </button>
+                        <button className="btn btn-primary btn-sm" onClick={() => downloadReceipt(f, "csv")}>
+                          CSV
+                        </button>
+                      </>
                     )}
                     <button className="btn btn-secondary btn-sm" onClick={() => openEdit(f)}>
                       Edit

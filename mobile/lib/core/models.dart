@@ -358,6 +358,7 @@ class AdminAttendanceRecord {
   final String timestamp;
   final bool markedManually;
   final bool hasSelfie;
+  final String approvalStatus;
 
   AdminAttendanceRecord({
     required this.id,
@@ -373,6 +374,7 @@ class AdminAttendanceRecord {
     required this.timestamp,
     required this.markedManually,
     required this.hasSelfie,
+    required this.approvalStatus,
   });
 
   factory AdminAttendanceRecord.fromJson(Map<String, dynamic> json) => AdminAttendanceRecord(
@@ -389,6 +391,7 @@ class AdminAttendanceRecord {
         timestamp: json['timestamp'] as String,
         markedManually: json['marked_manually'] as bool? ?? false,
         hasSelfie: json['has_selfie'] as bool? ?? false,
+        approvalStatus: json['approval_status'] as String? ?? 'PENDING',
       );
 }
 
@@ -400,6 +403,8 @@ class AdminLeaveRequest {
   final String endDate;
   final String reason;
   final String status;
+  final String? decisionNote;
+  final String? createdAt;
 
   AdminLeaveRequest({
     required this.id,
@@ -409,6 +414,8 @@ class AdminLeaveRequest {
     required this.endDate,
     required this.reason,
     required this.status,
+    this.decisionNote,
+    this.createdAt,
   });
 
   factory AdminLeaveRequest.fromJson(Map<String, dynamic> json) => AdminLeaveRequest(
@@ -419,6 +426,8 @@ class AdminLeaveRequest {
         endDate: json['end_date'] as String,
         reason: json['reason'] as String,
         status: json['status'] as String,
+        decisionNote: json['decision_note'] as String?,
+        createdAt: json['created_at'] as String?,
       );
 }
 

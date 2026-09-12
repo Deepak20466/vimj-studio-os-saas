@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { StudentsAPI, ReportsAPI } from "../api/endpoints";
+import { StudentsAPI } from "../api/endpoints";
 import Modal from "../components/Modal";
-import StudentReportPanel from "../components/StudentReportPanel";
 import SelfieCapture from "../components/SelfieCapture";
 
 export default function Students() {
@@ -11,7 +10,6 @@ export default function Students() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [viewingId, setViewingId] = useState(null);
   const [form, setForm] = useState({ name: "", email: "", phone: "", phone_secondary: "", password: "", additional_details: "" });
   const [profileFor, setProfileFor] = useState(null); // student object whose profile modal is open
   const [photoUrl, setPhotoUrl] = useState(null);
@@ -163,11 +161,7 @@ export default function Students() {
             <tbody>
               {students.map((s) => (
                 <tr key={s.id}>
-                  <td>
-                    <button className="link-btn" onClick={() => setViewingId(s.id)}>
-                      {s.name}
-                    </button>
-                  </td>
+                  <td>{s.name}</td>
                   <td>{displayEmail(s.email)}</td>
                   <td>{s.phone || "-"}</td>
                   <td>{s.phone_secondary || "-"}</td>
@@ -241,12 +235,6 @@ export default function Students() {
               <button className="btn btn-primary">{editing ? "Save" : "Create"}</button>
             </div>
           </form>
-        </Modal>
-      )}
-
-      {viewingId && (
-        <Modal title="Student Report" onClose={() => setViewingId(null)}>
-          <StudentReportPanel studentId={viewingId} />
         </Modal>
       )}
 

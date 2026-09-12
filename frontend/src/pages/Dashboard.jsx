@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
-import { ReportsAPI, AttendanceAPI } from "../api/endpoints";
+import { DashboardAPI, AttendanceAPI } from "../api/endpoints";
 import toast from "react-hot-toast";
 import useResizeAfterLoad from "../hooks/useResizeAfterLoad";
 
@@ -10,22 +10,21 @@ export default function Dashboard() {
   const [summary, setSummary] = useState(null);
   const [feeGraph, setFeeGraph] = useState(null);
   const [missing, setMissing] = useState([]);
-  const [analysis, setAnalysis] = useState(null);
+  const [activityAttendance, setActivityAttendance] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const now = new Date();
     Promise.all([
-      ReportsAPI.dashboardSummary(),
-      ReportsAPI.feeStatusGraph(),
+      DashboardAPI.summary(),
+      DashboardAPI.feeStatus(),
       AttendanceAPI.dailyMissing(),
-      ReportsAPI.monthlyAnalysis(now.getMonth() + 1, now.getFullYear()),
+      DashboardAPI.activityAttendance(),
     ])
       .then(([s, f, m, a]) => {
         setSummary(s.data);
         setFeeGraph(f.data);
         setMissing(m.data);
-        setAnalysis(a.data);
+        setActivityAttendance(a.data.points);
       })
       .catch((err) => toast.error(err.response?.data?.detail || "Failed to load dashboard"))
       .finally(() => setLoading(false));
@@ -43,10 +42,9 @@ export default function Dashboard() {
       ]
     : [];
 
-  const activityData = (analysis?.activity_breakdown || []).map((a) => ({
+  const activityData = activityAttendance.map((a) => ({
     name: a.activity_name,
     attendance: a.avg_attendance_pct,
-    revenue: a.revenue,
   }));
 
   return (
@@ -71,6 +69,10 @@ export default function Dashboard() {
         <div className="stat-card">
           <div className="stat-label">Monthly Revenue</div>
           <div className="stat-value">₹{summary.monthly_revenue.toLocaleString()}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Unpaid/Overdue Fees</div>
+          <div className="stat-value">{summary.unpaid_fees_count}</div>
         </div>
       </div>
 

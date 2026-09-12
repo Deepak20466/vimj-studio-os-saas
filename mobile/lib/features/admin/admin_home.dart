@@ -8,14 +8,9 @@ import 'admin_coaches_tab.dart';
 import 'admin_activities_tab.dart';
 import 'admin_batches_tab.dart';
 import 'admin_attendance_tab.dart';
-import 'admin_compliance_tab.dart';
-import 'admin_leave_tab.dart';
 import 'admin_fees_tab.dart';
-import 'admin_salary_tab.dart';
-import 'admin_reports_tab.dart';
-import 'admin_chat_tab.dart';
+import 'admin_leave_tab.dart';
 import 'admin_settings_tab.dart';
-import 'admin_about_tab.dart';
 import '../shared/notification_bell_action.dart';
 
 class AdminHome extends StatefulWidget {
@@ -47,14 +42,9 @@ class _AdminHomeState extends State<AdminHome> {
     _NavItem('Attendance', Icons.fact_check_outlined, AdminAttendanceTab()),
     _NavItem('Activities', Icons.event_outlined, AdminActivitiesTab()),
     _NavItem('Batches', Icons.calendar_month_outlined, AdminBatchesTab()),
-    _NavItem('Compliance', Icons.rule_folder_outlined, AdminComplianceTab()),
-    _NavItem('Leave', Icons.beach_access_outlined, AdminLeaveTab()),
     _NavItem('Fees', Icons.payments_outlined, AdminFeesTab()),
-    _NavItem('Salary', Icons.account_balance_wallet_outlined, AdminSalaryTab()),
-    _NavItem('Reports', Icons.bar_chart_outlined, AdminReportsTab()),
-    _NavItem('Chat', Icons.chat_bubble_outline, AdminChatTab()),
+    _NavItem('Leave', Icons.beach_access_outlined, AdminLeaveTab()),
     _NavItem('Settings', Icons.settings_outlined, AdminSettingsTab()),
-    _NavItem('About', Icons.info_outline, AdminAboutTab()),
   ];
 
   List<_NavItem> get _tabs => _items.sublist(0, _maxTabs);

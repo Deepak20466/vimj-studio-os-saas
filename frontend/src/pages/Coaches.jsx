@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { CoachesAPI, ActivitiesAPI } from "../api/endpoints";
 import Modal from "../components/Modal";
-import CoachReportPanel from "../components/CoachReportPanel";
 
 export default function Coaches() {
   const [coaches, setCoaches] = useState([]);
@@ -10,7 +9,6 @@ export default function Coaches() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [viewingId, setViewingId] = useState(null);
   const [form, setForm] = useState({ name: "", email: "", phone: "", password: "" });
   const [managingActivitiesFor, setManagingActivitiesFor] = useState(null);
   const [allActivities, setAllActivities] = useState([]);
@@ -143,11 +141,7 @@ export default function Coaches() {
             <tbody>
               {coaches.map((c) => (
                 <tr key={c.id}>
-                  <td>
-                    <button className="link-btn" onClick={() => setViewingId(c.id)}>
-                      {c.name}
-                    </button>
-                  </td>
+                  <td>{c.name}</td>
                   <td>{c.email}</td>
                   <td>{c.phone || "-"}</td>
                   <td>
@@ -200,12 +194,6 @@ export default function Coaches() {
               <button className="btn btn-primary">{editing ? "Save" : "Create"}</button>
             </div>
           </form>
-        </Modal>
-      )}
-
-      {viewingId && (
-        <Modal title="Coach Report" onClose={() => setViewingId(null)}>
-          <CoachReportPanel coachId={viewingId} />
         </Modal>
       )}
 

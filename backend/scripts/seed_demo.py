@@ -20,12 +20,8 @@ from app.models.attendance import (
 )
 from app.models.class_session import ClassSession
 from app.models.coach_activity import CoachActivity
-from app.models.compliance import AttendanceSubmission, LateStatus
 from app.models.enrollment import StudentEnrollment
 from app.models.fee import FeeStatus, StudentFee
-from app.models.leave import CoachLeave, LeaveStatus
-from app.models.salary import CoachSalary
-from app.models.swap import CoachSwap, SwapStatus
 from app.models.user import User, UserRole
 from app.security import hash_password
 
@@ -163,16 +159,6 @@ def main():
             if cls.date >= today:
                 continue
             roster = enrollment_map.get(cls.activity_id, [])
-            if roster and not db.query(AttendanceSubmission).filter(AttendanceSubmission.class_id == cls.id).first():
-                db.add(
-                    AttendanceSubmission(
-                        class_id=cls.id,
-                        coach_id=cls.coach_id,
-                        submitted_at=datetime.combine(cls.date, cls.end_time),
-                        is_late=False,
-                        late_status=LateStatus.NONE,
-                    )
-                )
             for student_id in roster:
                 exists = (
                     db.query(StudentAttendance)
@@ -263,73 +249,6 @@ def main():
                         status=status,
                         due_date=due,
                         paid_date=paid_date,
-                    )
-                )
-        db.commit()
-
-        # Salary for coaches: last 2 months
-        for coach in coaches:
-            for month_offset in (0, 1):
-                target = today.replace(day=1) - timedelta(days=1) if month_offset == 1 else today
-                month, year = (target.month, target.year) if month_offset == 1 else (today.month, today.year)
-                exists = (
-                    db.query(CoachSalary)
-                    .filter(CoachSalary.coach_id == coach.id, CoachSalary.month == month, CoachSalary.year == year)
-                    .first()
-                )
-                if exists:
-                    continue
-                db.add(
-                    CoachSalary(
-                        coach_id=coach.id,
-                        month=month,
-                        year=year,
-                        amount=Decimal("25000.00"),
-                        notified_at=datetime.utcnow() if month_offset == 1 else None,
-                        acknowledged_date=datetime.utcnow() if month_offset == 1 else None,
-                    )
-                )
-        db.commit()
-
-        # Leave requests: one pending, one approved (historical), one rejected
-        leave_seed = [
-            (coaches[0].id, today + timedelta(days=5), today + timedelta(days=6), "Family function", LeaveStatus.PENDING),
-            (coaches[1].id, today - timedelta(days=10), today - timedelta(days=9), "Medical", LeaveStatus.APPROVED),
-            (coaches[2].id, today - timedelta(days=20), today - timedelta(days=20), "Personal", LeaveStatus.REJECTED),
-        ]
-        for coach_id, start, end, reason, status in leave_seed:
-            exists = (
-                db.query(CoachLeave)
-                .filter(CoachLeave.coach_id == coach_id, CoachLeave.start_date == start, CoachLeave.reason == reason)
-                .first()
-            )
-            if exists:
-                continue
-            db.add(
-                CoachLeave(
-                    coach_id=coach_id,
-                    start_date=start,
-                    end_date=end,
-                    reason=reason,
-                    status=status,
-                    approved_by_admin_id=1 if status != LeaveStatus.PENDING else None,
-                )
-            )
-        db.commit()
-
-        # One coach swap example, tied to a real recent class
-        past_classes_coach0 = [c for c in created_classes if c.coach_id == coaches[0].id and c.date < today]
-        if past_classes_coach0:
-            swap_class = past_classes_coach0[-1]
-            exists = db.query(CoachSwap).filter(CoachSwap.class_id == swap_class.id).first()
-            if not exists:
-                db.add(
-                    CoachSwap(
-                        original_coach_id=coaches[0].id,
-                        covering_coach_id=coaches[1].id,
-                        class_id=swap_class.id,
-                        date=swap_class.date,
-                        status=SwapStatus.APPROVED,
                     )
                 )
         db.commit()

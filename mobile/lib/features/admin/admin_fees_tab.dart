@@ -95,12 +95,12 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
     }
   }
 
-  Future<void> _downloadReceiptPdf(int receiptId) async {
+  Future<void> _downloadReceipt(int receiptId, String fmt) async {
     if (_downloadingReceiptId == receiptId) return; // already in flight — ignore a double tap
     setState(() => _downloadingReceiptId = receiptId);
     try {
-      final bytes = await ApiClient.instance.getBytes('/receipts/$receiptId/pdf');
-      await shareExportedFile(bytes, 'receipt_$receiptId.pdf');
+      final bytes = await ApiClient.instance.getBytes('/receipts/$receiptId/pdf', query: {'fmt': fmt});
+      await shareExportedFile(bytes, 'receipt_$receiptId.$fmt');
     } on ApiException catch (e) {
       if (mounted) {
         // A 404 means this receipt no longer exists (deleted/changed elsewhere) —
@@ -113,12 +113,12 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
     }
   }
 
-  Future<void> _downloadFeeReceiptPdf(AdminFeeRecord f) async {
+  Future<void> _downloadFeeReceipt(AdminFeeRecord f, String fmt) async {
     if (_downloadingReceiptId == f.id) return; // already in flight — ignore a double tap
     setState(() => _downloadingReceiptId = f.id);
     try {
-      final bytes = await ApiClient.instance.getBytes('/fees/${f.id}/receipt');
-      await shareExportedFile(bytes, 'receipt_${f.id}.pdf');
+      final bytes = await ApiClient.instance.getBytes('/fees/${f.id}/receipt', query: {'fmt': fmt});
+      await shareExportedFile(bytes, 'receipt_${f.id}.$fmt');
     } on ApiException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
@@ -276,7 +276,13 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                           subtitle: Text('${r.month}/${r.year}'),
                           trailing: _downloadingReceiptId == r.id
                               ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                              : IconButton(icon: const Icon(Icons.picture_as_pdf_outlined), tooltip: 'Receipt (PDF)', onPressed: () => _downloadReceiptPdf(r.id)),
+                              : Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(icon: const Icon(Icons.picture_as_pdf_outlined), tooltip: 'Receipt (PDF)', onPressed: () => _downloadReceipt(r.id, 'pdf')),
+                                    IconButton(icon: const Icon(Icons.table_chart_outlined), tooltip: 'Receipt (CSV)', onPressed: () => _downloadReceipt(r.id, 'csv')),
+                                  ],
+                                ),
                         ),
                       ),
                     ),
@@ -369,12 +375,13 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                                     Expanded(child: OutlinedButton(onPressed: () => _remind(f), child: const Text('Remind'))),
                                     const SizedBox(width: 10),
                                     Expanded(child: ElevatedButton(onPressed: () => _markPaid(f), child: const Text('Mark Paid'))),
-                                  ] else
-                                    Expanded(
-                                      child: _downloadingReceiptId == f.id
-                                          ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
-                                          : OutlinedButton(onPressed: () => _downloadFeeReceiptPdf(f), child: const Text('Receipt (PDF)')),
-                                    ),
+                                  ] else if (_downloadingReceiptId == f.id)
+                                    const Expanded(child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))))
+                                  else ...[
+                                    Expanded(child: OutlinedButton(onPressed: () => _downloadFeeReceipt(f, 'pdf'), child: const Text('PDF'))),
+                                    const SizedBox(width: 10),
+                                    Expanded(child: OutlinedButton(onPressed: () => _downloadFeeReceipt(f, 'csv'), child: const Text('CSV'))),
+                                  ],
                                 ],
                               ),
                               const SizedBox(height: 8),

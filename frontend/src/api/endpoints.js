@@ -55,15 +55,24 @@ export const AttendanceAPI = {
   list: (params) => client.get("/attendance/students", { params }),
   update: (id, payload) => client.put(`/attendance/students/${id}`, payload),
   remove: (id) => client.delete(`/attendance/students/${id}`),
+  // Admin review of a coach-marked record — once decided, the coach can no longer edit it.
+  approve: (id, note) => client.put(`/attendance/students/${id}/approve`, { note }),
+  reject: (id, note) => client.put(`/attendance/students/${id}/reject`, { note }),
+  // Coach facility attendance — manual entry with full CRUD (separate from student attendance)
+  coachList: (params) => client.get("/attendance/coaches", { params }),
+  coachCreateManual: (payload) => client.post("/attendance/coaches/manual", payload),
+  coachUpdate: (id, payload) => client.put(`/attendance/coaches/${id}`, payload),
+  coachRemove: (id) => client.delete(`/attendance/coaches/${id}`),
 };
 
 export const LeaveAPI = {
+  request: (payload) => client.post("/leave/request", payload),
+  my: () => client.get("/leave/my"),
+  cancel: (id) => client.delete(`/leave/${id}`),
   pending: () => client.get("/leave/pending"),
   list: (params) => client.get("/leave", { params }),
   approve: (id, note) => client.put(`/leave/${id}/approve`, { note }),
   reject: (id, note) => client.put(`/leave/${id}/reject`, { note }),
-  update: (id, payload) => client.put(`/leave/${id}`, payload),
-  remove: (id) => client.delete(`/leave/${id}`),
 };
 
 export const FeesAPI = {
@@ -74,26 +83,10 @@ export const FeesAPI = {
   remove: (id) => client.delete(`/fees/${id}`),
   markPaid: (fee_id) => client.post("/fees/mark-paid", { fee_id }),
   remind: (feeId) => client.post(`/fees/${feeId}/remind`),
+  // fmt: "pdf" | "csv"; disposition: "attachment" (download) | "inline" (view)
+  receipt: (feeId, fmt = "pdf", disposition = "attachment") =>
+    client.get(`/fees/${feeId}/receipt`, { params: { fmt, disposition }, responseType: "blob" }),
   receiptPdf: (feeId) => client.get(`/fees/${feeId}/receipt`, { responseType: "blob" }),
-};
-
-export const SalaryAPI = {
-  create: (payload) => client.post("/salary", payload),
-  update: (id, payload) => client.put(`/salary/${id}`, payload),
-  remove: (id) => client.delete(`/salary/${id}`),
-  coachHistory: (coachId) => client.get(`/salary/coach/${coachId}`),
-  list: (params) => client.get("/salary", { params }),
-};
-
-export const SwapAPI = {
-  my: () => client.get("/swap/my"),
-  pending: () => client.get("/swap/pending"),
-  recent: () => client.get("/swap/recent"),
-  approve: (id) => client.put(`/swap/${id}/approve`),
-  reject: (id) => client.put(`/swap/${id}/reject`),
-  adminAssign: (payload) => client.post("/swap/admin-assign", payload),
-  request: (payload) => client.post("/swap/request", payload),
-  respond: (id, accept, declineReason) => client.put(`/swap/${id}/respond`, { accept, decline_reason: declineReason }),
 };
 
 export const NotificationsAPI = {
@@ -102,15 +95,6 @@ export const NotificationsAPI = {
   markAllRead: () => client.put("/notifications/read-all"),
   remove: (id) => client.delete(`/notifications/${id}`),
   removeAll: () => client.delete("/notifications"),
-};
-
-export const ChatAPI = {
-  threads: () => client.get("/chat/threads"),
-  messages: (coachId, sinceId) =>
-    client.get("/chat/messages", { params: { coach_id: coachId, since_id: sinceId } }),
-  send: (message, coachId) => client.post("/chat/messages", { message, coach_id: coachId }),
-  markRead: (coachId) => client.put("/chat/read", null, { params: { coach_id: coachId } }),
-  unreadCount: () => client.get("/chat/unread-count"),
 };
 
 export const BatchesAPI = {
@@ -145,19 +129,9 @@ export const ReceiptsAPI = {
   list: () => client.get("/receipts"),
   approve: (id, decision_note) => client.put(`/receipts/${id}/approve`, { decision_note }),
   reject: (id, decision_note) => client.put(`/receipts/${id}/reject`, { decision_note }),
-  pdf: (id) => client.get(`/receipts/${id}/pdf`, { responseType: "blob" }),
-};
-
-export const ComplianceAPI = {
-  classNotConducted: (classId, reason) => client.post("/compliance/class-not-conducted", { class_id: classId, reason }),
-  lateReason: (classId, reason) => client.post("/compliance/late-reason", { class_id: classId, reason }),
-  pendingLate: () => client.get("/compliance/pending"),
-  approveLate: (id, decision_note) => client.put(`/compliance/late/${id}/approve`, { decision_note }),
-  rejectLate: (id, decision_note) => client.put(`/compliance/late/${id}/reject`, { decision_note }),
-  summary: (params) => client.get("/compliance/summary", { params }),
-  uploadClassPhoto: (classId, photoBase64) => client.post(`/compliance/class/${classId}/photo`, { class_id: classId, photo_base64: photoBase64 }),
-  classPhotos: (classId) => client.get(`/compliance/class/${classId}/photos`),
-  classPhotoBlob: (photoId) => client.get(`/compliance/class-photo/${photoId}`, { responseType: "blob" }),
+  // fmt: "pdf" | "csv"; disposition: "attachment" (download) | "inline" (view)
+  pdf: (id, fmt = "pdf", disposition = "attachment") =>
+    client.get(`/receipts/${id}/pdf`, { params: { fmt, disposition }, responseType: "blob" }),
 };
 
 export const CoachSelfAPI = {
@@ -168,41 +142,23 @@ export const CoachSelfAPI = {
   coachEntry: (payload) => client.post("/attendance/coach-entry", payload),
   coachExit: (payload) => client.post("/attendance/coach-exit", payload),
   myAttendance: (coachId) => client.get(`/coaches/${coachId}/attendance`),
-  requestLeave: (payload) => client.post("/leave/request", payload),
-  myLeaves: () => client.get("/leave/my"),
-  updateLeave: (id, payload) => client.put(`/leave/${id}`, payload),
-  cancelLeave: (id) => client.delete(`/leave/${id}`),
-  leaveBalance: (coachId, year) => client.get(`/leave/balance/${coachId}`, { params: { year } }),
-  salaryHistory: (coachId) => client.get(`/coaches/${coachId}/salary`),
-  acknowledgeSalary: (salaryId) => client.post("/salary/acknowledge", { salary_id: salaryId }),
   myStudentAttendance: (params) => client.get("/attendance/students", { params }),
   updateStudentAttendance: (id, payload) => client.put(`/attendance/students/${id}`, payload),
   deleteStudentAttendance: (id) => client.delete(`/attendance/students/${id}`),
   myActivities: (coachId) => client.get(`/coaches/${coachId}/activities`),
   directory: () => client.get("/coaches/directory"),
-  monthlyReport: (month, year, fmt) =>
-    client.get("/reports/export/coach-monthly", { params: { month, year, fmt }, responseType: "blob" }),
 };
 
-export const ReportsAPI = {
-  dashboardSummary: () => client.get("/reports/dashboard-summary"),
-  studentReport: (id) => client.get(`/reports/student/${id}`),
-  coachReport: (id) => client.get(`/reports/coach/${id}`),
-  attendanceGraph: (userId) => client.get(`/reports/attendance-graph/${userId}`),
-  feeStatusGraph: () => client.get("/reports/fee-status-graph"),
-  monthlyAnalysis: (month, year) => client.get("/reports/monthly-analysis", { params: { month, year } }),
-  hundredPercentCoaches: (month, year) => client.get(`/reports/100-percent-coaches/${month}`, { params: { year } }),
-  exportStudent: (id, fmt) => client.get(`/reports/export/student/${id}`, { params: { fmt }, responseType: "blob" }),
-  exportCoach: (id, fmt) => client.get(`/reports/export/coach/${id}`, { params: { fmt }, responseType: "blob" }),
-  activityDetail: (id) => client.get(`/reports/activity/${id}`),
-  exportMonthlyAnalysis: (month, year, fmt) =>
-    client.get("/reports/export/monthly-analysis", { params: { month, year, fmt }, responseType: "blob" }),
+export const DashboardAPI = {
+  summary: () => client.get("/dashboard/summary"),
+  feeStatus: () => client.get("/dashboard/fee-status"),
+  activityAttendance: () => client.get("/dashboard/activity-attendance"),
 };
 
 export const ResetAPI = {
-  // Admin-only: wipes attendance/fee/leave/salary/swap/compliance/notification
-  // history system-wide. Keeps Users, Activities, and Batches intact.
+  // Admin-only: wipes attendance/fee/notification history system-wide.
+  // Keeps Users, Activities, and Batches intact.
   all: () => client.post("/reset/all"),
-  // Coach-only: wipes only the caller's own attendance/leave/swap history.
+  // Coach-only: wipes only the caller's own attendance history.
   mine: () => client.post("/reset/mine"),
 };

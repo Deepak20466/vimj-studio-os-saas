@@ -1,5 +1,5 @@
-export function downloadBlob(data, filename) {
-  const url = window.URL.createObjectURL(new Blob([data], { type: "application/pdf" }));
+export function downloadBlob(data, filename, mimeType = "application/pdf") {
+  const url = window.URL.createObjectURL(new Blob([data], { type: mimeType }));
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;

@@ -9,11 +9,8 @@ from app.database import SessionLocal
 from app.models.attendance import CoachAttendance, CoachAttendanceStatus, StudentAttendance
 from app.models.batch import Batch
 from app.models.class_session import ClassSession
-from app.models.compliance import AttendanceSubmission, ClassSkipReason
 from app.models.enrollment import StudentEnrollment
 from app.models.fee import StudentFee, FeeStatus
-from app.models.leave import CoachLeave, LeaveStatus
-from app.models.salary import CoachSalary
 from app.models.user import User, UserRole
 from app.services.batches import generate_sessions_for_batch
 from app.services.notifications import notify, notify_and_push, fee_reminder_message
@@ -64,32 +61,6 @@ def job_mark_overdue_fees():
         )
         db.commit()
         logger.info("Marked %d fees overdue", updated)
-    finally:
-        db.close()
-
-
-def job_monthly_salary_notifications():
-    """Runs on the 10th of every month: notify coaches their salary is ready for acknowledgment."""
-    db = SessionLocal()
-    try:
-        today = date.today()
-        salaries = (
-            db.query(CoachSalary)
-            .filter(CoachSalary.month == today.month, CoachSalary.year == today.year)
-            .all()
-        )
-        for salary in salaries:
-            coach = db.query(User).filter(User.id == salary.coach_id).first()
-            if not coach:
-                continue
-            message = (
-                f"Hi {coach.name}, your VIMJ Studio salary of {salary.amount} for "
-                f"{today.month}/{today.year} has been credited. Please acknowledge receipt in the app."
-            )
-            notify_and_push(db, coach, message, "Salary credited", "SALARY_CREDITED", link="/coach/salary")
-            salary.notified_at = datetime.utcnow()
-        db.commit()
-        logger.info("Sent %d salary notifications", len(salaries))
     finally:
         db.close()
 
@@ -216,19 +187,8 @@ def job_coach_entry_missing_alert():
             if current is None or cls.start_time < current.start_time:
                 first_class_by_coach[cls.coach_id] = cls
 
-        on_leave_ids = {
-            row[0]
-            for row in db.query(CoachLeave.coach_id).filter(
-                CoachLeave.status == LeaveStatus.APPROVED,
-                CoachLeave.start_date <= today,
-                CoachLeave.end_date >= today,
-            )
-        }
-
         admins = None
         for coach_id, cls in first_class_by_coach.items():
-            if coach_id in on_leave_ids:
-                continue
             class_start_dt = datetime.combine(cls.date, cls.start_time)
             window_start = class_start_dt + timedelta(minutes=10)
             window_end = class_start_dt + timedelta(minutes=11)
@@ -283,19 +243,8 @@ def job_coach_exit_missing_alert():
             if current is None or cls.end_time > current.end_time:
                 last_class_by_coach[cls.coach_id] = cls
 
-        on_leave_ids = {
-            row[0]
-            for row in db.query(CoachLeave.coach_id).filter(
-                CoachLeave.status == LeaveStatus.APPROVED,
-                CoachLeave.start_date <= today,
-                CoachLeave.end_date >= today,
-            )
-        }
-
         admins = None
         for coach_id, cls in last_class_by_coach.items():
-            if coach_id in on_leave_ids:
-                continue
             class_end_dt = datetime.combine(cls.date, cls.end_time)
             window_start = class_end_dt + timedelta(minutes=15)
             window_end = class_end_dt + timedelta(minutes=16)
@@ -348,13 +297,10 @@ def job_missed_attendance_admin_alert():
             if not (window_start <= class_end_dt <= window_end):
                 continue
 
-            has_submission = (
-                db.query(AttendanceSubmission).filter(AttendanceSubmission.class_id == cls.id).first()
+            has_attendance = (
+                db.query(StudentAttendance).filter(StudentAttendance.class_id == cls.id).first()
             )
-            has_skip_reason = (
-                db.query(ClassSkipReason).filter(ClassSkipReason.class_id == cls.id).first()
-            )
-            if has_submission or has_skip_reason:
+            if has_attendance:
                 continue
 
             if admins is None:
@@ -399,16 +345,8 @@ def job_end_of_day_missing_report():
             row[0]
             for row in db.query(CoachAttendance.coach_id).filter(CoachAttendance.date == today).all()
         }
-        on_leave_ids = {
-            row[0]
-            for row in db.query(CoachLeave.coach_id).filter(
-                CoachLeave.status == LeaveStatus.APPROVED,
-                CoachLeave.start_date <= today,
-                CoachLeave.end_date >= today,
-            )
-        }
 
-        missing_ids = coach_ids_today - marked_ids - on_leave_ids
+        missing_ids = coach_ids_today - marked_ids
         if not missing_ids:
             return
 
@@ -453,9 +391,6 @@ def job_auto_generate_batch_sessions():
 def start_scheduler():
     scheduler.add_job(
         job_monthly_fee_reminders, CronTrigger(day=10, hour=9, minute=0), id="monthly_fee_reminders", replace_existing=True
-    )
-    scheduler.add_job(
-        job_monthly_salary_notifications, CronTrigger(day=10, hour=9, minute=5), id="monthly_salary_notifications", replace_existing=True
     )
     scheduler.add_job(
         job_mark_overdue_fees, CronTrigger(hour=0, minute=30), id="mark_overdue_fees", replace_existing=True

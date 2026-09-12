@@ -3,7 +3,6 @@ import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/auth_api.dart';
 import '../../core/auth_storage.dart';
-import '../../core/models.dart';
 import '../auth/login_screen.dart';
 import '../shared/theme_toggle_tile.dart';
 
@@ -15,11 +14,15 @@ class CoachProfileTab extends StatefulWidget {
 }
 
 class _CoachProfileTabState extends State<CoachProfileTab> {
-  String _name = '';
-  int? _coachId;
-  double? _attendancePct;
-  List<SalaryRecord> _salary = [];
+  Map<String, dynamic>? _me;
   bool _loading = true;
+
+  final _nameCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _newPasswordCtrl = TextEditingController();
+  final _currentPasswordCtrl = TextEditingController();
+  bool _saving = false;
 
   @override
   void initState() {
@@ -27,18 +30,24 @@ class _CoachProfileTabState extends State<CoachProfileTab> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _phoneCtrl.dispose();
+    _emailCtrl.dispose();
+    _newPasswordCtrl.dispose();
+    _currentPasswordCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final session = await AuthStorage.load();
-      _name = session?.name ?? '';
-      _coachId = session?.userId;
-      if (_coachId != null) {
-        final report = await ApiClient.instance.get('/reports/coach/$_coachId') as Map<String, dynamic>;
-        _attendancePct = (report['student_attendance_pct'] as num).toDouble();
-        final salaryData = await ApiClient.instance.get('/coaches/$_coachId/salary') as List;
-        _salary = salaryData.map((e) => SalaryRecord.fromJson(e as Map<String, dynamic>)).toList();
-      }
+      final data = await ApiClient.instance.get('/auth/me') as Map<String, dynamic>;
+      _me = data;
+      _nameCtrl.text = data['name'] as String? ?? '';
+      _phoneCtrl.text = data['phone'] as String? ?? '';
+      _emailCtrl.text = data['email'] as String? ?? '';
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
@@ -46,12 +55,49 @@ class _CoachProfileTabState extends State<CoachProfileTab> {
     }
   }
 
-  Future<void> _acknowledge(SalaryRecord record) async {
+  Future<void> _submitProfile() async {
+    if (_currentPasswordCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter your current password to confirm changes')));
+      return;
+    }
+    setState(() => _saving = true);
     try {
-      await ApiClient.instance.post('/salary/acknowledge', body: {'salary_id': record.id});
-      _load();
+      final me = _me ?? {};
+      final body = <String, dynamic>{'current_password': _currentPasswordCtrl.text};
+      final name = _nameCtrl.text.trim();
+      if (name.isNotEmpty && name != (me['name'] as String? ?? '')) body['name'] = name;
+      final phone = _phoneCtrl.text.trim();
+      if (phone != (me['phone'] as String? ?? '')) body['phone'] = phone;
+      final email = _emailCtrl.text.trim();
+      if (email.isNotEmpty && email != (me['email'] as String? ?? '')) body['email'] = email;
+      if (_newPasswordCtrl.text.isNotEmpty) body['new_password'] = _newPasswordCtrl.text;
+
+      final data = await ApiClient.instance.put('/auth/me', body: body) as Map<String, dynamic>;
+      _me = data;
+      _nameCtrl.text = data['name'] as String? ?? '';
+      _phoneCtrl.text = data['phone'] as String? ?? '';
+      _emailCtrl.text = data['email'] as String? ?? '';
+      _newPasswordCtrl.clear();
+      _currentPasswordCtrl.clear();
+
+      // Keep the cached session name in sync so anywhere it's shown (e.g. an
+      // app-bar greeting) doesn't go stale until the next login.
+      final session = await AuthStorage.load();
+      if (session != null) {
+        await AuthStorage.save(AuthSession(
+          userId: session.userId,
+          name: data['name'] as String? ?? session.name,
+          role: session.role,
+          accessToken: session.accessToken,
+          refreshToken: session.refreshToken,
+        ));
+      }
+
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated')));
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -67,7 +113,7 @@ class _CoachProfileTabState extends State<CoachProfileTab> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'This permanently erases your own attendance, leave, and swap history. It does '
+                'This permanently erases your own attendance and leave history. It does '
                 'not touch any other coach\'s data. This cannot be undone.',
               ),
               const SizedBox(height: 16),
@@ -93,7 +139,6 @@ class _CoachProfileTabState extends State<CoachProfileTab> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['detail'] as String? ?? 'Your history has been reset')));
       }
-      _load();
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     }
@@ -108,7 +153,7 @@ class _CoachProfileTabState extends State<CoachProfileTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Profile')),
+      appBar: AppBar(title: const Text('Settings')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -116,34 +161,55 @@ class _CoachProfileTabState extends State<CoachProfileTab> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  CircleAvatar(radius: 32, child: Text(_name.isNotEmpty ? _name[0].toUpperCase() : '?')),
-                  const SizedBox(height: 8),
-                  Text(_name, textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 16),
                   Card(
-                    child: ListTile(
-                      leading: const Icon(Icons.insights_outlined),
-                      title: const Text('Student Attendance %'),
-                      trailing: Text('${_attendancePct?.toStringAsFixed(1) ?? '-'}%', style: Theme.of(context).textTheme.titleMedium),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text('Salary History', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  if (_salary.isEmpty)
-                    const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Text('No salary records yet.'))
-                  else
-                    ..._salary.map(
-                      (s) => Card(
-                        child: ListTile(
-                          title: Text('${s.month}/${s.year} — ₹${s.amount}'),
-                          subtitle: Text(s.acknowledgedDate != null ? 'Acknowledged' : 'Pending acknowledgment'),
-                          trailing: s.acknowledgedDate != null
-                              ? const Icon(Icons.check_circle, color: Colors.green)
-                              : TextButton(onPressed: () => _acknowledge(s), child: const Text('Acknowledge')),
-                        ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('My Profile', style: Theme.of(context).textTheme.titleMedium),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Update your name, phone, login email, or password.',
+                            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _phoneCtrl,
+                            decoration: const InputDecoration(labelText: 'Phone', hintText: '+91XXXXXXXXXX'),
+                            keyboardType: TextInputType.phone,
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _emailCtrl,
+                            decoration: const InputDecoration(labelText: 'Login Email (User ID)'),
+                            keyboardType: TextInputType.emailAddress,
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _newPasswordCtrl,
+                            decoration: const InputDecoration(labelText: 'New Password (optional)', hintText: 'Leave blank to keep current password'),
+                            obscureText: true,
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _currentPasswordCtrl,
+                            decoration: const InputDecoration(labelText: 'Current Password (required to confirm)'),
+                            obscureText: true,
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: _saving ? null : _submitProfile,
+                            child: _saving
+                                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Text('Save Changes'),
+                          ),
+                        ],
                       ),
                     ),
+                  ),
                   const SizedBox(height: 16),
                   const Card(child: ThemeToggleTile()),
                   const SizedBox(height: 16),
@@ -160,7 +226,7 @@ class _CoachProfileTabState extends State<CoachProfileTab> {
                         const Text('Danger Zone', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.danger)),
                         const SizedBox(height: 4),
                         const Text(
-                          'Reset your own attendance, leave, and swap history back to a clean slate.',
+                          'Reset your own attendance and leave history back to a clean slate.',
                           style: TextStyle(color: AppColors.textMuted),
                         ),
                         const SizedBox(height: 12),

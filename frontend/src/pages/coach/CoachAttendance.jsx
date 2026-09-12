@@ -1,11 +1,9 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/AuthContext";
-import { CoachSelfAPI } from "../../api/endpoints";
+import { CoachSelfAPI, AttendanceAPI } from "../../api/endpoints";
 import StatusBadge from "../../components/StatusBadge";
-import { downloadBlob } from "../../utils/download";
-
-const MONTH_NAMES = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+import Modal from "../../components/Modal";
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -18,26 +16,10 @@ export default function CoachAttendance() {
   const [dateFrom, setDateFrom] = useState(todayStr());
   const [dateTo, setDateTo] = useState(todayStr());
   const [busyId, setBusyId] = useState(null);
+  const [selfieUrl, setSelfieUrl] = useState(null);
 
   const [myAttendance, setMyAttendance] = useState([]);
   const [myAttendanceLoading, setMyAttendanceLoading] = useState(true);
-
-  const now = new Date();
-  const [reportMonth, setReportMonth] = useState(now.getMonth() + 1);
-  const [reportYear, setReportYear] = useState(now.getFullYear());
-  const [reportDownloading, setReportDownloading] = useState(false);
-
-  const downloadMonthlyReport = async () => {
-    setReportDownloading(true);
-    try {
-      const { data } = await CoachSelfAPI.monthlyReport(reportMonth, reportYear, "pdf");
-      downloadBlob(data, `monthly_report_${reportYear}_${String(reportMonth).padStart(2, "0")}.pdf`);
-    } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to generate report");
-    } finally {
-      setReportDownloading(false);
-    }
-  };
 
   const load = () => {
     setLoading(true);
@@ -58,7 +40,7 @@ export default function CoachAttendance() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const canEdit = (r) => String(r.class_date).slice(0, 10) === todayStr();
+  const canEdit = (r) => String(r.class_date).slice(0, 10) === todayStr() && r.approval_status === "PENDING";
 
   const changeStatus = async (record, status) => {
     setBusyId(record.id);
@@ -87,41 +69,24 @@ export default function CoachAttendance() {
     }
   };
 
+  const viewSelfie = async (record) => {
+    try {
+      const { data } = await AttendanceAPI.selfieBlob(record.id);
+      setSelfieUrl(URL.createObjectURL(data));
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to load selfie");
+    }
+  };
+
+  const approvalBadge = (status) => {
+    const cls = status === "APPROVED" ? "badge-paid" : status === "REJECTED" ? "badge-overdue" : "badge-unpaid";
+    return <span className={`badge ${cls}`}>{status === "PENDING" ? "Awaiting Admin" : status}</span>;
+  };
+
   return (
     <div>
       <div className="page-header">
         <h1>Attendance</h1>
-      </div>
-
-      <div className="card" style={{ marginBottom: 16 }}>
-        <h3 style={{ marginTop: 0 }}>Monthly Report</h3>
-        <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: -8 }}>
-          Download a PDF of your students' attendance and fee status for a month, broken down by activity.
-        </p>
-        <div className="toolbar" style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <div className="field" style={{ margin: 0 }}>
-            <label>Month</label>
-            <select value={reportMonth} onChange={(e) => setReportMonth(Number(e.target.value))}>
-              {MONTH_NAMES.slice(1).map((m, i) => (
-                <option key={i + 1} value={i + 1}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field" style={{ margin: 0 }}>
-            <label>Year</label>
-            <input
-              type="number"
-              value={reportYear}
-              onChange={(e) => setReportYear(Number(e.target.value))}
-              style={{ width: 100 }}
-            />
-          </div>
-          <button className="btn btn-primary" disabled={reportDownloading} onClick={downloadMonthlyReport}>
-            {reportDownloading ? "Generating..." : "Download PDF"}
-          </button>
-        </div>
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
@@ -163,6 +128,9 @@ export default function CoachAttendance() {
       <div className="page-header">
         <h1>Student Attendance</h1>
       </div>
+      <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: -12 }}>
+        Once admin approves or rejects a record you marked, it locks and can no longer be changed from here.
+      </p>
 
       <div className="card">
         <div className="toolbar" style={{ marginBottom: 12, display: "flex", gap: 12, alignItems: "center" }}>
@@ -188,6 +156,7 @@ export default function CoachAttendance() {
                 <th>Activity</th>
                 <th>Class Date</th>
                 <th>Status</th>
+                <th>Admin Review</th>
                 <th>Marked At</th>
                 <th>Actions</th>
               </tr>
@@ -201,27 +170,37 @@ export default function CoachAttendance() {
                   <td>
                     <StatusBadge status={r.status} />
                   </td>
+                  <td>{approvalBadge(r.approval_status)}</td>
                   <td>{new Date(r.timestamp).toLocaleString()}</td>
                   <td>
-                    {canEdit(r) ? (
-                      <div className="table-actions">
-                        {["PRESENT", "ABSENT", "LEAVE"].filter((s) => s !== r.status).map((s) => (
-                          <button
-                            key={s}
-                            className="btn btn-secondary btn-sm"
-                            disabled={busyId === r.id}
-                            onClick={() => changeStatus(r, s)}
-                          >
-                            Mark {s.charAt(0) + s.slice(1).toLowerCase()}
-                          </button>
-                        ))}
-                        <button className="btn btn-danger btn-sm" disabled={busyId === r.id} onClick={() => remove(r)}>
-                          Delete
+                    <div className="table-actions" style={{ flexWrap: "wrap" }}>
+                      {r.has_selfie && (
+                        <button className="btn btn-secondary btn-sm" onClick={() => viewSelfie(r)}>
+                          View Photo
                         </button>
-                      </div>
-                    ) : (
-                      <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Locked (past class)</span>
-                    )}
+                      )}
+                      {canEdit(r) ? (
+                        <>
+                          {["PRESENT", "ABSENT", "LEAVE"].filter((s) => s !== r.status).map((s) => (
+                            <button
+                              key={s}
+                              className="btn btn-secondary btn-sm"
+                              disabled={busyId === r.id}
+                              onClick={() => changeStatus(r, s)}
+                            >
+                              Mark {s.charAt(0) + s.slice(1).toLowerCase()}
+                            </button>
+                          ))}
+                          <button className="btn btn-danger btn-sm" disabled={busyId === r.id} onClick={() => remove(r)}>
+                            Delete
+                          </button>
+                        </>
+                      ) : (
+                        <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                          {r.approval_status === "PENDING" ? "Locked (past class)" : "Locked (reviewed by admin)"}
+                        </span>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -229,6 +208,12 @@ export default function CoachAttendance() {
           </table>
         )}
       </div>
+
+      {selfieUrl && (
+        <Modal title="Attendance Photo" onClose={() => setSelfieUrl(null)}>
+          <img src={selfieUrl} alt="Attendance selfie" style={{ width: "100%", borderRadius: 8 }} />
+        </Modal>
+      )}
     </div>
   );
 }

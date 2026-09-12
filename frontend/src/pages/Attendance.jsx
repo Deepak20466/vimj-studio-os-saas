@@ -1,17 +1,20 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { AttendanceAPI, ActivitiesAPI, StudentsAPI, CoachesAPI, SwapAPI } from "../api/endpoints";
+import { AttendanceAPI, ActivitiesAPI, StudentsAPI, CoachesAPI } from "../api/endpoints";
 import StatusBadge from "../components/StatusBadge";
 import Modal from "../components/Modal";
+
+const todayStr = () => new Date().toISOString().slice(0, 10);
 
 export default function Attendance() {
   const [missing, setMissing] = useState([]);
   const [missingLoading, setMissingLoading] = useState(true);
   const [activities, setActivities] = useState([]);
+  const [coaches, setCoaches] = useState([]);
 
   const [records, setRecords] = useState([]);
   const [recordsLoading, setRecordsLoading] = useState(true);
-  const [filters, setFilters] = useState({ activity_id: "", status_filter: "", date_from: "", date_to: "" });
+  const [filters, setFilters] = useState({ activity_id: "", status_filter: "", approval_status: "", date_from: "", date_to: "" });
 
   const [manualForm, setManualForm] = useState({ activity_id: "", student_id: "", class_id: "", status: "PRESENT" });
   const [classes, setClasses] = useState([]);
@@ -23,10 +26,15 @@ export default function Attendance() {
   const [selfieFor, setSelfieFor] = useState(null); // record whose selfie is shown
   const [selfieUrl, setSelfieUrl] = useState(null);
   const [selfieLoading, setSelfieLoading] = useState(false);
+  const [approvalBusyId, setApprovalBusyId] = useState(null);
 
-  const [coaches, setCoaches] = useState([]);
-  const [reassigning, setReassigning] = useState(null); // missing-row being reassigned
-  const [reassignForm, setReassignForm] = useState({ covering_coach_id: "", reason: "" });
+  // --- Coach attendance (separate CRUD) ---
+  const [coachRecords, setCoachRecords] = useState([]);
+  const [coachRecordsLoading, setCoachRecordsLoading] = useState(true);
+  const [coachFilters, setCoachFilters] = useState({ coach_id: "", date_from: "", date_to: "" });
+  const [coachManualForm, setCoachManualForm] = useState({ coach_id: "", date: todayStr(), entry_time: "", exit_time: "", status: "PRESENT" });
+  const [editingCoach, setEditingCoach] = useState(null);
+  const [editCoachForm, setEditCoachForm] = useState({ entry_time: "", exit_time: "", status: "PRESENT" });
 
   const loadMissing = () => {
     setMissingLoading(true);
@@ -41,12 +49,25 @@ export default function Attendance() {
     const params = {};
     if (filters.activity_id) params.activity_id = Number(filters.activity_id);
     if (filters.status_filter) params.status_filter = filters.status_filter;
+    if (filters.approval_status) params.approval_status = filters.approval_status;
     if (filters.date_from) params.date_from = filters.date_from;
     if (filters.date_to) params.date_to = filters.date_to;
     AttendanceAPI.list(params)
       .then((r) => setRecords(r.data))
       .catch((err) => toast.error(err.response?.data?.detail || "Failed to load attendance records"))
       .finally(() => setRecordsLoading(false));
+  };
+
+  const loadCoachRecords = () => {
+    setCoachRecordsLoading(true);
+    const params = {};
+    if (coachFilters.coach_id) params.coach_id = Number(coachFilters.coach_id);
+    if (coachFilters.date_from) params.date_from = coachFilters.date_from;
+    if (coachFilters.date_to) params.date_to = coachFilters.date_to;
+    AttendanceAPI.coachList(params)
+      .then((r) => setCoachRecords(r.data))
+      .catch((err) => toast.error(err.response?.data?.detail || "Failed to load coach attendance records"))
+      .finally(() => setCoachRecordsLoading(false));
   };
 
   useEffect(() => {
@@ -60,6 +81,12 @@ export default function Attendance() {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
+
+  useEffect(() => {
+    const t = setTimeout(loadCoachRecords, 200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coachFilters]);
 
   useEffect(() => {
     if (!manualForm.activity_id) {
@@ -145,26 +172,83 @@ export default function Attendance() {
     setSelfieUrl(null);
   };
 
-  const openReassign = (m) => {
-    setReassigning(m);
-    setReassignForm({ covering_coach_id: "", reason: "" });
+  const decideApproval = async (r, approve) => {
+    setApprovalBusyId(r.id);
+    try {
+      if (approve) {
+        await AttendanceAPI.approve(r.id, null);
+        toast.success("Attendance approved and locked");
+      } else {
+        const note = prompt("Reason for rejecting (optional):") || "";
+        await AttendanceAPI.reject(r.id, note);
+        toast.success("Attendance rejected and locked");
+      }
+      loadRecords();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Action failed");
+    } finally {
+      setApprovalBusyId(null);
+    }
   };
 
-  const submitReassign = async (e) => {
+  const coachName = (id) => coaches.find((c) => c.id === id)?.name || (id ? `#${id}` : "-");
+
+  const submitCoachManual = async (e) => {
     e.preventDefault();
     try {
-      await SwapAPI.adminAssign({
-        original_coach_id: reassigning.coach_id,
-        covering_coach_id: Number(reassignForm.covering_coach_id),
-        class_id: reassigning.class_id,
-        date: reassigning.date,
-        reason: reassignForm.reason,
+      await AttendanceAPI.coachCreateManual({
+        coach_id: Number(coachManualForm.coach_id),
+        date: coachManualForm.date,
+        entry_time: coachManualForm.entry_time || null,
+        exit_time: coachManualForm.exit_time || null,
+        status: coachManualForm.status,
       });
-      toast.success("Class reassigned to substitute coach");
-      setReassigning(null);
-      loadMissing();
+      toast.success("Coach attendance recorded");
+      setCoachManualForm({ ...coachManualForm, coach_id: "", entry_time: "", exit_time: "" });
+      loadCoachRecords();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Reassignment failed");
+      toast.error(err.response?.data?.detail || "Failed to record coach attendance");
+    }
+  };
+
+  const openEditCoach = (r) => {
+    setEditingCoach(r);
+    setEditCoachForm({
+      entry_time: r.entry_time ? r.entry_time.slice(11, 16) : "",
+      exit_time: r.exit_time ? r.exit_time.slice(11, 16) : "",
+      status: r.status,
+    });
+  };
+
+  const submitEditCoach = async (e) => {
+    e.preventDefault();
+    try {
+      await AttendanceAPI.coachUpdate(editingCoach.id, {
+        entry_time: editCoachForm.entry_time || null,
+        exit_time: editCoachForm.exit_time || null,
+        status: editCoachForm.status,
+      });
+      toast.success("Coach attendance updated");
+      setEditingCoach(null);
+      loadCoachRecords();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Update failed");
+    }
+  };
+
+  const removeCoachRecord = async (r) => {
+    if (!confirm(`Delete this attendance record for ${coachName(r.coach_id)} on ${r.date}?`)) return;
+    try {
+      await AttendanceAPI.coachRemove(r.id);
+      toast.success("Coach attendance record deleted");
+      loadCoachRecords();
+    } catch (err) {
+      if (err.response?.status === 404) {
+        toast("Already deleted — refreshing list");
+        loadCoachRecords();
+        return;
+      }
+      toast.error(err.response?.data?.detail || "Delete failed");
     }
   };
 
@@ -188,7 +272,6 @@ export default function Attendance() {
                 <th>Activity</th>
                 <th>Date</th>
                 <th>End Time</th>
-                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -198,17 +281,14 @@ export default function Attendance() {
                   <td>{m.activity_name}</td>
                   <td>{m.date}</td>
                   <td>{m.end_time}</td>
-                  <td className="table-actions">
-                    <button className="btn btn-secondary btn-sm" onClick={() => openReassign(m)}>
-                      Reassign
-                    </button>
-                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
+
+      <h2 style={{ marginBottom: 8 }}>Student Attendance</h2>
 
       <div className="card" style={{ marginBottom: 16 }}>
         <h3 style={{ marginTop: 0 }}>Manual Attendance Entry (Admin)</h3>
@@ -263,8 +343,8 @@ export default function Attendance() {
         </form>
       </div>
 
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>All Attendance Records</h3>
+      <div className="card" style={{ marginBottom: 24 }}>
+        <h3 style={{ marginTop: 0 }}>All Student Attendance Records</h3>
         <div className="toolbar" style={{ marginBottom: 12 }}>
           <select value={filters.activity_id} onChange={(e) => setFilters({ ...filters, activity_id: e.target.value })}>
             <option value="">All activities</option>
@@ -279,6 +359,12 @@ export default function Attendance() {
             <option value="PRESENT">Present</option>
             <option value="ABSENT">Absent</option>
             <option value="LEAVE">Leave</option>
+          </select>
+          <select value={filters.approval_status} onChange={(e) => setFilters({ ...filters, approval_status: e.target.value })}>
+            <option value="">All review states</option>
+            <option value="PENDING">Awaiting Admin Review</option>
+            <option value="APPROVED">Approved</option>
+            <option value="REJECTED">Rejected</option>
           </select>
           <input type="date" value={filters.date_from} onChange={(e) => setFilters({ ...filters, date_from: e.target.value })} />
           <input type="date" value={filters.date_to} onChange={(e) => setFilters({ ...filters, date_to: e.target.value })} />
@@ -298,6 +384,7 @@ export default function Attendance() {
                 <th>Coach</th>
                 <th>Status</th>
                 <th>Marked</th>
+                <th>Admin Review</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -312,16 +399,143 @@ export default function Attendance() {
                     <StatusBadge status={r.status} />
                   </td>
                   <td>{r.marked_manually ? "Manual" : "Coach"}</td>
-                  <td className="table-actions">
+                  <td>
+                    <span
+                      className={`badge ${r.approval_status === "APPROVED" ? "badge-paid" : r.approval_status === "REJECTED" ? "badge-overdue" : "badge-unpaid"}`}
+                    >
+                      {r.approval_status}
+                    </span>
+                  </td>
+                  <td className="table-actions" style={{ flexWrap: "wrap" }}>
                     {r.has_selfie && (
                       <button className="btn btn-secondary btn-sm" onClick={() => viewSelfie(r)}>
                         View Selfie
                       </button>
                     )}
+                    {r.approval_status === "PENDING" && !r.marked_manually && (
+                      <>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          disabled={approvalBusyId === r.id}
+                          onClick={() => decideApproval(r, true)}
+                        >
+                          Approve
+                        </button>
+                        <button
+                          className="btn btn-danger btn-sm"
+                          disabled={approvalBusyId === r.id}
+                          onClick={() => decideApproval(r, false)}
+                        >
+                          Reject
+                        </button>
+                      </>
+                    )}
                     <button className="btn btn-secondary btn-sm" onClick={() => openEdit(r)}>
                       Edit
                     </button>
                     <button className="btn btn-danger btn-sm" onClick={() => remove(r)}>
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <h2 style={{ marginBottom: 8 }}>Coach Attendance</h2>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h3 style={{ marginTop: 0 }}>Manual Facility Attendance Entry (Admin)</h3>
+        <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: -8 }}>
+          Record or backfill a coach's facility entry/exit directly — bypasses geofencing.
+        </p>
+        <form onSubmit={submitCoachManual} className="form-grid">
+          <div>
+            <label>Coach</label>
+            <select value={coachManualForm.coach_id} onChange={(e) => setCoachManualForm({ ...coachManualForm, coach_id: e.target.value })} required>
+              <option value="">Select coach</option>
+              {coaches.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label>Date</label>
+            <input type="date" value={coachManualForm.date} onChange={(e) => setCoachManualForm({ ...coachManualForm, date: e.target.value })} required />
+          </div>
+          <div>
+            <label>Entry Time</label>
+            <input type="time" value={coachManualForm.entry_time} onChange={(e) => setCoachManualForm({ ...coachManualForm, entry_time: e.target.value })} />
+          </div>
+          <div>
+            <label>Exit Time</label>
+            <input type="time" value={coachManualForm.exit_time} onChange={(e) => setCoachManualForm({ ...coachManualForm, exit_time: e.target.value })} />
+          </div>
+          <div>
+            <label>Status</label>
+            <select value={coachManualForm.status} onChange={(e) => setCoachManualForm({ ...coachManualForm, status: e.target.value })}>
+              <option value="PRESENT">Present</option>
+              <option value="ABSENT">Absent</option>
+              <option value="LEAVE">Leave</option>
+              <option value="INCOMPLETE">Incomplete</option>
+            </select>
+          </div>
+          <div style={{ alignSelf: "end" }}>
+            <button className="btn btn-primary">Record</button>
+          </div>
+        </form>
+      </div>
+
+      <div className="card">
+        <h3 style={{ marginTop: 0 }}>All Coach Attendance Records</h3>
+        <div className="toolbar" style={{ marginBottom: 12 }}>
+          <select value={coachFilters.coach_id} onChange={(e) => setCoachFilters({ ...coachFilters, coach_id: e.target.value })}>
+            <option value="">All coaches</option>
+            {coaches.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <input type="date" value={coachFilters.date_from} onChange={(e) => setCoachFilters({ ...coachFilters, date_from: e.target.value })} />
+          <input type="date" value={coachFilters.date_to} onChange={(e) => setCoachFilters({ ...coachFilters, date_to: e.target.value })} />
+        </div>
+
+        {coachRecordsLoading ? (
+          <div className="empty-state">Loading...</div>
+        ) : coachRecords.length === 0 ? (
+          <div className="empty-state">No coach attendance records match these filters.</div>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Coach</th>
+                <th>Entry</th>
+                <th>Exit</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {coachRecords.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.date}</td>
+                  <td>{r.coach_name}</td>
+                  <td>{r.entry_time ? r.entry_time.slice(11, 16) : "-"}</td>
+                  <td>{r.exit_time ? r.exit_time.slice(11, 16) : "-"}</td>
+                  <td>
+                    <StatusBadge status={r.status} />
+                  </td>
+                  <td className="table-actions">
+                    <button className="btn btn-secondary btn-sm" onClick={() => openEditCoach(r)}>
+                      Edit
+                    </button>
+                    <button className="btn btn-danger btn-sm" onClick={() => removeCoachRecord(r)}>
                       Delete
                     </button>
                   </td>
@@ -353,41 +567,33 @@ export default function Attendance() {
         </Modal>
       )}
 
-      {reassigning && (
-        <Modal title={`Reassign — ${reassigning.activity_name} (${reassigning.date})`} onClose={() => setReassigning(null)}>
-          <form onSubmit={submitReassign}>
-            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: -8 }}>
-              {reassigning.coach_name} is marked absent for this class; pick a substitute coach to cover it.
-            </p>
+      {editingCoach && (
+        <Modal title={`Edit Coach Attendance — ${coachName(editingCoach.coach_id)}`} onClose={() => setEditingCoach(null)}>
+          <form onSubmit={submitEditCoach}>
+            <div className="form-grid">
+              <div>
+                <label>Entry Time</label>
+                <input type="time" value={editCoachForm.entry_time} onChange={(e) => setEditCoachForm({ ...editCoachForm, entry_time: e.target.value })} />
+              </div>
+              <div>
+                <label>Exit Time</label>
+                <input type="time" value={editCoachForm.exit_time} onChange={(e) => setEditCoachForm({ ...editCoachForm, exit_time: e.target.value })} />
+              </div>
+            </div>
             <div className="field">
-              <label>Substitute Coach</label>
-              <select
-                value={reassignForm.covering_coach_id}
-                onChange={(e) => setReassignForm({ ...reassignForm, covering_coach_id: e.target.value })}
-                required
-              >
-                <option value="">Select coach</option>
-                {coaches.filter((c) => c.id !== reassigning.coach_id).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
+              <label>Status</label>
+              <select value={editCoachForm.status} onChange={(e) => setEditCoachForm({ ...editCoachForm, status: e.target.value })}>
+                <option value="PRESENT">Present</option>
+                <option value="ABSENT">Absent</option>
+                <option value="LEAVE">Leave</option>
+                <option value="INCOMPLETE">Incomplete</option>
               </select>
             </div>
-            <div className="field">
-              <label>Reason for substitution</label>
-              <textarea
-                rows={3}
-                value={reassignForm.reason}
-                onChange={(e) => setReassignForm({ ...reassignForm, reason: e.target.value })}
-                required
-              />
-            </div>
             <div className="modal-actions">
-              <button type="button" className="btn btn-secondary" onClick={() => setReassigning(null)}>
+              <button type="button" className="btn btn-secondary" onClick={() => setEditingCoach(null)}>
                 Cancel
               </button>
-              <button className="btn btn-primary">Reassign</button>
+              <button className="btn btn-primary">Save</button>
             </div>
           </form>
         </Modal>

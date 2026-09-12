@@ -1,12 +1,10 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/auth_storage.dart';
-import '../../core/export_helper.dart';
 import '../../core/models.dart';
 import '../shared/notification_bell_action.dart';
-
-const _monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 String _isoDate(DateTime d) => d.toIso8601String().substring(0, 10);
 String _todayStr() => _isoDate(DateTime.now());
@@ -20,9 +18,6 @@ class CoachFacilityAttendanceTab extends StatefulWidget {
 
 class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab> {
   int? _coachId;
-  bool _reportDownloading = false;
-  int _reportMonth = DateTime.now().month;
-  int _reportYear = DateTime.now().year;
 
   List<dynamic> _myAttendance = [];
   bool _myAttendanceLoading = true;
@@ -86,20 +81,7 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
     _loadRecords();
   }
 
-  Future<void> _downloadMonthlyReport() async {
-    setState(() => _reportDownloading = true);
-    try {
-      final bytes = await ApiClient.instance.getBytes('/reports/export/coach-monthly', query: {'month': _reportMonth, 'year': _reportYear, 'fmt': 'pdf'});
-      final monthStr = _reportMonth.toString().padLeft(2, '0');
-      await shareExportedFile(bytes, 'monthly_report_${_reportYear}_$monthStr.pdf');
-    } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
-    } finally {
-      if (mounted) setState(() => _reportDownloading = false);
-    }
-  }
-
-  bool _canEdit(AdminAttendanceRecord r) => r.classDate == _todayStr();
+  bool _canEdit(AdminAttendanceRecord r) => r.classDate == _todayStr() && r.approvalStatus == 'PENDING';
 
   Future<void> _changeStatus(AdminAttendanceRecord r, String status) async {
     setState(() => _busyId = r.id);
@@ -141,6 +123,45 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
 
   Color _statusColor(String status) => status == 'PRESENT' ? AppColors.success : (status == 'ABSENT' ? AppColors.danger : AppColors.warning);
 
+  Color _approvalColor(String status) {
+    switch (status) {
+      case 'APPROVED':
+        return AppColors.success;
+      case 'REJECTED':
+        return AppColors.danger;
+      default:
+        return AppColors.warning;
+    }
+  }
+
+  String _approvalLabel(String status) => status == 'PENDING' ? 'Awaiting Admin' : status;
+
+  Future<void> _viewPhoto(AdminAttendanceRecord r) async {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Photo — ${r.studentName}'),
+        content: SizedBox(
+          width: 280,
+          height: 280,
+          child: FutureBuilder<Uint8List>(
+            future: ApiClient.instance.getBytes('/attendance/selfie/${r.id}').then((b) => Uint8List.fromList(b)),
+            builder: (ctx, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError || !snapshot.hasData) {
+                return const Center(child: Text('Photo not available.'));
+              }
+              return ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.memory(snapshot.data!, fit: BoxFit.contain));
+            },
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+      ),
+    );
+  }
+
   String _fmtTime(String? iso) {
     if (iso == null) return '-';
     final dt = DateTime.tryParse(iso);
@@ -158,44 +179,6 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Monthly Report', style: Theme.of(context).textTheme.titleMedium),
-                  const Text('Download a PDF of your students\' attendance and fee status for a month, broken down by activity.', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      DropdownButton<int>(
-                        value: _reportMonth,
-                        items: List.generate(12, (i) => i + 1).map((m) => DropdownMenuItem(value: m, child: Text(_monthNames[m]))).toList(),
-                        onChanged: (v) => setState(() => _reportMonth = v ?? _reportMonth),
-                      ),
-                      SizedBox(
-                        width: 90,
-                        child: TextField(
-                          keyboardType: TextInputType.number,
-                          controller: TextEditingController(text: _reportYear.toString()),
-                          onChanged: (v) => _reportYear = int.tryParse(v) ?? _reportYear,
-                        ),
-                      ),
-                      ElevatedButton(
-                        onPressed: _reportDownloading ? null : _downloadMonthlyReport,
-                        child: _reportDownloading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Download PDF'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(14),
@@ -266,10 +249,20 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Expanded(child: Text(r.studentName, style: const TextStyle(fontWeight: FontWeight.bold))),
-                            Chip(
-                              label: Text(r.status, style: const TextStyle(fontSize: 10, color: Colors.white)),
-                              backgroundColor: _statusColor(r.status),
-                              visualDensity: VisualDensity.compact,
+                            Wrap(
+                              spacing: 4,
+                              children: [
+                                Chip(
+                                  label: Text(r.status, style: const TextStyle(fontSize: 10, color: Colors.white)),
+                                  backgroundColor: _statusColor(r.status),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                Chip(
+                                  label: Text(_approvalLabel(r.approvalStatus), style: const TextStyle(fontSize: 10, color: Colors.white)),
+                                  backgroundColor: _approvalColor(r.approvalStatus),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -277,23 +270,34 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
                         const SizedBox(height: 8),
                         if (_busyId == r.id)
                           const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
-                        else if (_canEdit(r))
+                        else
                           Wrap(
                             spacing: 6,
+                            runSpacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
-                              ...['PRESENT', 'ABSENT', 'LEAVE'].where((s) => s != r.status).map((s) => OutlinedButton(
-                                    onPressed: () => _changeStatus(r, s),
-                                    child: Text('Mark ${s[0]}${s.substring(1).toLowerCase()}'),
-                                  )),
-                              OutlinedButton(
-                                onPressed: () => _remove(r),
-                                style: OutlinedButton.styleFrom(foregroundColor: AppColors.danger),
-                                child: const Text('Delete'),
-                              ),
+                              if (r.hasSelfie)
+                                OutlinedButton(
+                                  onPressed: () => _viewPhoto(r),
+                                  child: const Text('View Photo'),
+                                ),
+                              if (_canEdit(r)) ...[
+                                ...['PRESENT', 'ABSENT', 'LEAVE'].where((s) => s != r.status).map((s) => OutlinedButton(
+                                      onPressed: () => _changeStatus(r, s),
+                                      child: Text('Mark ${s[0]}${s.substring(1).toLowerCase()}'),
+                                    )),
+                                OutlinedButton(
+                                  onPressed: () => _remove(r),
+                                  style: OutlinedButton.styleFrom(foregroundColor: AppColors.danger),
+                                  child: const Text('Delete'),
+                                ),
+                              ] else
+                                Text(
+                                  r.approvalStatus == 'PENDING' ? 'Locked (past class)' : 'Locked (reviewed by admin)',
+                                  style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                                ),
                             ],
-                          )
-                        else
-                          const Text('Locked (past class)', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                          ),
                       ],
                     ),
                   ),

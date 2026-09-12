@@ -3,7 +3,7 @@ from datetime import date
 from decimal import Decimal
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -17,6 +17,7 @@ from app.security import require_admin
 from app.services.audit import log_action
 from app.services.notifications import notify, fee_reminder_message
 from app.services.receipt_pdf import build_fee_receipt_pdf
+from app.services.export import rows_to_csv
 
 router = APIRouter(prefix="/fees", tags=["fees"])
 
@@ -189,11 +190,14 @@ def send_reminder(
 
 
 @router.get("/{fee_id}/receipt")
-def fee_receipt_pdf(
+def fee_receipt(
     fee_id: int,
+    fmt: str = "pdf",
+    disposition: str = "attachment",
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
+    """Fee receipt as PDF or CSV, for inline viewing or download (requirement: view/download in both formats)."""
     fee = db.query(StudentFee).filter(StudentFee.id == fee_id).first()
     if not fee:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fee record not found")
@@ -213,6 +217,29 @@ def fee_receipt_pdf(
             .all()
         )
     ]
+    disposition = "inline" if disposition == "inline" else "attachment"
+
+    if fmt == "csv":
+        headers = ["Receipt No", "Student", "Activities", "Period", "Amount Paid", "Balance", "Paid Date", "Approved By"]
+        rows = [[
+            f"FEE-{fee.id:06d}",
+            student.name if student else "Unknown",
+            ", ".join(activity_names) or "N/A",
+            f"{fee.month:02d}/{fee.year}",
+            fee.amount,
+            fee.balance_amount,
+            (fee.paid_date or date.today()).isoformat(),
+            current_user.name,
+        ]]
+        buffer = rows_to_csv(headers, rows)
+        log_action(db, current_user.id, "DOWNLOAD_RECEIPT_CSV", "StudentFee", fee.id)
+        db.commit()
+        return Response(
+            content=buffer.read(),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"{disposition}; filename=receipt_fee_{fee.id}.csv"},
+        )
+
     pdf_bytes = build_fee_receipt_pdf(
         receipt_no=f"FEE-{fee.id:06d}",
         student_name=student.name if student else "Unknown",
@@ -230,5 +257,5 @@ def fee_receipt_pdf(
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=receipt_fee_{fee.id}.pdf"},
+        headers={"Content-Disposition": f"{disposition}; filename=receipt_fee_{fee.id}.pdf"},
     )

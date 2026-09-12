@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { AuthAPI, CoachesAPI, ResetAPI } from "../api/endpoints";
+import { AuthAPI, CoachesAPI, ResetAPI, AcademyAPI } from "../api/endpoints";
 import Modal from "../components/Modal";
 
 const emptyCoachForm = { name: "", email: "", phone: "", password: "" };
@@ -11,6 +11,11 @@ export default function Settings() {
   const [me, setMe] = useState(null);
   const [accountForm, setAccountForm] = useState({ email: "", current_password: "", new_password: "" });
   const [accountSaving, setAccountSaving] = useState(false);
+
+  // --- Academy profile ---
+  const [academy, setAcademy] = useState(null);
+  const [academyForm, setAcademyForm] = useState({ name: "", address: "", phone: "", email: "", description: "" });
+  const [academySaving, setAcademySaving] = useState(false);
 
   // --- Coach accounts ---
   const [coaches, setCoaches] = useState([]);
@@ -36,6 +41,35 @@ export default function Settings() {
       })
       .catch((err) => toast.error(err.response?.data?.detail || "Failed to load your account"));
   }, []);
+
+  useEffect(() => {
+    AcademyAPI.get()
+      .then((r) => {
+        setAcademy(r.data);
+        setAcademyForm({
+          name: r.data.name || "",
+          address: r.data.address || "",
+          phone: r.data.phone || "",
+          email: r.data.email || "",
+          description: r.data.description || "",
+        });
+      })
+      .catch((err) => toast.error(err.response?.data?.detail || "Failed to load academy profile"));
+  }, []);
+
+  const submitAcademy = async (e) => {
+    e.preventDefault();
+    setAcademySaving(true);
+    try {
+      const { data } = await AcademyAPI.update(academyForm);
+      setAcademy(data);
+      toast.success("Academy profile updated");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Update failed");
+    } finally {
+      setAcademySaving(false);
+    }
+  };
 
   const loadCoaches = () => {
     setLoading(true);
@@ -90,6 +124,15 @@ export default function Settings() {
       toast.error(err.response?.data?.detail || "Failed to create coach");
     } finally {
       setAddSaving(false);
+    }
+  };
+
+  const toggleCoachActive = async (c) => {
+    try {
+      await CoachesAPI.update(c.id, { is_active: !c.is_active });
+      loadCoaches();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Update failed");
     }
   };
 
@@ -192,6 +235,46 @@ export default function Settings() {
         )}
       </div>
 
+      <div className="card" style={{ maxWidth: 640, marginBottom: 24 }}>
+        <h3 style={{ marginTop: 0 }}>Academy Profile</h3>
+        <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
+          Shown on generated fee receipts and available to coaches.
+        </p>
+        {!academy ? (
+          <div className="empty-state">Loading...</div>
+        ) : (
+          <form onSubmit={submitAcademy}>
+            <div className="field">
+              <label>Academy Name</label>
+              <input value={academyForm.name} onChange={(e) => setAcademyForm({ ...academyForm, name: e.target.value })} required />
+            </div>
+            <div className="form-grid">
+              <div>
+                <label>Phone</label>
+                <input value={academyForm.phone} onChange={(e) => setAcademyForm({ ...academyForm, phone: e.target.value })} placeholder="+91XXXXXXXXXX" />
+              </div>
+              <div>
+                <label>Email</label>
+                <input type="email" value={academyForm.email} onChange={(e) => setAcademyForm({ ...academyForm, email: e.target.value })} />
+              </div>
+            </div>
+            <div className="field">
+              <label>Address</label>
+              <input value={academyForm.address} onChange={(e) => setAcademyForm({ ...academyForm, address: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>Description</label>
+              <textarea rows={2} value={academyForm.description} onChange={(e) => setAcademyForm({ ...academyForm, description: e.target.value })} />
+            </div>
+            <div className="modal-actions" style={{ justifyContent: "flex-start" }}>
+              <button className="btn btn-primary" disabled={academySaving}>
+                {academySaving ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+
       <div className="page-header">
         <h3 style={{ margin: 0 }}>Coach Accounts</h3>
         <button className="btn btn-primary" onClick={openAdd}>
@@ -230,6 +313,9 @@ export default function Settings() {
                     <button className="btn btn-secondary btn-sm" onClick={() => openCred(c)}>
                       Change User ID / Password
                     </button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => toggleCoachActive(c)}>
+                      {c.is_active ? "Deactivate" : "Activate"}
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -241,9 +327,9 @@ export default function Settings() {
       <div className="card" style={{ maxWidth: 640, marginTop: 24, borderColor: "var(--danger)" }}>
         <h3 style={{ marginTop: 0, color: "var(--danger)" }}>Danger Zone</h3>
         <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
-          Reset all attendance, fee, leave, salary, swap, compliance, and notification history back
-          to a clean slate. Users, students, coaches, activities, and batches are kept — only
-          records/history are erased. This cannot be undone.
+          Reset all attendance, fee, and notification history back to a clean slate. Users,
+          students, coaches, activities, and batches are kept — only records/history are erased.
+          This cannot be undone.
         </p>
         <button className="btn btn-danger" onClick={openReset}>
           Reset All Data
@@ -313,9 +399,9 @@ export default function Settings() {
       {showReset && (
         <Modal title="Reset All Data?" onClose={() => setShowReset(false)}>
           <p>
-            This permanently erases <strong>all</strong> attendance, fee, leave, salary, swap,
-            compliance, and notification records for every student and coach. Users, activities,
-            and batches are kept so the app keeps working right after. This cannot be undone.
+            This permanently erases <strong>all</strong> attendance, fee, and notification
+            records for every student and coach. Users, activities, and batches are kept so the
+            app keeps working right after. This cannot be undone.
           </p>
           <div className="field">
             <label>

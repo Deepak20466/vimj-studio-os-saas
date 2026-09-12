@@ -24,12 +24,22 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
   DateTime? _filterDateFrom;
   DateTime? _filterDateTo;
   int? _removingId;
+  int? _approvalBusyId;
+
+  // --- Coach attendance (separate CRUD) ---
+  bool _coachRecordsLoading = true;
+  List<Map<String, dynamic>> _coachRecords = [];
+  int? _coachFilterId;
+  DateTime? _coachFilterDateFrom;
+  DateTime? _coachFilterDateTo;
+  int? _removingCoachId;
 
   @override
   void initState() {
     super.initState();
     _load();
     _loadRecords();
+    _loadCoachRecords();
   }
 
   Future<void> _load() async {
@@ -70,6 +80,7 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
   Future<void> _refreshAll() async {
     await _load();
     await _loadRecords();
+    await _loadCoachRecords();
   }
 
   Future<void> _openManualEntry() async {
@@ -82,64 +93,128 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
     if (marked == true) _refreshAll();
   }
 
-  Future<void> _openReassign(DailyMissingRow m) async {
-    int? coveringCoachId;
-    final reasonCtrl = TextEditingController();
-    final saved = await showModalBottomSheet<bool>(
+  Future<void> _loadCoachRecords() async {
+    setState(() => _coachRecordsLoading = true);
+    try {
+      final query = <String, dynamic>{};
+      if (_coachFilterId != null) query['coach_id'] = _coachFilterId;
+      if (_coachFilterDateFrom != null) query['date_from'] = _coachFilterDateFrom!.toIso8601String().substring(0, 10);
+      if (_coachFilterDateTo != null) query['date_to'] = _coachFilterDateTo!.toIso8601String().substring(0, 10);
+      final data = await ApiClient.instance.get('/attendance/coaches', query: query) as List;
+      _coachRecords = data.cast<Map<String, dynamic>>();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _coachRecordsLoading = false);
+    }
+  }
+
+  Future<void> _pickCoachFilterDate(bool isFrom) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: (isFrom ? _coachFilterDateFrom : _coachFilterDateTo) ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+    if (picked == null) return;
+    setState(() => isFrom ? _coachFilterDateFrom = picked : _coachFilterDateTo = picked);
+    _loadCoachRecords();
+  }
+
+  Future<void> _openCoachManualEntry() async {
+    final marked = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      builder: (_) => _CoachManualEntryForm(coaches: _coaches),
+    );
+    if (marked == true) _loadCoachRecords();
+  }
+
+  Future<void> _openEditCoachRecord(Map<String, dynamic> r) async {
+    String status = r['status'] as String? ?? 'PRESENT';
+    final entryCtrl = TextEditingController(text: r['entry_time'] != null ? (r['entry_time'] as String).substring(11, 16) : '');
+    final exitCtrl = TextEditingController(text: r['exit_time'] != null ? (r['exit_time'] as String).substring(11, 16) : '');
+    final saved = await showDialog<bool>(
+      context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => Padding(
-          padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text('Reassign — ${m.activityName} (${m.date})', style: Theme.of(ctx).textTheme.titleLarge),
-                Text('${m.coachName} is marked absent for this class; pick a substitute coach to cover it.', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<int>(
-                  initialValue: coveringCoachId,
-                  decoration: const InputDecoration(labelText: 'Substitute Coach'),
-                  items: _coaches.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
-                  onChanged: (v) => setSheetState(() => coveringCoachId = v),
-                ),
-                const SizedBox(height: 12),
-                TextField(controller: reasonCtrl, decoration: const InputDecoration(labelText: 'Reason for substitution'), maxLines: 3),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: () async {
-                    if (coveringCoachId == null || reasonCtrl.text.trim().isEmpty) {
-                      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Pick a substitute coach and reason')));
-                      return;
-                    }
-                    try {
-                      await ApiClient.instance.post('/swap/admin-assign', body: {
-                        'original_coach_id': m.coachId,
-                        'covering_coach_id': coveringCoachId,
-                        'class_id': m.classId,
-                        'date': m.date,
-                        'reason': reasonCtrl.text.trim(),
-                      });
-                      if (ctx.mounted) Navigator.of(ctx).pop(true);
-                    } on ApiException catch (e) {
-                      if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(e.message)));
-                    }
-                  },
-                  child: const Text('Reassign'),
-                ),
-              ],
-            ),
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text('Edit Coach Attendance — ${r['coach_name']}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: entryCtrl, decoration: const InputDecoration(labelText: 'Entry time (HH:MM)')),
+              TextField(controller: exitCtrl, decoration: const InputDecoration(labelText: 'Exit time (HH:MM)')),
+              DropdownButtonFormField<String>(
+                initialValue: status,
+                decoration: const InputDecoration(labelText: 'Status'),
+                items: const [
+                  DropdownMenuItem(value: 'PRESENT', child: Text('Present')),
+                  DropdownMenuItem(value: 'ABSENT', child: Text('Absent')),
+                  DropdownMenuItem(value: 'LEAVE', child: Text('Leave')),
+                  DropdownMenuItem(value: 'INCOMPLETE', child: Text('Incomplete')),
+                ],
+                onChanged: (v) => setDialogState(() => status = v ?? status),
+              ),
+            ],
           ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () async {
+                try {
+                  await ApiClient.instance.put('/attendance/coaches/${r['id']}', body: {
+                    if (entryCtrl.text.trim().isNotEmpty) 'entry_time': '${entryCtrl.text.trim()}:00',
+                    if (exitCtrl.text.trim().isNotEmpty) 'exit_time': '${exitCtrl.text.trim()}:00',
+                    'status': status,
+                  });
+                  if (ctx.mounted) Navigator.pop(ctx, true);
+                } on ApiException catch (e) {
+                  if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(e.message)));
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
         ),
       ),
     );
-    reasonCtrl.dispose();
+    entryCtrl.dispose();
+    exitCtrl.dispose();
     if (saved == true) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Class reassigned to substitute coach')));
-      _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Coach attendance updated')));
+      _loadCoachRecords();
+    }
+  }
+
+  Future<void> _removeCoachRecord(Map<String, dynamic> r) async {
+    final id = r['id'] as int;
+    if (_removingCoachId == id) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete coach attendance record?'),
+        content: Text('Delete this attendance record for ${r['coach_name']} on ${r['date']}?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete', style: TextStyle(color: AppColors.danger))),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _removingCoachId = id);
+    try {
+      await ApiClient.instance.delete('/attendance/coaches/$id');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Coach attendance record deleted')));
+      _loadCoachRecords();
+    } on ApiException catch (e) {
+      if (mounted) {
+        final message = e.statusCode == 404 ? 'Already deleted — refreshing list' : e.message;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        if (e.statusCode == 404) _loadCoachRecords();
+      }
+    } finally {
+      if (mounted) setState(() => _removingCoachId = null);
     }
   }
 
@@ -217,6 +292,58 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
     }
   }
 
+  Future<String?> _promptReason(String title) {
+    final ctrl = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(title),
+        content: TextField(controller: ctrl, decoration: const InputDecoration(labelText: 'Reason (optional)'), maxLines: 2),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, ctrl.text.trim()), child: const Text('Confirm')),
+        ],
+      ),
+    ).then((value) {
+      ctrl.dispose();
+      return value;
+    });
+  }
+
+  Future<void> _decideApproval(AdminAttendanceRecord r, bool approve) async {
+    setState(() => _approvalBusyId = r.id);
+    try {
+      if (approve) {
+        await ApiClient.instance.put('/attendance/students/${r.id}/approve', body: {'note': null});
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Attendance approved and locked')));
+      } else {
+        final note = await _promptReason('Reason for rejecting');
+        if (note == null) {
+          setState(() => _approvalBusyId = null);
+          return; // cancelled the dialog
+        }
+        await ApiClient.instance.put('/attendance/students/${r.id}/reject', body: {'note': note.isEmpty ? null : note});
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Attendance rejected and locked')));
+      }
+      _loadRecords();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _approvalBusyId = null);
+    }
+  }
+
+  Color _approvalColor(String status) {
+    switch (status) {
+      case 'APPROVED':
+        return AppColors.success;
+      case 'REJECTED':
+        return AppColors.danger;
+      default:
+        return AppColors.warning;
+    }
+  }
+
   Future<void> _viewSelfie(AdminAttendanceRecord r) async {
     showDialog(
       context: context,
@@ -285,10 +412,13 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                             leading: const Icon(Icons.warning_amber_rounded, color: AppColors.warning),
                             title: Text(m.coachName),
                             subtitle: Text('${m.activityName} · ${m.date} · ends ${m.endTime}'),
-                            trailing: TextButton(onPressed: () => _openReassign(m), child: const Text('Reassign')),
                           ),
                         )),
                   const SizedBox(height: 20),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                    child: Text('Student Attendance', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                  ),
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 4, horizontal: 4),
                     child: Text('All Attendance Records', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
@@ -342,31 +472,153 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                   else
                     ..._records.map((r) => Card(
                           margin: const EdgeInsets.only(bottom: 8),
-                          child: ListTile(
-                            title: Text(r.studentName),
-                            subtitle: Text('${r.classDate} · ${r.activityName} · ${r.coachName ?? "-"} · ${r.markedManually ? "Manual" : "Coach"}'),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Chip(
-                                  label: Text(r.status, style: const TextStyle(fontSize: 11, color: Colors.white)),
-                                  backgroundColor: r.status == 'PRESENT'
-                                      ? AppColors.success
-                                      : r.status == 'ABSENT'
-                                          ? AppColors.danger
-                                          : AppColors.warning,
-                                  visualDensity: VisualDensity.compact,
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(child: Text(r.studentName, style: const TextStyle(fontWeight: FontWeight.bold))),
+                                    Wrap(
+                                      spacing: 4,
+                                      children: [
+                                        Chip(
+                                          label: Text(r.status, style: const TextStyle(fontSize: 11, color: Colors.white)),
+                                          backgroundColor: r.status == 'PRESENT'
+                                              ? AppColors.success
+                                              : r.status == 'ABSENT'
+                                                  ? AppColors.danger
+                                                  : AppColors.warning,
+                                          visualDensity: VisualDensity.compact,
+                                        ),
+                                        Chip(
+                                          label: Text(r.approvalStatus, style: const TextStyle(fontSize: 11, color: Colors.white)),
+                                          backgroundColor: _approvalColor(r.approvalStatus),
+                                          visualDensity: VisualDensity.compact,
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
-                                if (r.hasSelfie)
-                                  IconButton(icon: const Icon(Icons.photo_camera_outlined, size: 20), tooltip: 'View Selfie', onPressed: () => _viewSelfie(r)),
-                                IconButton(icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _openEditRecord(r)),
-                                _removingId == r.id
-                                    ? const Padding(padding: EdgeInsets.all(10), child: SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)))
-                                    : IconButton(icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.danger), onPressed: () => _removeRecord(r)),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${r.classDate} · ${r.activityName} · ${r.coachName ?? "-"} · ${r.markedManually ? "Manual" : "Coach"}',
+                                  style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                                ),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 4,
+                                  runSpacing: 4,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    if (r.hasSelfie)
+                                      IconButton(icon: const Icon(Icons.photo_camera_outlined, size: 20), tooltip: 'View Selfie', onPressed: () => _viewSelfie(r)),
+                                    if (r.approvalStatus == 'PENDING')
+                                      _approvalBusyId == r.id
+                                          ? const Padding(padding: EdgeInsets.all(10), child: SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)))
+                                          : Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                IconButton(
+                                                  icon: const Icon(Icons.check_circle_outline, size: 20, color: AppColors.success),
+                                                  tooltip: 'Approve',
+                                                  onPressed: () => _decideApproval(r, true),
+                                                ),
+                                                IconButton(
+                                                  icon: const Icon(Icons.cancel_outlined, size: 20, color: AppColors.danger),
+                                                  tooltip: 'Reject',
+                                                  onPressed: () => _decideApproval(r, false),
+                                                ),
+                                              ],
+                                            ),
+                                    IconButton(icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _openEditRecord(r)),
+                                    _removingId == r.id
+                                        ? const Padding(padding: EdgeInsets.all(10), child: SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)))
+                                        : IconButton(icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.danger), onPressed: () => _removeRecord(r)),
+                                  ],
+                                ),
                               ],
                             ),
                           ),
                         )),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Coach Attendance', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                      ElevatedButton.icon(
+                        onPressed: _openCoachManualEntry,
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('Manual Entry'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      DropdownButton<int?>(
+                        value: _coachFilterId,
+                        hint: const Text('All coaches'),
+                        items: [
+                          const DropdownMenuItem<int?>(value: null, child: Text('All coaches')),
+                          ..._coaches.map((c) => DropdownMenuItem<int?>(value: c.id, child: Text(c.name))),
+                        ],
+                        onChanged: (v) {
+                          setState(() => _coachFilterId = v);
+                          _loadCoachRecords();
+                        },
+                      ),
+                      OutlinedButton(
+                        onPressed: () => _pickCoachFilterDate(true),
+                        child: Text(_coachFilterDateFrom == null ? 'From date' : _coachFilterDateFrom!.toIso8601String().substring(0, 10)),
+                      ),
+                      OutlinedButton(
+                        onPressed: () => _pickCoachFilterDate(false),
+                        child: Text(_coachFilterDateTo == null ? 'To date' : _coachFilterDateTo!.toIso8601String().substring(0, 10)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (_coachRecordsLoading)
+                    const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator()))
+                  else if (_coachRecords.isEmpty)
+                    const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('No coach attendance records match these filters.')))
+                  else
+                    ..._coachRecords.map((r) {
+                      final id = r['id'] as int;
+                      final status = r['status'] as String? ?? 'PRESENT';
+                      final entry = r['entry_time'] != null ? (r['entry_time'] as String).substring(11, 16) : '-';
+                      final exit = r['exit_time'] != null ? (r['exit_time'] as String).substring(11, 16) : '-';
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          title: Text(r['coach_name'] as String? ?? '-'),
+                          subtitle: Text('${r['date']} · Entry $entry · Exit $exit'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Chip(
+                                label: Text(status, style: const TextStyle(fontSize: 11, color: Colors.white)),
+                                backgroundColor: status == 'PRESENT'
+                                    ? AppColors.success
+                                    : status == 'ABSENT'
+                                        ? AppColors.danger
+                                        : AppColors.warning,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              IconButton(icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _openEditCoachRecord(r)),
+                              _removingCoachId == id
+                                  ? const Padding(padding: EdgeInsets.all(10), child: SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)))
+                                  : IconButton(icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.danger), onPressed: () => _removeCoachRecord(r)),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
                 ],
               ),
             ),
@@ -502,6 +754,123 @@ class _ManualEntryFormState extends State<_ManualEntryForm> {
                 onChanged: (v) => setState(() => _status = v ?? 'PRESENT'),
               ),
             ],
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _submitting ? null : _submit,
+              child: _submitting ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Record'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CoachManualEntryForm extends StatefulWidget {
+  final List<Coach> coaches;
+  const _CoachManualEntryForm({required this.coaches});
+
+  @override
+  State<_CoachManualEntryForm> createState() => _CoachManualEntryFormState();
+}
+
+class _CoachManualEntryFormState extends State<_CoachManualEntryForm> {
+  int? _coachId;
+  DateTime _date = DateTime.now();
+  TimeOfDay? _entryTime;
+  TimeOfDay? _exitTime;
+  String _status = 'PRESENT';
+  bool _submitting = false;
+
+  String _fmtTime(TimeOfDay t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:00';
+
+  Future<void> _submit() async {
+    if (_coachId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select a coach')));
+      return;
+    }
+    setState(() => _submitting = true);
+    try {
+      await ApiClient.instance.post('/attendance/coaches/manual', body: {
+        'coach_id': _coachId,
+        'date': _date.toIso8601String().substring(0, 10),
+        if (_entryTime != null) 'entry_time': _fmtTime(_entryTime!),
+        if (_exitTime != null) 'exit_time': _fmtTime(_exitTime!),
+        'status': _status,
+      });
+      if (mounted) Navigator.of(context).pop(true);
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Manual Coach Attendance Entry', style: Theme.of(context).textTheme.titleLarge),
+            const Text('Bypasses geofencing — for correcting or backfilling records.', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<int>(
+              initialValue: _coachId,
+              decoration: const InputDecoration(labelText: 'Coach'),
+              items: widget.coaches.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
+              onChanged: (v) => setState(() => _coachId = v),
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Date'),
+              subtitle: Text(_date.toIso8601String().substring(0, 10)),
+              onTap: () async {
+                final picked = await showDatePicker(context: context, initialDate: _date, firstDate: DateTime(2020), lastDate: DateTime(2100));
+                if (picked != null) setState(() => _date = picked);
+              },
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Entry Time'),
+                    subtitle: Text(_entryTime?.format(context) ?? '-'),
+                    onTap: () async {
+                      final picked = await showTimePicker(context: context, initialTime: _entryTime ?? TimeOfDay.now());
+                      if (picked != null) setState(() => _entryTime = picked);
+                    },
+                  ),
+                ),
+                Expanded(
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Exit Time'),
+                    subtitle: Text(_exitTime?.format(context) ?? '-'),
+                    onTap: () async {
+                      final picked = await showTimePicker(context: context, initialTime: _exitTime ?? TimeOfDay.now());
+                      if (picked != null) setState(() => _exitTime = picked);
+                    },
+                  ),
+                ),
+              ],
+            ),
+            DropdownButtonFormField<String>(
+              initialValue: _status,
+              decoration: const InputDecoration(labelText: 'Status'),
+              items: const [
+                DropdownMenuItem(value: 'PRESENT', child: Text('Present')),
+                DropdownMenuItem(value: 'ABSENT', child: Text('Absent')),
+                DropdownMenuItem(value: 'LEAVE', child: Text('Leave')),
+                DropdownMenuItem(value: 'INCOMPLETE', child: Text('Incomplete')),
+              ],
+              onChanged: (v) => setState(() => _status = v ?? 'PRESENT'),
+            ),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _submitting ? null : _submit,

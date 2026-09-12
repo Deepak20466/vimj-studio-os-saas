@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { ActivitiesAPI, CoachesAPI, StudentsAPI, BatchesAPI, AttendanceAPI } from "../api/endpoints";
 import Modal from "../components/Modal";
-import ActivityReportPanel from "../components/ActivityReportPanel";
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const STATUS_OPTIONS = ["PRESENT", "ABSENT", "LEAVE"];
@@ -40,7 +39,6 @@ export default function Activities() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: "", capacity: 20, monthly_fee: "0" });
   const [managing, setManaging] = useState(null);
-  const [reporting, setReporting] = useState(null);
   const [viewingSessions, setViewingSessions] = useState(null);
 
   const load = () => {
@@ -128,9 +126,6 @@ export default function Activities() {
                     <button className="btn btn-secondary btn-sm" onClick={() => setManaging(a)}>
                       Manage
                     </button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => setReporting(a)}>
-                      Report
-                    </button>
                     <button className="btn btn-secondary btn-sm" onClick={() => openEdit(a)}>
                       Edit
                     </button>
@@ -174,12 +169,6 @@ export default function Activities() {
       )}
 
       {managing && <ActivityManageModal activity={managing} onClose={() => setManaging(null)} />}
-
-      {reporting && (
-        <Modal title={`Report: ${reporting.name}`} onClose={() => setReporting(null)}>
-          <ActivityReportPanel activityId={reporting.id} />
-        </Modal>
-      )}
 
       {viewingSessions && <SessionsModal activity={viewingSessions} onClose={() => setViewingSessions(null)} />}
     </div>

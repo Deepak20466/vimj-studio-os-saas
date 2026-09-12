@@ -10,41 +10,27 @@ import Students from "./pages/Students";
 import Coaches from "./pages/Coaches";
 import Activities from "./pages/Activities";
 import Attendance from "./pages/Attendance";
-import Leave from "./pages/Leave";
 import Fees from "./pages/Fees";
-import Reports from "./pages/Reports";
-import Salary from "./pages/Salary";
-import Batches from "./pages/Batches";
-import Compliance from "./pages/Compliance";
-import Chat from "./pages/Chat";
-import About from "./pages/About";
+import Leave from "./pages/Leave";
 import Settings from "./pages/Settings";
 import CoachDashboard from "./pages/coach/CoachDashboard";
 import CoachClasses from "./pages/coach/CoachClasses";
 import CoachAttendance from "./pages/coach/CoachAttendance";
 import CoachLeave from "./pages/coach/CoachLeave";
-import CoachSwaps from "./pages/coach/CoachSwaps";
-import CoachSalary from "./pages/coach/CoachSalary";
 import CoachReceipts from "./pages/coach/CoachReceipts";
 import CoachFeeReminders from "./pages/coach/CoachFeeReminders";
 import CoachStudents from "./pages/coach/CoachStudents";
-import CoachChat from "./pages/coach/CoachChat";
+import CoachSettings from "./pages/coach/CoachSettings";
 
 const ADMIN_LINKS = [
   { to: "/", label: "Dashboard", icon: "dashboard" },
   { to: "/students", label: "Students", icon: "students" },
   { to: "/coaches", label: "Coaches", icon: "coaches" },
   { to: "/attendance", label: "Attendance", icon: "attendance" },
-  { to: "/compliance", label: "Compliance", icon: "attendance" },
   { to: "/activities", label: "Activities", icon: "activities" },
-  { to: "/batches", label: "Batches", icon: "classes" },
-  { to: "/leave", label: "Leave", icon: "leave" },
   { to: "/fees", label: "Fees", icon: "fees" },
-  { to: "/salary", label: "Salary", icon: "salary" },
-  { to: "/reports", label: "Reports", icon: "reports" },
-  { to: "/chat", label: "Chat", icon: "chat" },
+  { to: "/leave", label: "Leave", icon: "leave" },
   { to: "/settings", label: "Settings", icon: "settings" },
-  { to: "/about", label: "About", icon: "about" },
 ];
 
 const COACH_LINKS = [
@@ -53,11 +39,9 @@ const COACH_LINKS = [
   { to: "/coach/students", label: "Students", icon: "students" },
   { to: "/coach/attendance", label: "Attendance", icon: "attendance" },
   { to: "/coach/leave", label: "Leave", icon: "leave" },
-  { to: "/coach/swaps", label: "Swaps", icon: "swap" },
-  { to: "/coach/salary", label: "Salary", icon: "salary" },
   { to: "/coach/receipts", label: "Receipts", icon: "fees" },
   { to: "/coach/fee-reminders", label: "Fee Reminders", icon: "fees" },
-  { to: "/coach/chat", label: "Chat", icon: "chat" },
+  { to: "/coach/settings", label: "Settings", icon: "settings" },
 ];
 
 export default function App() {
@@ -81,16 +65,10 @@ export default function App() {
             <Route path="students" element={<Students />} />
             <Route path="coaches" element={<Coaches />} />
             <Route path="activities" element={<Activities />} />
-            <Route path="batches" element={<Batches />} />
             <Route path="attendance" element={<Attendance />} />
-            <Route path="compliance" element={<Compliance />} />
-            <Route path="leave" element={<Leave />} />
             <Route path="fees" element={<Fees />} />
-            <Route path="salary" element={<Salary />} />
-            <Route path="reports" element={<Reports />} />
-            <Route path="chat" element={<Chat />} />
+            <Route path="leave" element={<Leave />} />
             <Route path="settings" element={<Settings />} />
-            <Route path="about" element={<About />} />
           </Route>
 
           <Route
@@ -106,11 +84,9 @@ export default function App() {
             <Route path="students" element={<CoachStudents />} />
             <Route path="attendance" element={<CoachAttendance />} />
             <Route path="leave" element={<CoachLeave />} />
-            <Route path="swaps" element={<CoachSwaps />} />
-            <Route path="salary" element={<CoachSalary />} />
             <Route path="receipts" element={<CoachReceipts />} />
             <Route path="fee-reminders" element={<CoachFeeReminders />} />
-            <Route path="chat" element={<CoachChat />} />
+            <Route path="settings" element={<CoachSettings />} />
           </Route>
         </Routes>
       </BrowserRouter>

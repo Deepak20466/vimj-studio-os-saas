@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/models.dart';
-import 'activity_report_screen.dart';
 import 'activity_sessions_screen.dart';
 
 class AdminActivitiesTab extends StatefulWidget {
@@ -96,9 +95,6 @@ class _AdminActivitiesTabState extends State<AdminActivitiesTab> {
                                 if (v == 'manage') {
                                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => _ManageActivityScreen(activity: a)));
                                 }
-                                if (v == 'report') {
-                                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => ActivityReportScreen(activityId: a.id, activityName: a.name)));
-                                }
                                 if (v == 'sessions') {
                                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => ActivitySessionsScreen(activity: a)));
                                 }
@@ -107,7 +103,6 @@ class _AdminActivitiesTabState extends State<AdminActivitiesTab> {
                               },
                               itemBuilder: (_) => [
                                 const PopupMenuItem(value: 'manage', child: Text('Manage (Classes/Roster)')),
-                                const PopupMenuItem(value: 'report', child: Text('Report')),
                                 const PopupMenuItem(value: 'sessions', child: Text('Sessions')),
                                 const PopupMenuItem(value: 'edit', child: Text('Edit')),
                                 const PopupMenuItem(value: 'delete', child: Text('Delete')),

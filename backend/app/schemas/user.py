@@ -47,9 +47,12 @@ class UserUpdate(BaseModel):
 
 
 class SelfAccountUpdate(BaseModel):
-    """Used by the logged-in admin to change their own login email and/or password."""
+    """Used by the logged-in admin or coach to update their own account: login email,
+    password, name, and/or phone."""
 
     email: Optional[EmailStr] = None
+    name: Optional[str] = None
+    phone: Optional[str] = None
     current_password: str
     new_password: Optional[str] = Field(default=None, min_length=8)
 

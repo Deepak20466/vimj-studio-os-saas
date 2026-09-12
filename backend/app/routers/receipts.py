@@ -3,7 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -24,6 +24,7 @@ from app.services.audit import log_action
 from app.services.authorization import coach_may_bill_student
 from app.services.notifications import notify, notify_and_push
 from app.services.receipt_pdf import build_fee_receipt_pdf
+from app.services.export import rows_to_csv
 
 router = APIRouter(prefix="/receipts", tags=["receipts"])
 
@@ -218,9 +219,12 @@ def reject_receipt(
 @router.get("/{receipt_id}/pdf")
 def receipt_pdf(
     receipt_id: int,
+    fmt: str = "pdf",
+    disposition: str = "attachment",
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_coach),
 ):
+    """Receipt as PDF or CSV, for inline viewing or download."""
     receipt = db.query(FeeReceipt).filter(FeeReceipt.id == receipt_id).first()
     if not receipt:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Receipt not found")
@@ -253,6 +257,31 @@ def receipt_pdf(
         .first()
     )
     balance_amount = fee.balance_amount if fee else Decimal("0")
+    paid_date = receipt.decided_at.date() if receipt.decided_at else date.today()
+    disposition = "inline" if disposition == "inline" else "attachment"
+
+    if fmt == "csv":
+        headers = ["Receipt No", "Student", "Coach", "Activities", "Period", "Amount", "Balance", "Payment Mode", "Paid Date", "Approved By"]
+        rows = [[
+            f"RCPT-{receipt.id:06d}",
+            student.name if student else "Unknown",
+            current_user.name if current_user.role == UserRole.COACH else (approver.name if approver else "-"),
+            ", ".join(activity_names) or "N/A",
+            f"{receipt.month:02d}/{receipt.year}",
+            receipt.amount,
+            balance_amount,
+            receipt.payment_mode,
+            paid_date.isoformat(),
+            approver.name if approver else "-",
+        ]]
+        buffer = rows_to_csv(headers, rows)
+        log_action(db, current_user.id, "DOWNLOAD_RECEIPT_CSV", "FeeReceipt", receipt.id)
+        db.commit()
+        return Response(
+            content=buffer.read(),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"{disposition}; filename=receipt_{receipt.id}.csv"},
+        )
 
     pdf_bytes = build_fee_receipt_pdf(
         receipt_no=f"RCPT-{receipt.id:06d}",
@@ -263,7 +292,7 @@ def receipt_pdf(
         amount_paid=receipt.amount,
         balance_amount=balance_amount,
         payment_mode=receipt.payment_mode,
-        paid_date=receipt.decided_at.date() if receipt.decided_at else date.today(),
+        paid_date=paid_date,
         approved_by=approver.name if approver else None,
     )
     log_action(db, current_user.id, "DOWNLOAD_RECEIPT_PDF", "FeeReceipt", receipt.id)
@@ -271,5 +300,5 @@ def receipt_pdf(
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=receipt_{receipt.id}.pdf"},
+        headers={"Content-Disposition": f"{disposition}; filename=receipt_{receipt.id}.pdf"},
     )

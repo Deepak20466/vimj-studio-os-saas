@@ -23,11 +23,63 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
   bool _loadingCoaches = true;
   String _coachSearch = '';
 
+  bool _loadingAcademy = true;
+  bool _savingAcademy = false;
+  late final _academyNameCtrl = TextEditingController();
+  late final _academyPhoneCtrl = TextEditingController();
+  late final _academyEmailCtrl = TextEditingController();
+  late final _academyAddressCtrl = TextEditingController();
+  late final _academyDescriptionCtrl = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     _load();
     _loadCoaches();
+    _loadAcademy();
+  }
+
+  Future<void> _loadAcademy() async {
+    setState(() => _loadingAcademy = true);
+    try {
+      final data = await ApiClient.instance.get('/academy') as Map<String, dynamic>;
+      _academyNameCtrl.text = data['name'] as String? ?? '';
+      _academyPhoneCtrl.text = data['phone'] as String? ?? '';
+      _academyEmailCtrl.text = data['email'] as String? ?? '';
+      _academyAddressCtrl.text = data['address'] as String? ?? '';
+      _academyDescriptionCtrl.text = data['description'] as String? ?? '';
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _loadingAcademy = false);
+    }
+  }
+
+  Future<void> _submitAcademy() async {
+    setState(() => _savingAcademy = true);
+    try {
+      await ApiClient.instance.put('/academy', body: {
+        'name': _academyNameCtrl.text.trim(),
+        'phone': _academyPhoneCtrl.text.trim(),
+        'email': _academyEmailCtrl.text.trim(),
+        'address': _academyAddressCtrl.text.trim(),
+        'description': _academyDescriptionCtrl.text.trim(),
+      });
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Academy profile updated')));
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _savingAcademy = false);
+    }
+  }
+
+  Future<void> _toggleCoachActive(Coach c) async {
+    try {
+      await ApiClient.instance.put('/coaches/${c.id}', body: {'is_active': !c.isActive});
+      _loadCoaches();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
   }
 
   Future<void> _load() async {
@@ -77,9 +129,9 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'This permanently erases all attendance, fee, leave, salary, swap, compliance, '
-                'and notification records for every student and coach. Users, activities, and '
-                'batches are kept so the app keeps working right after. This cannot be undone.',
+                'This permanently erases all attendance, fee, and notification records for every '
+                'student and coach. Users, activities, and batches are kept so the app keeps '
+                'working right after. This cannot be undone.',
               ),
               const SizedBox(height: 16),
               const Text('Type RESET to confirm', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -119,6 +171,19 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
     if (saved == true) _loadCoaches();
   }
 
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _currentPasswordCtrl.dispose();
+    _newPasswordCtrl.dispose();
+    _academyNameCtrl.dispose();
+    _academyPhoneCtrl.dispose();
+    _academyEmailCtrl.dispose();
+    _academyAddressCtrl.dispose();
+    _academyDescriptionCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _submit() async {
     if (_currentPasswordCtrl.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter your current password to confirm changes')));
@@ -140,14 +205,6 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
-  }
-
-  @override
-  void dispose() {
-    _emailCtrl.dispose();
-    _currentPasswordCtrl.dispose();
-    _newPasswordCtrl.dispose();
-    super.dispose();
   }
 
   @override
@@ -193,6 +250,41 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
           ),
         ),
         const SizedBox(height: 20),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Academy Profile', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 4),
+              const Text('Shown on generated fee receipts and available to coaches.', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+              const SizedBox(height: 16),
+              if (_loadingAcademy)
+                const Center(child: CircularProgressIndicator())
+              else ...[
+                TextField(controller: _academyNameCtrl, decoration: const InputDecoration(labelText: 'Academy Name')),
+                const SizedBox(height: 12),
+                TextField(controller: _academyPhoneCtrl, decoration: const InputDecoration(labelText: 'Phone'), keyboardType: TextInputType.phone),
+                const SizedBox(height: 12),
+                TextField(controller: _academyEmailCtrl, decoration: const InputDecoration(labelText: 'Email'), keyboardType: TextInputType.emailAddress),
+                const SizedBox(height: 12),
+                TextField(controller: _academyAddressCtrl, decoration: const InputDecoration(labelText: 'Address')),
+                const SizedBox(height: 12),
+                TextField(controller: _academyDescriptionCtrl, decoration: const InputDecoration(labelText: 'Description'), maxLines: 2),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: _savingAcademy ? null : _submitAcademy,
+                  child: _savingAcademy ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Save Changes'),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -231,9 +323,15 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
                                   ],
                                 ),
                                 subtitle: Text(c.email),
-                                trailing: TextButton(
-                                  onPressed: () => _openCoachCredentials(c),
-                                  child: const Text('Change Login'),
+                                trailing: PopupMenuButton<String>(
+                                  onSelected: (v) {
+                                    if (v == 'credentials') _openCoachCredentials(c);
+                                    if (v == 'toggle') _toggleCoachActive(c);
+                                  },
+                                  itemBuilder: (_) => [
+                                    const PopupMenuItem(value: 'credentials', child: Text('Change Login')),
+                                    PopupMenuItem(value: 'toggle', child: Text(c.isActive ? 'Deactivate' : 'Activate')),
+                                  ],
                                 ),
                               ),
                             ))
@@ -253,8 +351,8 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
               const Text('Danger Zone', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.danger)),
               const SizedBox(height: 4),
               const Text(
-                'Reset all attendance, fee, leave, salary, swap, compliance, and notification history '
-                'back to a clean slate. Users, students, coaches, activities, and batches are kept.',
+                'Reset all attendance, fee, and notification history back to a clean slate. Users, '
+                'students, coaches, activities, and batches are kept.',
                 style: TextStyle(color: AppColors.textMuted),
               ),
               const SizedBox(height: 12),

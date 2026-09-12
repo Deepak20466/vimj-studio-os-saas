@@ -93,6 +93,11 @@ def update_me(payload: SelfAccountUpdate, current_user: User = Depends(get_curre
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
         current_user.email = payload.email
 
+    if payload.name:
+        current_user.name = payload.name
+    if payload.phone is not None:
+        current_user.phone = payload.phone
+
     if payload.new_password:
         current_user.password_hash = hash_password(payload.new_password)
 

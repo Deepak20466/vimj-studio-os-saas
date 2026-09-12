@@ -11,182 +11,88 @@ class AdminLeaveTab extends StatefulWidget {
 }
 
 class _AdminLeaveTabState extends State<AdminLeaveTab> {
-  bool _loading = true;
-  bool _pendingOnly = true;
-  List<AdminLeaveRequest> _leaves = [];
+  bool _pendingLoading = true;
+  List<AdminLeaveRequest> _pending = [];
   int? _busyId;
+
+  bool _historyLoading = true;
+  List<AdminLeaveRequest> _history = [];
+  String? _statusFilter;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _loadPending();
+    _loadHistory();
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  Future<void> _loadPending() async {
+    setState(() => _pendingLoading = true);
     try {
-      final data = await ApiClient.instance.get(_pendingOnly ? '/leave/pending' : '/leave') as List;
-      _leaves = data.map((e) => AdminLeaveRequest.fromJson(e as Map<String, dynamic>)).toList();
+      final data = await ApiClient.instance.get('/leave/pending') as List;
+      _pending = data.map((e) => AdminLeaveRequest.fromJson(e as Map<String, dynamic>)).toList();
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _pendingLoading = false);
     }
+  }
+
+  Future<void> _loadHistory() async {
+    setState(() => _historyLoading = true);
+    try {
+      final query = <String, dynamic>{};
+      if (_statusFilter != null) query['status_filter'] = _statusFilter;
+      final data = await ApiClient.instance.get('/leave', query: query) as List;
+      _history = data.map((e) => AdminLeaveRequest.fromJson(e as Map<String, dynamic>)).toList();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _historyLoading = false);
+    }
+  }
+
+  Future<void> _refreshAll() async {
+    await _loadPending();
+    await _loadHistory();
+  }
+
+  Future<String?> _promptReason(String title) {
+    final ctrl = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(title),
+        content: TextField(controller: ctrl, decoration: const InputDecoration(labelText: 'Reason (optional)'), maxLines: 2),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, ctrl.text.trim()), child: const Text('Confirm')),
+        ],
+      ),
+    ).then((value) {
+      ctrl.dispose();
+      return value;
+    });
   }
 
   Future<void> _decide(AdminLeaveRequest l, bool approve) async {
-    final noteCtrl = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(approve ? 'Approve leave' : 'Reject leave'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('${l.coachName ?? "Coach #${l.coachId}"} · ${l.startDate} to ${l.endDate}'),
-            const SizedBox(height: 4),
-            Text(l.reason, style: const TextStyle(color: AppColors.textMuted)),
-            const SizedBox(height: 12),
-            TextField(controller: noteCtrl, decoration: const InputDecoration(labelText: 'Note (optional)')),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(approve ? 'Approve' : 'Reject', style: TextStyle(color: approve ? AppColors.success : AppColors.danger)),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) {
-      noteCtrl.dispose();
-      return;
-    }
     setState(() => _busyId = l.id);
     try {
-      final path = approve ? '/leave/${l.id}/approve' : '/leave/${l.id}/reject';
-      await ApiClient.instance.put(path, body: {'note': noteCtrl.text.trim()});
-      _load();
-    } on ApiException catch (e) {
-      if (mounted) {
-        final message = e.statusCode == 404 ? 'This request no longer exists — refreshing list' : e.message;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-        if (e.statusCode == 404) _load();
+      if (approve) {
+        await ApiClient.instance.put('/leave/${l.id}/approve', body: {'note': null});
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Leave approved')));
+      } else {
+        final note = await _promptReason('Reason for rejecting');
+        if (note == null) {
+          setState(() => _busyId = null);
+          return; // cancelled the dialog
+        }
+        await ApiClient.instance.put('/leave/${l.id}/reject', body: {'note': note.isEmpty ? null : note});
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Leave rejected')));
       }
-    } finally {
-      noteCtrl.dispose();
-      if (mounted) setState(() => _busyId = null);
-    }
-  }
-
-  Future<void> _openEdit(AdminLeaveRequest l) async {
-    final startCtrl = TextEditingController(text: l.startDate);
-    final endCtrl = TextEditingController(text: l.endDate);
-    final reasonCtrl = TextEditingController(text: l.reason);
-
-    Future<void> pickDate(TextEditingController ctrl) async {
-      final picked = await showDatePicker(
-        context: context,
-        initialDate: DateTime.tryParse(ctrl.text) ?? DateTime.now(),
-        firstDate: DateTime(2020),
-        lastDate: DateTime(2100),
-      );
-      if (picked != null) ctrl.text = '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-    }
-
-    final saved = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => Padding(
-          padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text('Edit Leave Request — ${l.coachName ?? "Coach #${l.coachId}"}', style: Theme.of(ctx).textTheme.titleLarge),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: startCtrl,
-                  readOnly: true,
-                  decoration: const InputDecoration(labelText: 'Start date', suffixIcon: Icon(Icons.calendar_today)),
-                  onTap: () async {
-                    await pickDate(startCtrl);
-                    setSheetState(() {});
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: endCtrl,
-                  readOnly: true,
-                  decoration: const InputDecoration(labelText: 'End date', suffixIcon: Icon(Icons.calendar_today)),
-                  onTap: () async {
-                    await pickDate(endCtrl);
-                    setSheetState(() {});
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextField(controller: reasonCtrl, decoration: const InputDecoration(labelText: 'Reason'), maxLines: 3),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: () async {
-                    try {
-                      await ApiClient.instance.put('/leave/${l.id}', body: {
-                        'start_date': startCtrl.text.trim(),
-                        'end_date': endCtrl.text.trim(),
-                        'reason': reasonCtrl.text.trim(),
-                      });
-                      if (ctx.mounted) Navigator.of(ctx).pop(true);
-                    } on ApiException catch (e) {
-                      if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(e.message)));
-                    }
-                  },
-                  child: const Text('Save'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-    startCtrl.dispose();
-    endCtrl.dispose();
-    reasonCtrl.dispose();
-    if (saved == true) _load();
-  }
-
-  Future<void> _remove(AdminLeaveRequest l) async {
-    if (_busyId == l.id) return; // already in flight — ignore a double tap
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Delete leave request?'),
-        content: Text('Delete this leave request from ${l.coachName ?? "Coach #${l.coachId}"}?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete', style: TextStyle(color: AppColors.danger))),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    setState(() => _busyId = l.id);
-    try {
-      await ApiClient.instance.delete('/leave/${l.id}');
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Leave request deleted')));
-      _load();
+      await _refreshAll();
     } on ApiException catch (e) {
-      if (mounted) {
-        // A 404 means the request is already gone (deleted/decided elsewhere,
-        // or a duplicate tap raced this same request) — refresh instead of
-        // leaving a stale card on screen with a confusing permanent error.
-        final message = e.statusCode == 404 ? 'Already gone — refreshing list' : e.message;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-        if (e.statusCode == 404) _load();
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _busyId = null);
     }
@@ -205,104 +111,124 @@ class _AdminLeaveTabState extends State<AdminLeaveTab> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              const Text('Show pending only', style: TextStyle(fontSize: 12)),
-              Switch(
-                value: _pendingOnly,
-                onChanged: (v) {
-                  setState(() => _pendingOnly = v);
-                  _load();
-                },
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: _loading
-              ? const Center(child: CircularProgressIndicator())
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: _leaves.isEmpty
-                      ? ListView(children: [Padding(padding: const EdgeInsets.all(32), child: Center(child: Text('No leave requests${_pendingOnly ? " pending" : ""}.')))])
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(12),
-                          itemCount: _leaves.length,
-                          itemBuilder: (context, i) {
-                            final l = _leaves[i];
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 10),
-                              child: Padding(
-                                padding: const EdgeInsets.all(14),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+    return Scaffold(
+      body: RefreshIndicator(
+        onRefresh: _refreshAll,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text('Pending Leave Requests', style: Theme.of(context).textTheme.titleLarge),
+            const Text(
+              "Approve or reject a coach's leave request. Coaches are notified either way.",
+              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            if (_pendingLoading)
+              const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
+            else if (_pending.isEmpty)
+              const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('No leave requests awaiting a decision.')))
+            else
+              ..._pending.map((l) => Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(l.coachName ?? 'Coach #${l.coachId}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 4),
+                          Text('${l.startDate} to ${l.endDate}', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                          const SizedBox(height: 4),
+                          Text(l.reason),
+                          const SizedBox(height: 8),
+                          _busyId == l.id
+                              ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+                              : Wrap(
+                                  spacing: 8,
                                   children: [
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Expanded(child: Text(l.coachName ?? 'Coach #${l.coachId}', style: const TextStyle(fontWeight: FontWeight.bold))),
-                                        Chip(
-                                          label: Text(l.status, style: const TextStyle(color: Colors.white, fontSize: 11)),
-                                          backgroundColor: _statusColor(l.status),
-                                          visualDensity: VisualDensity.compact,
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text('${l.startDate} to ${l.endDate}', style: const TextStyle(color: AppColors.textMuted)),
-                                    const SizedBox(height: 4),
-                                    Text(l.reason),
-                                    const SizedBox(height: 12),
-                                    if (l.status == 'PENDING')
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: OutlinedButton(
-                                              onPressed: _busyId == l.id ? null : () => _decide(l, false),
-                                              style: OutlinedButton.styleFrom(foregroundColor: AppColors.danger),
-                                              child: const Text('Reject'),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 10),
-                                          Expanded(
-                                            child: ElevatedButton(
-                                              onPressed: _busyId == l.id ? null : () => _decide(l, true),
-                                              child: _busyId == l.id
-                                                  ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                                  : const Text('Approve'),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      children: [
-                                        Expanded(child: TextButton(onPressed: _busyId == l.id ? null : () => _openEdit(l), child: const Text('Edit'))),
-                                        Expanded(
-                                          child: TextButton(
-                                            onPressed: _busyId == l.id ? null : () => _remove(l),
-                                            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-                                            child: _busyId == l.id
-                                                ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                                                : const Text('Delete'),
-                                          ),
-                                        ),
-                                      ],
+                                    ElevatedButton(onPressed: () => _decide(l, true), child: const Text('Approve')),
+                                    OutlinedButton(
+                                      onPressed: () => _decide(l, false),
+                                      style: OutlinedButton.styleFrom(foregroundColor: AppColors.danger),
+                                      child: const Text('Reject'),
                                     ),
                                   ],
                                 ),
-                              ),
-                            );
-                          },
-                        ),
+                        ],
+                      ),
+                    ),
+                  )),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Leave History', style: Theme.of(context).textTheme.titleLarge),
+                DropdownButton<String?>(
+                  value: _statusFilter,
+                  hint: const Text('All statuses'),
+                  items: const [
+                    DropdownMenuItem<String?>(value: null, child: Text('All statuses')),
+                    DropdownMenuItem<String?>(value: 'PENDING', child: Text('Pending')),
+                    DropdownMenuItem<String?>(value: 'APPROVED', child: Text('Approved')),
+                    DropdownMenuItem<String?>(value: 'REJECTED', child: Text('Rejected')),
+                  ],
+                  onChanged: (v) {
+                    setState(() => _statusFilter = v);
+                    _loadHistory();
+                  },
                 ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (_historyLoading)
+              const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
+            else if (_history.isEmpty)
+              const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('No leave requests found.')))
+            else
+              ..._history.map((l) {
+                final decisionNote = l.decisionNote;
+                final createdAt = l.createdAt;
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(child: Text(l.coachName ?? 'Coach #${l.coachId}', style: const TextStyle(fontWeight: FontWeight.bold))),
+                            Chip(
+                              label: Text(l.status, style: const TextStyle(fontSize: 11, color: Colors.white)),
+                              backgroundColor: _statusColor(l.status),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text('${l.startDate} to ${l.endDate}', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                        const SizedBox(height: 4),
+                        Text(l.reason),
+                        if (decisionNote != null && decisionNote.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text('Note: $decisionNote', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                        ],
+                        if (createdAt != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Submitted ${DateTime.tryParse(createdAt)?.toLocal().toString().substring(0, 16) ?? createdAt}',
+                            style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              }),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

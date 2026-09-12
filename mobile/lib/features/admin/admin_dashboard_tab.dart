@@ -26,17 +26,16 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final now = DateTime.now();
       final results = await Future.wait([
-        ApiClient.instance.get('/reports/dashboard-summary'),
-        ApiClient.instance.get('/reports/fee-status-graph'),
+        ApiClient.instance.get('/dashboard/summary'),
+        ApiClient.instance.get('/dashboard/fee-status'),
         ApiClient.instance.get('/attendance/daily-missing'),
-        ApiClient.instance.get('/reports/monthly-analysis', query: {'month': now.month, 'year': now.year}),
+        ApiClient.instance.get('/dashboard/activity-attendance'),
       ]);
       _summary = results[0] as Map<String, dynamic>;
       _feeGraph = results[1] as Map<String, dynamic>;
       _missing = results[2] as List<dynamic>;
-      _activityBreakdown = (results[3] as Map<String, dynamic>)['activity_breakdown'] as List<dynamic>? ?? [];
+      _activityBreakdown = (results[3] as Map<String, dynamic>)['points'] as List<dynamic>? ?? [];
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
@@ -90,6 +89,7 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
               _statCard('Coaches', '${s['total_coaches'] ?? 0}'),
               _statCard('Classes this month', '${s['total_classes_this_month'] ?? 0}'),
               _statCard('Monthly revenue', '₹${s['monthly_revenue'] ?? 0}'),
+              _statCard('Unpaid/overdue fees', '${s['unpaid_fees_count'] ?? 0}'),
             ],
           ),
           const SizedBox(height: 20),

@@ -14,98 +14,38 @@ from app.models.attendance import (
     AttendanceStatus,
     CoachAttendance,
     CoachAttendanceStatus,
+    AttendanceApprovalStatus,
 )
-from app.models.leave import CoachLeave, LeaveStatus
-from app.models.swap import CoachSwap, SwapStatus
-from app.models.compliance import AttendanceSubmission, LateStatus
 from app.schemas.attendance import (
     MarkStudentAttendanceRequest,
     ManualAttendanceRequest,
     StudentAttendanceOut,
     StudentAttendanceUpdate,
     StudentAttendanceAdminOut,
+    AttendanceReviewRequest,
     CoachEntryExitRequest,
     CoachAttendanceOut,
+    CoachAttendanceAdminOut,
+    CoachAttendanceManualCreate,
+    CoachAttendanceManualUpdate,
     MissingCoachOut,
 )
 from app.security import get_current_user, require_admin, require_coach, require_admin_or_coach
 from app.services.geofence import geofence_check
 from app.services.storage import save_selfie
 from app.services.audit import log_action
+from app.services.notifications import notify_and_push
 
 router = APIRouter(prefix="/attendance", tags=["attendance"])
 
 # How long after a class ends a coach is still allowed to mark attendance for it.
 MARK_DEADLINE_MINUTES = 60
-# Beyond this, a mark is considered "late" and needs a reason + admin approval.
-LATE_MARK_MINUTES = 10
-
-
-def _get_or_create_submission(db: Session, class_session: ClassSession, coach_id: int, late_reason: Optional[str]) -> AttendanceSubmission:
-    """First attendance mark for a class records the submission.
-
-    Marking itself is never blocked by lateness (that would break the existing mark
-    flow, including the mobile app, for marks made within the existing 60-minute
-    MARK_DEADLINE_MINUTES window). If the mark is late, it's flagged for admin
-    review; the coach can supply/confirm the reason immediately via late_reason on
-    this request, or afterwards via POST /compliance/late-reason.
-    """
-    submission = db.query(AttendanceSubmission).filter(AttendanceSubmission.class_id == class_session.id).first()
-    if submission:
-        return submission
-
-    class_end_dt = datetime.combine(class_session.date, class_session.end_time)
-    is_late = datetime.now() > class_end_dt + timedelta(minutes=LATE_MARK_MINUTES)
-
-    submission = AttendanceSubmission(
-        class_id=class_session.id,
-        coach_id=coach_id,
-        submitted_at=datetime.now(),
-        is_late=is_late,
-        late_reason=late_reason if is_late else None,
-        late_status=LateStatus.PENDING if (is_late and late_reason) else LateStatus.NONE,
-    )
-    db.add(submission)
-    db.flush()
-    return submission
-
-
-def _coach_is_on_leave(db: Session, coach_id: int, on_date) -> bool:
-    return (
-        db.query(CoachLeave)
-        .filter(
-            CoachLeave.coach_id == coach_id,
-            CoachLeave.status == LeaveStatus.APPROVED,
-            CoachLeave.start_date <= on_date,
-            CoachLeave.end_date >= on_date,
-        )
-        .first()
-        is not None
-    )
 
 
 def _resolve_marking_coach(db: Session, class_session: ClassSession, current_user: User) -> int:
-    """Return the coach_id allowed to mark this class: the assigned coach, or an approved swap covering coach."""
+    """Return the coach_id allowed to mark this class: only the assigned coach."""
     if current_user.id == class_session.coach_id:
-        if _coach_is_on_leave(db, current_user.id, class_session.date):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are on approved leave and cannot mark attendance for this class",
-            )
         return current_user.id
-
-    swap = (
-        db.query(CoachSwap)
-        .filter(
-            CoachSwap.class_id == class_session.id,
-            CoachSwap.covering_coach_id == current_user.id,
-            CoachSwap.status == SwapStatus.APPROVED,
-        )
-        .first()
-    )
-    if swap:
-        return current_user.id
-
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not assigned to this class")
 
 
@@ -157,8 +97,6 @@ def mark_student_attendance(
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Attendance already marked for this student")
 
-    _get_or_create_submission(db, class_session, coach_id, payload.late_reason)
-
     selfie_bytes = None
     if payload.status == AttendanceStatus.PRESENT:
         if not payload.selfie_base64:
@@ -193,20 +131,6 @@ def mark_student_attendance_manual(
     if not class_session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
 
-    submission = db.query(AttendanceSubmission).filter(AttendanceSubmission.class_id == class_session.id).first()
-    if not submission:
-        # An admin's own backfill is authoritative and never needs the late-approval
-        # workflow that a coach's own late mark goes through.
-        db.add(
-            AttendanceSubmission(
-                class_id=class_session.id,
-                coach_id=class_session.coach_id,
-                submitted_at=datetime.now(),
-                is_late=False,
-                late_status=LateStatus.NONE,
-            )
-        )
-
     existing = (
         db.query(StudentAttendance)
         .filter(
@@ -218,6 +142,7 @@ def mark_student_attendance_manual(
     if existing:
         existing.status = payload.status
         existing.coach_id = class_session.coach_id
+        existing.approval_status = AttendanceApprovalStatus.APPROVED
         record = existing
     else:
         record = StudentAttendance(
@@ -226,6 +151,7 @@ def mark_student_attendance_manual(
             status=payload.status,
             coach_id=class_session.coach_id,
             marked_manually=1,
+            approval_status=AttendanceApprovalStatus.APPROVED,
         )
         db.add(record)
 
@@ -243,8 +169,6 @@ def coach_entry(
     current_user: User = Depends(require_coach),
 ):
     today = datetime.now().date()
-    if _coach_is_on_leave(db, current_user.id, today):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are on approved leave today")
 
     within, distance, radius = geofence_check(float(payload.location_lat), float(payload.location_lng))
     if not within:
@@ -309,6 +233,7 @@ def list_student_attendance(
     coach_id: Optional[int] = None,
     student_id: Optional[int] = None,
     status_filter: Optional[AttendanceStatus] = None,
+    approval_status: Optional[AttendanceApprovalStatus] = None,
     date_from: Optional[date_type] = None,
     date_to: Optional[date_type] = None,
     db: Session = Depends(get_db),
@@ -330,6 +255,8 @@ def list_student_attendance(
         query = query.filter(StudentAttendance.student_id == student_id)
     if status_filter:
         query = query.filter(StudentAttendance.status == status_filter)
+    if approval_status:
+        query = query.filter(StudentAttendance.approval_status == approval_status)
     if date_from:
         query = query.filter(ClassSession.date >= date_from)
     if date_to:
@@ -354,16 +281,24 @@ def list_student_attendance(
                 timestamp=r.timestamp,
                 marked_manually=bool(r.marked_manually),
                 has_selfie=bool(r.selfie_photo),
+                approval_status=r.approval_status,
             )
         )
     return result
 
 
 def _authorize_own_attendance_edit(db: Session, current_user: User, record: StudentAttendance) -> None:
-    """Coaches may only correct records they marked themselves, on the same day the class was held."""
+    """Coaches may only correct records they marked themselves, on the same day the class was
+    held, and only while admin hasn't reviewed the record yet. Once admin approves or rejects a
+    record, it is locked from the coach's side — only admin's own tools can change it further."""
     if current_user.role == UserRole.COACH:
         if record.coach_id != current_user.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+        if record.approval_status != AttendanceApprovalStatus.PENDING:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This record has already been reviewed by admin and can no longer be changed",
+            )
         if record.class_session.date != datetime.now().date():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -404,6 +339,174 @@ def delete_student_attendance(
     _authorize_own_attendance_edit(db, current_user, record)
 
     log_action(db, current_user.id, "DELETE", "StudentAttendance", record.id)
+    db.delete(record)
+    db.commit()
+
+
+@router.put("/students/{attendance_id}/approve", response_model=StudentAttendanceOut)
+def approve_student_attendance(
+    attendance_id: int,
+    payload: AttendanceReviewRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    record = db.query(StudentAttendance).filter(StudentAttendance.id == attendance_id).first()
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attendance record not found")
+    if record.approval_status != AttendanceApprovalStatus.PENDING:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This record has already been reviewed")
+
+    record.approval_status = AttendanceApprovalStatus.APPROVED
+    log_action(db, current_user.id, "APPROVE_ATTENDANCE", "StudentAttendance", record.id, details=payload.note)
+    db.commit()
+    db.refresh(record)
+
+    coach = db.query(User).filter(User.id == record.coach_id).first() if record.coach_id else None
+    if coach:
+        notify_and_push(
+            db, coach,
+            f"Your attendance mark for {record.student.name if record.student else 'a student'} on "
+            f"{record.class_session.date} was approved and is now locked.",
+            "Attendance approved", "ATTENDANCE_DECIDED", link="/coach/attendance",
+        )
+        db.commit()
+    return record
+
+
+@router.put("/students/{attendance_id}/reject", response_model=StudentAttendanceOut)
+def reject_student_attendance(
+    attendance_id: int,
+    payload: AttendanceReviewRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    record = db.query(StudentAttendance).filter(StudentAttendance.id == attendance_id).first()
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attendance record not found")
+    if record.approval_status != AttendanceApprovalStatus.PENDING:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This record has already been reviewed")
+
+    record.approval_status = AttendanceApprovalStatus.REJECTED
+    log_action(db, current_user.id, "REJECT_ATTENDANCE", "StudentAttendance", record.id, details=payload.note)
+    db.commit()
+    db.refresh(record)
+
+    coach = db.query(User).filter(User.id == record.coach_id).first() if record.coach_id else None
+    if coach:
+        notify_and_push(
+            db, coach,
+            f"Your attendance mark for {record.student.name if record.student else 'a student'} on "
+            f"{record.class_session.date} was rejected"
+            + (f": {payload.note}" if payload.note else ".")
+            + " Contact admin to have it corrected.",
+            "Attendance rejected", "ATTENDANCE_DECIDED", link="/coach/attendance",
+        )
+        db.commit()
+    return record
+
+
+@router.get("/coaches", response_model=List[CoachAttendanceAdminOut])
+def list_coach_attendance(
+    coach_id: Optional[int] = None,
+    date_from: Optional[date_type] = None,
+    date_to: Optional[date_type] = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Admin view of coach facility entry/exit records, for manual reporting/CRUD."""
+    query = db.query(CoachAttendance)
+    if coach_id:
+        query = query.filter(CoachAttendance.coach_id == coach_id)
+    if date_from:
+        query = query.filter(CoachAttendance.date >= date_from)
+    if date_to:
+        query = query.filter(CoachAttendance.date <= date_to)
+
+    records = query.order_by(CoachAttendance.date.desc()).limit(500).all()
+    coaches = {u.id: u.name for u in db.query(User).filter(User.id.in_([r.coach_id for r in records])).all()}
+    return [
+        CoachAttendanceAdminOut(
+            id=r.id,
+            coach_id=r.coach_id,
+            coach_name=coaches.get(r.coach_id, "Unknown"),
+            date=r.date,
+            entry_time=r.entry_time,
+            exit_time=r.exit_time,
+            status=r.status,
+        )
+        for r in records
+    ]
+
+
+@router.post("/coaches/manual", response_model=CoachAttendanceOut, status_code=status.HTTP_201_CREATED)
+def create_coach_attendance_manual(
+    payload: CoachAttendanceManualCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Admin manual entry for a coach's facility attendance — bypasses geofencing."""
+    coach = db.query(User).filter(User.id == payload.coach_id, User.role == UserRole.COACH).first()
+    if not coach:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Coach not found")
+
+    existing = (
+        db.query(CoachAttendance)
+        .filter(CoachAttendance.coach_id == payload.coach_id, CoachAttendance.date == payload.date)
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Attendance record already exists for this coach on this date")
+
+    record = CoachAttendance(
+        coach_id=payload.coach_id,
+        date=payload.date,
+        entry_time=datetime.combine(payload.date, payload.entry_time) if payload.entry_time else None,
+        exit_time=datetime.combine(payload.date, payload.exit_time) if payload.exit_time else None,
+        status=payload.status,
+    )
+    db.add(record)
+    db.flush()
+    log_action(db, current_user.id, "MANUAL_MARK_COACH_ATTENDANCE", "CoachAttendance", record.id)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+@router.put("/coaches/{attendance_id}", response_model=CoachAttendanceOut)
+def update_coach_attendance(
+    attendance_id: int,
+    payload: CoachAttendanceManualUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    record = db.query(CoachAttendance).filter(CoachAttendance.id == attendance_id).first()
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Coach attendance record not found")
+
+    if payload.entry_time is not None:
+        record.entry_time = datetime.combine(record.date, payload.entry_time)
+    if payload.exit_time is not None:
+        record.exit_time = datetime.combine(record.date, payload.exit_time)
+    if payload.status is not None:
+        record.status = payload.status
+
+    log_action(db, current_user.id, "UPDATE", "CoachAttendance", record.id)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+@router.delete("/coaches/{attendance_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_coach_attendance(
+    attendance_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    record = db.query(CoachAttendance).filter(CoachAttendance.id == attendance_id).first()
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Coach attendance record not found")
+
+    log_action(db, current_user.id, "DELETE", "CoachAttendance", record.id)
     db.delete(record)
     db.commit()
 

@@ -18,6 +18,7 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
   List<RosterStudent> _students = [];
   bool _loading = true;
   int? _downloadingId;
+  int? _downloadingCsvId;
 
   @override
   void initState() {
@@ -88,6 +89,18 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
     }
   }
 
+  Future<void> _downloadCsv(FeeReceiptRecord r) async {
+    setState(() => _downloadingCsvId = r.id);
+    try {
+      final bytes = await ApiClient.instance.getBytes('/receipts/${r.id}/pdf', query: {'fmt': 'csv'});
+      await shareExportedFile(bytes, 'receipt_${r.id}.csv');
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _downloadingCsvId = null);
+    }
+  }
+
   Color _statusColor(String status) {
     switch (status) {
       case 'APPROVED':
@@ -131,10 +144,14 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                if (r.status == 'APPROVED')
+                                if (r.status == 'APPROVED') ...[
                                   _downloadingId == r.id
                                       ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                                       : IconButton(icon: const Icon(Icons.picture_as_pdf_outlined), tooltip: 'Receipt (PDF)', onPressed: () => _downloadPdf(r)),
+                                  _downloadingCsvId == r.id
+                                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                                      : IconButton(icon: const Icon(Icons.table_chart_outlined), tooltip: 'Receipt (CSV)', onPressed: () => _downloadCsv(r)),
+                                ],
                                 Chip(label: Text(r.status, style: const TextStyle(fontSize: 11, color: Colors.white)), backgroundColor: _statusColor(r.status)),
                               ],
                             ),

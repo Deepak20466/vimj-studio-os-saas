@@ -1,5 +1,21 @@
 Act as a senior developer and build a complete Production-ready Attendance Management System. *First inspect the existing repository and do not rewrite working functionality unnecessarily.* If this a new project create the architecture below.
 
+> **⚠️ 2026-09-12 — Both dashboards rebuilt to reduced scopes, same day.** The
+> admin dashboard was rebuilt first around 7 sections (Students, Coaches,
+> Attendance, Activities incl. Batches, Fees, Settings, Notifications), then
+> the coach dashboard was rebuilt around 6 sections (Students, Attendance incl.
+> an admin-approval lock + photo, Leave, Fees, Settings, Notifications) in a
+> second round the same day. The 15 requirements and full API list below are
+> the **pre-2026-09-12 architecture** — still accurate for anything not called
+> out in the "2026-09-12 ADMIN DASHBOARD REBUILD" and "2026-09-12 COACH
+> DASHBOARD REBUILD" sections near the end of this file. Leave came back
+> system-wide as part of the coach round (it had been deleted in the admin
+> round) with a fresh, simpler shape — coach requests, admin approves/rejects,
+> no leave-balance concept, no leave-blocking of attendance marking. Salary,
+> Coach Swapping, Chat, and Compliance remain deleted and are NOT coming back
+> as part of this round. Do not "fix" old broken calls by resurrecting deleted
+> backend without an explicit decision to do so.
+
 # VIMJ Studio Attendance System -
 
 **Tech Stack:**  Frontend web - react js, dashboard ui, analytics charts, React ui.
@@ -287,6 +303,20 @@ signing config) and were never on GitHub before this fix; every fresh
 checkout silently reverted to Flutter's defaults. See `mobile/README.md`.
 
 ### Coach App
+> **Superseded 2026-09-12 — see "COACH DASHBOARD REBUILD" above for the
+> current, accurate section list.** The bullet list below describes the
+> pre-2026-09-12 design (9 sections including Swaps/Chat/Salary) and is kept
+> only for its still-accurate mechanics (GPS/selfie flow, offline queue,
+> notification poller, biometric login, theme). As of 2026-09-12 the coach app
+> has exactly 6 sections — Students, Attendance (now with an admin-approval
+> lock + photo visibility), Leave (resurrected in a simpler shape), Fees
+> (Receipts/Fee Reminders), Settings (new — profile edit/password/theme/reset),
+> and the Notifications bell — with Swaps/Chat/Salary and the Compliance-tied
+> half of Classes (batch photo, not-conducted, late-reason) deleted. Bottom-nav
+> shell (`lib/features/coach/coach_home.dart`) is now 4 primary tabs
+> (Dashboard/Classes/Students/Attendance) + a "More" sheet (Leave/Receipts/Fee
+> Reminders/Settings).
+
 Bottom-nav shell (`lib/features/coach/`) with 4 primary tabs (Dashboard,
 Classes, Leave, Swaps) plus a "More" sheet — same overflow pattern as the
 web dashboard's `Layout.jsx` — for My Students, Fee Receipts, Fee Reminders,
@@ -330,6 +360,14 @@ Chat, and Profile. Full parity with the web coach dashboard's 9 sections
   sender using that project's credentials — none of which exists yet.
 
 ### Admin App
+> **Superseded 2026-09-12 — see "ADMIN DASHBOARD REBUILD" above for the
+> current section list** (Dashboard, Students, Coaches, Attendance, Activities
+> incl. Batches, Fees, Settings incl. Academy Profile, Notifications — plus a
+> `AdminLeaveTab` added back into the "More" sheet in the coach-rebuild round
+> right after). Compliance, Salary, Reports, and About are gone; Batches
+> stayed mobile-only (stripped of its swap-dependent panels) rather than
+> folding into Activities the way web did.
+
 Same login screen, routed by role. Bottom-nav shell (`lib/features/admin/admin_home.dart`)
 as of 2026-09-09 — 4 primary tabs (Dashboard/Students/Coaches/Attendance) plus a
 "More" sheet for the other 10, matching the Coach app and the web dashboard's
@@ -463,6 +501,238 @@ AppBar (covers all 14 sections, unlike the coach app's per-tab placement).
    Compliance view already displayed these correctly on both platforms
    (`admin_compliance_tab.dart`'s `_viewPhotos`, web `Compliance.jsx`) — no
    changes needed there.
+
+---
+
+## 2026-09-12 ADMIN DASHBOARD REBUILD — client-directed feature cut
+
+Client feedback: the admin dashboard had grown too large and bug-prone.
+Instruction was to delete entire sections rather than keep patching them, and
+rebuild the admin side around exactly 7 requirements, same brand colors. Coach
+requirements are being defined separately in a follow-up round — the coach app
+was **not** touched to that new spec this round (see the warning banner at the
+top of this file).
+
+**Deleted system-wide** (backend routers + models + schemas + DB tables via
+Alembic migration `0013`, web pages/components, mobile tabs/screens):
+Leave (`CoachLeave`), Salary (`CoachSalary`), Coach Swapping (`CoachSwap`),
+Chat (`ChatMessage`), Compliance (`AttendanceSubmission`, `ClassSkipReason`,
+`ClassPhoto` — late-attendance approval, class-not-conducted reasons, batch
+photos), and the standalone Reports/Analytics section (`/reports/*`:
+individual student/coach reports, monthly business analytics, 100%-attendance
+coaches, month-over-month comparison, CSV/PDF exports for those). Requirement
+items #3 (coach attendance reminder's late-approval half), #7 (salary
+acknowledgment), #8 (coach swapping), #10 (end-of-day missing report's
+leave-exclusion logic), #11/#12 (leave management/approval), and #13
+(100%-attendance report) from the original 15 no longer exist. Attendance
+marking itself (`POST /attendance/mark-student`) is simplified: no more
+leave-blocking, no more swap-covering-coach check, no more late-submission
+tracking — a coach can only mark their own assigned class, full stop.
+
+**New:** `GET /dashboard/summary` / `/dashboard/fee-status` /
+`/dashboard/activity-attendance` (`backend/app/routers/dashboard.py`) replace
+`/reports/dashboard-summary`, `/reports/fee-status-graph`, and
+`/reports/monthly-analysis`'s `activity_breakdown` respectively, feeding the
+same bar/pie charts (recharts on web, fl_chart on mobile) that already existed
+on the Dashboard — the visual design didn't change, only where the data comes
+from. Admin can now also CRUD **coach** facility attendance manually (add/edit/
+delete), not just student attendance: `GET/POST /attendance/coaches`,
+`POST /attendance/coaches/manual`, `PUT`/`DELETE /attendance/coaches/{id}`
+(web: second section on the Attendance page; mobile: second section on
+`admin_attendance_tab.dart`). Fee receipts (`GET /fees/{id}/receipt`,
+`GET /receipts/{id}/pdf`) now take `fmt=pdf|csv` and `disposition=
+attachment|inline` query params — same `receipt_pdf.py` template/logo/colors,
+just also exportable as CSV and viewable inline (web: opens a new tab; mobile:
+still shares via the OS share sheet, `fmt` just changes the shared file's
+extension/content). Settings gained an Academy Profile editor (`AcademyAPI`,
+pre-existing backend, previously only reachable via the deleted "About" page)
+and a coach activate/deactivate toggle, on both web and mobile.
+
+**Web nav** (`frontend/src/App.jsx`'s `ADMIN_LINKS`) is now exactly: Dashboard,
+Students, Coaches, Attendance, Activities, Fees, Settings — Batches was folded
+into Activities' pre-existing per-activity "Sessions" modal (batch CRUD +
+roster) rather than kept as a 8th top-level page; `pages/Batches.jsx` was
+deleted. **Mobile** (`admin_home.dart`) kept Batches as its own "More"-sheet
+entry instead (stripped of the Reassign-Coach/Pending-Swap-Requests/Recent-
+Reassignments panels, which were swap-dependent) — a deliberate small
+divergence from web, not an oversight; both approaches satisfy requirement 4
+("Batches creation with proper crud options... your preferred specifications").
+
+**Per-student/coach/activity "View Report" buttons removed** from Students.jsx,
+Coaches.jsx, Activities.jsx (web) and their mobile equivalents — they opened
+`StudentReportPanel`/`CoachReportPanel`/`ActivityReportPanel` (web, now
+deleted) or `ReportScreen`/`ActivityReportScreen` (mobile, now deleted), both
+of which called the now-gone `/reports/*` endpoints. Plain CRUD (add/edit/
+delete/activate/deactivate) remains on all three, matching requirements 1 and
+2's literal wording.
+
+**Left alone / still present, do not re-delete:** `academy.py` (backend
+router/model) — kept because it now backs the Settings > Academy Profile
+editor; `receipts.py` and `fee_reminders.py` (coach-submitted, admin-approved
+fee receipts/reminders) — not on the client's deletion list, still feed the
+Fees page's approval queues; `services/export.py`'s `rows_to_csv`/
+`rows_to_pdf` — trimmed of the two Reports-only PDF builders
+(`build_monthly_analysis_pdf`, `build_coach_monthly_report_pdf`) but kept for
+reuse by the new fee-receipt CSV export; `coaches.py`'s `GET /coaches/
+directory` endpoint — originally described as "used to pick a covering coach
+for a swap," now unused by admin but harmless, left in place.
+
+**Verified live, not just by inspection** (per this repo's testing
+convention): backend endpoints curl-tested directly (dashboard charts, coach-
+attendance manual CRUD, fee receipt CSV); web frontend driven end-to-end with
+Playwright/Firefox (22/22 scripted checks — login, simplified nav, dashboard
+charts, student CRUD create+delete, coach-attendance CRUD create+list+delete,
+fees View/PDF/CSV buttons, Settings Academy Profile + coach activate toggle);
+mobile driven via the established Flutter web-server (port 8082) +
+Playwright/Firefox coordinate-click technique (`flutter analyze`: 0 errors/
+warnings; screenshotted the Dashboard's live bar+pie charts, the Attendance
+tab's Student and Coach sections with real CRUD data, the More sheet's exact
+5-item contents, the Fees screen's PDF/CSV buttons, and Settings' Academy
+Profile + coach account list) — no Android emulator available in this
+environment, so the native share-sheet/PDF-viewer behavior on a real device
+is still unverified, consistent with prior sessions' documented limitation.
+
+---
+
+## 2026-09-12 COACH DASHBOARD REBUILD — client-directed feature cut, round 2
+
+Same day as the admin rebuild above, same client pattern (see
+`[[feedback-cut-scope-not-patch]]` in memory): a short numbered list of exactly
+6 requirements, everything else gone. Unlike the admin round, one previously-
+deleted feature came back — **Leave management** — but reshaped to the new,
+simpler spec rather than restored as it was.
+
+**The 6 requirements, mapped to what shipped:**
+1. **Students** — already full CRUD on both web (`CoachStudents.jsx`) and
+   mobile (`coach_students_tab.dart`); untouched, no gap existed.
+2. **Attendance marking + admin-approval lock + photo visibility** — new. Every
+   `StudentAttendance` row now carries `approval_status` (`PENDING` on a
+   coach's own mark, auto-`APPROVED` on an admin manual entry). While
+   `PENDING`, the marking coach can still edit/delete it same-day exactly as
+   before; the moment admin approves or **rejects** it via the new
+   `PUT /attendance/students/{id}/approve` / `.../reject`, it is **permanently
+   locked from the coach's side** — a reject does NOT reopen it for
+   re-marking, only admin's own manual-entry/edit/delete tools can still touch
+   it (an explicit client choice, not the default "reopen on reject" option).
+   The selfie a coach already captured on marking is now visible to the coach
+   too, not just admin: web's `CoachClasses.jsx`/`CoachAttendance.jsx` and
+   mobile's `mark_attendance_screen.dart`/`coach_facility_attendance_tab.dart`
+   all gained a "View Photo" action (same authenticated-blob pattern as the
+   existing admin "View Selfie", `GET /attendance/selfie/{id}` already allowed
+   the marking coach — no backend RBAC change needed there). Admin's
+   `Attendance.jsx` / `admin_attendance_tab.dart` gained Approve/Reject actions
+   per pending row (shown only while `approval_status == PENDING`) and a
+   review-status filter/column. Deliberately scoped to **student** attendance
+   only — coach's own facility entry/exit (`CoachAttendance`) has no approval
+   concept, since the client's wording ("attendance of each student") pointed
+   at student records specifically; adding it there would have been scope
+   creep nobody asked for.
+3. **Leave management** — resurrected system-wide with a fresh, simpler shape
+   (new `CoachLeave` model/table via Alembic `0014`, new
+   `backend/app/routers/leave.py`): coach `POST /leave/request` /
+   `GET /leave/my` / `DELETE /leave/{id}` (cancel, PENDING-only), admin
+   `GET /leave/pending` / `GET /leave` / `PUT /leave/{id}/approve|reject`. No
+   leave-balance/entitlement concept (the old pre-cut design had one; this
+   round's client list didn't ask for it) and no generic edit endpoint (cancel
+   and resubmit instead) — both deliberate simplifications, not oversights.
+   Leave does **not** block attendance marking (the original requirement #12's
+   behavior) — that coupling was cut along with everything else in the admin
+   round and nothing in this round's client list asked to bring it back. New
+   web `pages/Leave.jsx` (admin, added as an 8th top-level nav item — the
+   client's explicit choice over folding it into an existing page, unlike how
+   Batches folded into Activities) and `pages/coach/CoachLeave.jsx`; new mobile
+   `admin_leave_tab.dart` (recreated from scratch — the pre-cut version was
+   deleted in the admin round) and a simplified `leave_tab.dart` (dropped its
+   old balance-grid and edit-mode).
+4. **Fees — receipt PDF/CSV view + download** — the backend
+   (`GET /receipts/{id}/pdf?fmt=pdf|csv&disposition=inline|attachment`) already
+   supported this from the admin round; the gap was purely in the coach UI.
+   Web `CoachReceipts.jsx` gained View (inline, new tab) alongside the
+   existing PDF download, plus a CSV button. Mobile `coach_receipts_tab.dart`
+   gained a CSV share-sheet export alongside the existing PDF one (no inline
+   "View" on mobile — this app's established convention is share-sheet-only
+   exports on mobile, there's no in-app PDF viewer anywhere else either, so
+   PDF+CSV via share sheet already satisfies "view and download" on this
+   platform). Same receipt PDF template/logo/colors throughout — untouched.
+5. **Settings — reset + "some extra functions"** — the coach reset-mine danger
+   zone already existed on mobile only; web had **no coach Settings page at
+   all**. New web `pages/coach/CoachSettings.jsx` and a repurposed mobile
+   `coach_profile_tab.dart` (kept the filename, dropped its dead
+   attendance-%/salary-history section) both now offer: profile edit
+   (name/phone/login email via an extended `PUT /auth/me`, which gained
+   optional `name`/`phone` fields), password change, a theme toggle, and the
+   reset-mine danger zone (copy corrected to no longer mention "swap history").
+   `POST /reset/mine` and `POST /reset/all` were extended to also wipe
+   `CoachLeave` rows.
+6. **Notifications + light/dark mode** — the in-app bell/notification-center
+   (web `NotificationBell.jsx`, mobile's polling service) was already generic
+   and unaffected by any of this — no changes needed. Real SMS for
+   coach-facing notifications was explicitly declined (client's own choice
+   when asked): stays in-app only, `NOTIFICATIONS_ENABLED` stays `false` in
+   production, same as every other notification in this system. Dark/light
+   mode already existed (web `Layout.jsx` topbar toggle, mobile
+   `ThemeToggleTile`) — now also duplicated into the new Settings pages on
+   both platforms for discoverability, matching the admin app's pattern.
+
+**Deleted system-wide** (the coach-side leftovers that were already broken
+after the admin round, per that section's warning): Coach Swapping
+(`frontend/src/pages/coach/CoachSwaps.jsx`, mobile `swap_tab.dart`), Chat
+(`CoachChat.jsx`, `components/ChatThread.jsx`, mobile `coach_chat_tab.dart`),
+Salary (`CoachSalary.jsx` and the salary-history half of
+`coach_profile_tab.dart`), and the Compliance-tied half of the class-marking
+flow (batch-photo upload, "class not conducted" reporting, late-mark reason —
+`frontend/src/pages/coach/CoachClasses.jsx` and mobile `classes_tab.dart` both
+had this code even though the backend was already gone; now removed on both).
+`frontend/src/api/endpoints.js`'s dead `SwapAPI`/`ChatAPI`/`ComplianceAPI`
+exports and `CoachSelfAPI`'s dead leave/salary/report methods were deleted
+outright (no longer needed as build-only stubs — new `LeaveAPI` replaces the
+old leave methods).
+
+**Web nav** (`frontend/src/App.jsx`): `ADMIN_LINKS` gained a `Leave` entry
+before Settings (8 items total: Dashboard, Students, Coaches, Attendance,
+Activities, Fees, Leave, Settings). `COACH_LINKS` is now exactly Dashboard,
+Classes, Students, Attendance, Leave, Receipts, Fee Reminders, Settings (8
+items, first 4 primary tabs + 4 in the "More" sheet via `Layout.jsx`'s
+existing overflow pattern — no `Layout.jsx` changes needed). **Mobile**
+(`admin_home.dart`): `AdminLeaveTab` inserted into the "More" sheet right
+before Settings. `coach_home.dart`: primary tabs Dashboard/Classes/Students/
+Attendance (Students and Attendance promoted out of the old "More" sheet);
+More sheet now Leave/Receipts/Fee Reminders/Settings.
+
+**Verified live** (not just by inspection, per this repo's testing
+convention): backend curl-tested directly (leave request→approve→notify→
+cancel-blocked cycle; attendance mark→admin-approve→coach-edit-blocked-400
+cycle, and the reject variant; receipt create→approve→view-inline→
+download-csv cycle; `PUT /auth/me` name/phone update; `/reset/mine` now
+deleting leave rows too). Web driven end-to-end with Playwright/Firefox
+(coach nav/More-sheet contents, Leave submit→admin-approve→coach-sees-status
+round trip across two separate browser sessions, Settings profile+theme
+render, Receipts View/PDF/CSV buttons all present and functional). Mobile
+driven via the same Flutter web-server (port 8082) + Playwright/Firefox
+coordinate-click technique used in the admin round: `flutter analyze` clean
+(0 errors/warnings, same 14 pre-existing info-level notices as before this
+change); screenshotted and functionally exercised the coach bottom-nav/More
+sheet, the Leave screen (confirmed it reflects a decision made from the web
+session moments earlier — real cross-platform state, not two disconnected
+mocks), the Settings screen (profile fields correctly pre-filled from
+`GET /auth/me`, corrected danger-zone copy), the coach Attendance tab's
+"View Photo" action (the actual uploaded selfie bytes rendered, not a
+placeholder), and the admin side's Approve action on both the Attendance tab
+(status flipped PENDING→APPROVED live, action icons correctly disappeared
+afterward, confirmation snackbar shown) and the new Leave tab (pending
+request moved into history as APPROVED live). No Android emulator available
+in this environment, so real-device-only concerns (gesture-nav safe areas,
+native share-sheet behavior) remain unverified here, consistent with every
+prior mobile round's documented limitation — worth a real-device smoke test
+before assuming the CSV export share sheet is flawless.
+
+Backend (port 8000) and web frontend dev server (port 5173) were left running
+at the end of this session; the Flutter web-server test instance was shut
+down. Hit the login rate limiter (`LOGIN_RATE_LIMIT=5/15minutes`) again from
+repeated test logins across curl + two separate Playwright passes (web and
+mobile) — bumped it to `200/15minutes`, restarted the backend, and **restored
+it to `5/15minutes` + restarted again** before finishing, per the existing
+gotcha noted in the admin-round section above.
 
 ---
 

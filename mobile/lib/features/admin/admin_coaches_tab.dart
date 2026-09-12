@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/models.dart';
-import 'report_screen.dart';
 
 class AdminCoachesTab extends StatefulWidget {
   const AdminCoachesTab({super.key});
@@ -128,16 +127,12 @@ class _AdminCoachesTabState extends State<AdminCoachesTab> {
                                   ),
                                   trailing: PopupMenuButton<String>(
                                     onSelected: (v) {
-                                      if (v == 'report') {
-                                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => ReportScreen(isCoach: true, id: c.id, name: c.name)));
-                                      }
                                       if (v == 'edit') _openForm(coach: c);
                                       if (v == 'activities') _openActivities(c);
                                       if (v == 'toggle') _toggleActive(c);
                                       if (v == 'delete') _remove(c);
                                     },
                                     itemBuilder: (_) => [
-                                      const PopupMenuItem(value: 'report', child: Text('View Report')),
                                       const PopupMenuItem(value: 'edit', child: Text('Edit')),
                                       const PopupMenuItem(value: 'activities', child: Text('Manage Activities')),
                                       PopupMenuItem(value: 'toggle', child: Text(c.isActive ? 'Deactivate' : 'Activate')),
