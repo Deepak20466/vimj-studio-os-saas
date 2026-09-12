@@ -898,3 +898,98 @@ label {
 .chat-composer input {
   flex: 1;
 }
+
+/* ---- Coach attendance calendar ---- */
+.cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.cal-dow {
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  padding-bottom: 4px;
+}
+
+.cal-cell {
+  position: relative;
+  min-height: 48px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px;
+  background: var(--bg);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: background-color 0.12s, border-color 0.12s;
+}
+
+.cal-cell:hover {
+  border-color: var(--brand-orange);
+}
+
+.cal-cell.cal-empty {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.cal-cell.cal-today {
+  border-color: var(--brand-orange);
+  box-shadow: 0 0 0 1px var(--brand-orange);
+}
+
+.cal-cell.cal-selected {
+  background: var(--brand-light);
+  border-color: var(--brand-orange);
+}
+
+.cal-daynum {
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.cal-dots {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.cal-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.cal-count {
+  font-size: 0.62rem;
+  color: var(--text-muted);
+}
+
+@media (min-width: 640px) {
+  .cal-grid {
+    gap: 6px;
+  }
+
+  .cal-cell {
+    min-height: 64px;
+    padding: 8px;
+  }
+
+  .cal-daynum {
+    font-size: 0.85rem;
+  }
+}

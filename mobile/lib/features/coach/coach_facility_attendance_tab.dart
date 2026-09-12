@@ -1,12 +1,13 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/auth_storage.dart';
 import '../../core/models.dart';
 import '../shared/notification_bell_action.dart';
 
-String _isoDate(DateTime d) => d.toIso8601String().substring(0, 10);
+String _isoDate(DateTime d) => DateFormat('yyyy-MM-dd').format(d);
 
 class CoachFacilityAttendanceTab extends StatefulWidget {
   const CoachFacilityAttendanceTab({super.key});
@@ -21,10 +22,15 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
   List<dynamic> _myAttendance = [];
   bool _myAttendanceLoading = true;
 
-  DateTime _dateFrom = DateTime.now();
-  DateTime _dateTo = DateTime.now();
+  DateTime _viewMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
+  String? _selectedDate = _isoDate(DateTime.now());
   List<AdminAttendanceRecord> _records = [];
   bool _recordsLoading = true;
+
+  DateTime get _monthStart => DateTime(_viewMonth.year, _viewMonth.month, 1);
+  DateTime get _monthEnd => DateTime(_viewMonth.year, _viewMonth.month + 1, 0);
+  int get _daysInMonth => _monthEnd.day;
+  int get _leadingBlanks => _monthStart.weekday % 7; // 0 = Sunday
 
   @override
   void initState() {
@@ -36,7 +42,7 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
     final session = await AuthStorage.load();
     _coachId = session?.userId;
     _loadMyAttendance();
-    _loadRecords();
+    _loadMonthRecords();
   }
 
   Future<void> _loadMyAttendance() async {
@@ -52,12 +58,12 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
     }
   }
 
-  Future<void> _loadRecords() async {
+  Future<void> _loadMonthRecords() async {
     setState(() => _recordsLoading = true);
     try {
       final data = await ApiClient.instance.get('/attendance/students', query: {
-        'date_from': _isoDate(_dateFrom),
-        'date_to': _isoDate(_dateTo),
+        'date_from': _isoDate(_monthStart),
+        'date_to': _isoDate(_monthEnd),
       }) as List;
       _records = data.map((e) => AdminAttendanceRecord.fromJson(e as Map<String, dynamic>)).toList();
     } on ApiException catch (e) {
@@ -67,16 +73,37 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
     }
   }
 
-  Future<void> _pickDate(bool isFrom) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: isFrom ? _dateFrom : _dateTo,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
-    );
-    if (picked == null) return;
-    setState(() => isFrom ? _dateFrom = picked : _dateTo = picked);
-    _loadRecords();
+  Map<String, dynamic> get _facilityByDate {
+    final map = <String, dynamic>{};
+    for (final a in _myAttendance) {
+      map[(a['date'] as String).substring(0, 10)] = a;
+    }
+    return map;
+  }
+
+  Map<String, List<AdminAttendanceRecord>> get _studentByDate {
+    final map = <String, List<AdminAttendanceRecord>>{};
+    for (final r in _records) {
+      map.putIfAbsent(r.classDate, () => []).add(r);
+    }
+    return map;
+  }
+
+  void _goMonth(int delta) {
+    setState(() {
+      _viewMonth = DateTime(_viewMonth.year, _viewMonth.month + delta, 1);
+      _selectedDate = null;
+    });
+    _loadMonthRecords();
+  }
+
+  void _goToday() {
+    final now = DateTime.now();
+    setState(() {
+      _viewMonth = DateTime(now.year, now.month, 1);
+      _selectedDate = _isoDate(now);
+    });
+    _loadMonthRecords();
   }
 
   Color _statusColor(String status) {
@@ -135,120 +162,192 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
     return '$h:${local.minute.toString().padLeft(2, '0')} $suffix';
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Attendance'), actions: const [NotificationBellAction(), SizedBox(width: 4)]),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('My Facility Attendance', style: Theme.of(context).textTheme.titleMedium),
-                  const Text('Your own manual attendance history — one entry per day, set from your Dashboard. Once submitted it can\'t be changed; only admin can correct it.', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
-                  const SizedBox(height: 10),
-                  if (_myAttendanceLoading)
-                    const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator()))
-                  else if (_myAttendance.isEmpty)
-                    const Text('No facility attendance recorded yet.', style: TextStyle(color: AppColors.textMuted))
-                  else
-                    ..._myAttendance.map((a) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text((a['date'] as String).substring(0, 10), style: const TextStyle(fontSize: 12)),
-                              Text('Marked at ${_fmtTime(a['entry_time'] as String?)}', style: const TextStyle(fontSize: 12)),
-                              Chip(
-                                label: Text(a['status'] as String, style: const TextStyle(fontSize: 10, color: Colors.white)),
-                                backgroundColor: _statusColor(a['status'] as String),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            ],
-                          ),
-                        )),
-                ],
-              ),
-            ),
+  Widget _dot(Color c) => Container(
+        width: 6,
+        height: 6,
+        margin: const EdgeInsets.only(right: 2, top: 1),
+        decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+      );
+
+  Widget _dayCell(DateTime day) {
+    final key = _isoDate(day);
+    final facility = _facilityByDate[key];
+    final students = _studentByDate[key] ?? const <AdminAttendanceRecord>[];
+    final statuses = students.map((s) => s.status).toSet();
+    final isToday = _isoDate(DateTime.now()) == key;
+    final isSelected = _selectedDate == key;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedDate = key),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.brandLight : AppColors.bg,
+          border: Border.all(
+            color: isToday || isSelected ? AppColors.brandOrange : AppColors.textMuted.withOpacity(0.25),
+            width: isToday || isSelected ? 1.4 : 1,
           ),
-          const SizedBox(height: 16),
-          Text('Student Attendance', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Row(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${day.day}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 2),
+            Row(
+              children: [
+                if (facility != null) _dot(_statusColor(facility['status'] as String)),
+                ...statuses.map((s) => _dot(_statusColor(s))),
+              ],
+            ),
+            if (students.isNotEmpty)
+              Text('${students.length}', style: const TextStyle(fontSize: 9, color: AppColors.textMuted)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCalendar() {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => _goMonth(-1)),
+            Row(
+              children: [
+                Text(DateFormat('MMMM yyyy').format(_viewMonth), style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(width: 6),
+                TextButton(onPressed: _goToday, child: const Text('Today')),
+              ],
+            ),
+            IconButton(icon: const Icon(Icons.chevron_right), onPressed: () => _goMonth(1)),
+          ],
+        ),
+        if (_recordsLoading || _myAttendanceLoading) const LinearProgressIndicator(),
+        const SizedBox(height: 8),
+        GridView.count(
+          crossAxisCount: 7,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 3,
+          crossAxisSpacing: 3,
+          childAspectRatio: 0.9,
+          children: [
+            for (final w in const ['S', 'M', 'T', 'W', 'T', 'F', 'S'])
+              Center(
+                child: Text(w, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+              ),
+            for (var i = 0; i < _leadingBlanks; i++) const SizedBox.shrink(),
+            for (var d = 1; d <= _daysInMonth; d++) _dayCell(DateTime(_viewMonth.year, _viewMonth.month, d)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDetailPanel() {
+    final key = _selectedDate;
+    if (key == null) {
+      return const Text(
+        'Click a day on the calendar above to view its attendance.',
+        style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+      );
+    }
+    final facility = _facilityByDate[key];
+    final students = _studentByDate[key] ?? const <AdminAttendanceRecord>[];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(DateFormat('EEEE, MMM d, yyyy').format(DateTime.parse(key)), style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 14),
+        Text('My Facility Attendance', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 6),
+        if (facility == null)
+          const Text('No facility attendance marked on this date.', style: TextStyle(fontSize: 12, color: AppColors.textMuted))
+        else
+          Wrap(
+            spacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Expanded(child: OutlinedButton(onPressed: () => _pickDate(true), child: Text('From ${_isoDate(_dateFrom)}'))),
-              const SizedBox(width: 8),
-              Expanded(child: OutlinedButton(onPressed: () => _pickDate(false), child: Text('To ${_isoDate(_dateTo)}'))),
+              Chip(
+                label: Text(facility['status'] as String, style: const TextStyle(fontSize: 10, color: Colors.white)),
+                backgroundColor: _statusColor(facility['status'] as String),
+                visualDensity: VisualDensity.compact,
+              ),
+              Text('Marked at ${_fmtTime(facility['entry_time'] as String?)} — locked', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
             ],
           ),
-          const SizedBox(height: 12),
-          if (_recordsLoading)
-            const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
-          else if (_records.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(20),
-              child: Center(
-                child: Text(
-                  'No attendance records marked in this range. Records appear here once you mark student '
-                  "attendance for a class — if you don't have any classes yet, ask your admin to assign you one.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: AppColors.textMuted),
+        const SizedBox(height: 18),
+        Text('Student Attendance', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 6),
+        if (students.isEmpty)
+          const Text('No student attendance marked on this date.', style: TextStyle(fontSize: 12, color: AppColors.textMuted))
+        else
+          ...students.map((r) => Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.textMuted.withOpacity(0.2)),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-              ),
-            )
-          else
-            ..._records.map((r) => Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(child: Text(r.studentName, style: const TextStyle(fontWeight: FontWeight.bold))),
-                            Wrap(
-                              spacing: 4,
-                              children: [
-                                Chip(
-                                  label: Text(r.status, style: const TextStyle(fontSize: 10, color: Colors.white)),
-                                  backgroundColor: _statusColor(r.status),
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                                Chip(
-                                  label: Text(_approvalLabel(r.approvalStatus), style: const TextStyle(fontSize: 10, color: Colors.white)),
-                                  backgroundColor: _approvalColor(r.approvalStatus),
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        Text('${r.activityName} · ${r.classDate}', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-                        const SizedBox(height: 8),
+                        Expanded(child: Text(r.studentName, style: const TextStyle(fontWeight: FontWeight.bold))),
                         Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 4,
                           children: [
-                            if (r.hasSelfie)
-                              OutlinedButton(
-                                onPressed: () => _viewPhoto(r),
-                                child: const Text('View Photo'),
-                              ),
-                            const Text('Locked', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                            Chip(
+                              label: Text(r.status, style: const TextStyle(fontSize: 10, color: Colors.white)),
+                              backgroundColor: _statusColor(r.status),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            Chip(
+                              label: Text(_approvalLabel(r.approvalStatus), style: const TextStyle(fontSize: 10, color: Colors.white)),
+                              backgroundColor: _approvalColor(r.approvalStatus),
+                              visualDensity: VisualDensity.compact,
+                            ),
                           ],
                         ),
                       ],
                     ),
-                  ),
-                )),
-        ],
+                    Text(r.activityName, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                    if (r.hasSelfie) ...[
+                      const SizedBox(height: 6),
+                      OutlinedButton(onPressed: () => _viewPhoto(r), child: const Text('View Photo')),
+                    ],
+                  ],
+                ),
+              )),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Attendance'), actions: const [NotificationBellAction(), SizedBox(width: 4)]),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await _loadMyAttendance();
+          await _loadMonthRecords();
+        },
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Card(
+              child: Padding(padding: const EdgeInsets.all(14), child: _buildCalendar()),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: Padding(padding: const EdgeInsets.all(14), child: _buildDetailPanel()),
+            ),
+          ],
+        ),
       ),
     );
   }

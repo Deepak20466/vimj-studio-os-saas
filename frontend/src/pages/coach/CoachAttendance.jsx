@@ -1,43 +1,78 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
+import { addMonths, eachDayOfInterval, endOfMonth, format, getDay, isToday, startOfMonth, subMonths } from "date-fns";
 import { useAuth } from "../../context/AuthContext";
 import { CoachSelfAPI, AttendanceAPI } from "../../api/endpoints";
 import StatusBadge from "../../components/StatusBadge";
 import Modal from "../../components/Modal";
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+const FACILITY_DOT_COLOR = { PRESENT: "var(--success)", ABSENT: "var(--danger)", NOT_CONFIRM: "var(--info)" };
+const STUDENT_DOT_COLOR = { PRESENT: "var(--success)", ABSENT: "var(--danger)", LEAVE: "var(--warning)", NOT_CONFIRM: "var(--info)" };
+const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function dateKey(d) {
+  return format(d, "yyyy-MM-dd");
 }
 
 export default function CoachAttendance() {
   const { user } = useAuth();
-  const [records, setRecords] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [dateFrom, setDateFrom] = useState(todayStr());
-  const [dateTo, setDateTo] = useState(todayStr());
+  const [viewDate, setViewDate] = useState(startOfMonth(new Date()));
+  const [selectedDate, setSelectedDate] = useState(dateKey(new Date()));
+  const [monthRecords, setMonthRecords] = useState([]);
+  const [monthLoading, setMonthLoading] = useState(true);
+  const [facilityAll, setFacilityAll] = useState([]);
+  const [facilityLoading, setFacilityLoading] = useState(true);
   const [selfieUrl, setSelfieUrl] = useState(null);
 
-  const [myAttendance, setMyAttendance] = useState([]);
-  const [myAttendanceLoading, setMyAttendanceLoading] = useState(true);
-
-  const load = () => {
-    setLoading(true);
-    CoachSelfAPI.myStudentAttendance({ date_from: dateFrom, date_to: dateTo })
-      .then((r) => setRecords(r.data))
-      .catch((err) => toast.error(err.response?.data?.detail || "Failed to load attendance"))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(load, [dateFrom, dateTo]);
-
   useEffect(() => {
-    setMyAttendanceLoading(true);
+    setFacilityLoading(true);
     CoachSelfAPI.myAttendance(user.id)
-      .then((r) => setMyAttendance(r.data))
+      .then((r) => setFacilityAll(r.data))
       .catch((err) => toast.error(err.response?.data?.detail || "Failed to load your facility attendance"))
-      .finally(() => setMyAttendanceLoading(false));
+      .finally(() => setFacilityLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    setMonthLoading(true);
+    CoachSelfAPI.myStudentAttendance({
+      date_from: dateKey(startOfMonth(viewDate)),
+      date_to: dateKey(endOfMonth(viewDate)),
+    })
+      .then((r) => setMonthRecords(r.data))
+      .catch((err) => toast.error(err.response?.data?.detail || "Failed to load attendance"))
+      .finally(() => setMonthLoading(false));
+  }, [viewDate]);
+
+  const facilityByDate = useMemo(() => {
+    const map = {};
+    for (const a of facilityAll) map[String(a.date).slice(0, 10)] = a;
+    return map;
+  }, [facilityAll]);
+
+  const studentByDate = useMemo(() => {
+    const map = {};
+    for (const r of monthRecords) {
+      (map[r.class_date] ||= []).push(r);
+    }
+    return map;
+  }, [monthRecords]);
+
+  const days = useMemo(
+    () => eachDayOfInterval({ start: startOfMonth(viewDate), end: endOfMonth(viewDate) }),
+    [viewDate]
+  );
+  const leadingBlanks = getDay(startOfMonth(viewDate));
+
+  const goMonth = (delta) => {
+    setViewDate((d) => (delta > 0 ? addMonths(d, 1) : subMonths(d, 1)));
+    setSelectedDate(null);
+  };
+
+  const goToday = () => {
+    setViewDate(startOfMonth(new Date()));
+    setSelectedDate(dateKey(new Date()));
+  };
 
   const viewSelfie = async (record) => {
     try {
@@ -53,106 +88,142 @@ export default function CoachAttendance() {
     return <span className={`badge ${cls}`}>{status === "PENDING" ? "Awaiting Admin" : status}</span>;
   };
 
+  const selectedFacility = selectedDate ? facilityByDate[selectedDate] : null;
+  const selectedStudentRecords = selectedDate ? studentByDate[selectedDate] || [] : [];
+
   return (
     <div>
       <div className="page-header">
         <h1>Attendance</h1>
       </div>
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <h3 style={{ marginTop: 0 }}>My Facility Attendance</h3>
-        <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: -8 }}>
-          Your own manual attendance history — one entry per day, set from your Dashboard. Once
-          submitted it can't be changed here; only admin can correct it.
-        </p>
-        {myAttendanceLoading ? (
-          <div className="empty-state">Loading...</div>
-        ) : myAttendance.length === 0 ? (
-          <div className="empty-state">No facility attendance recorded yet.</div>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Marked At</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {myAttendance.map((a) => (
-                <tr key={a.id}>
-                  <td>{a.date}</td>
-                  <td>{a.entry_time ? new Date(a.entry_time).toLocaleTimeString() : "-"}</td>
-                  <td>
-                    <StatusBadge status={a.status} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <div className="page-header">
-        <h1>Student Attendance</h1>
-      </div>
-      <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: -12 }}>
-        Manual entry only — once submitted, a mark cannot be changed from here. Only admin can correct it.
-      </p>
-
       <div className="card">
-        <div className="toolbar" style={{ marginBottom: 12, display: "flex", gap: 12, alignItems: "center" }}>
-          <div className="field" style={{ margin: 0 }}>
-            <label>From</label>
-            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+        <div className="cal-header">
+          <button className="btn btn-secondary btn-sm" onClick={() => goMonth(-1)}>
+            ← Prev
+          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <h3 style={{ margin: 0 }}>{format(viewDate, "MMMM yyyy")}</h3>
+            <button className="btn btn-secondary btn-sm" onClick={goToday}>
+              Today
+            </button>
           </div>
-          <div className="field" style={{ margin: 0 }}>
-            <label>To</label>
-            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-          </div>
+          <button className="btn btn-secondary btn-sm" onClick={() => goMonth(1)}>
+            Next →
+          </button>
         </div>
 
-        {loading ? (
-          <div className="empty-state">Loading...</div>
-        ) : records.length === 0 ? (
-          <div className="empty-state">No attendance records marked in this range.</div>
+        {(monthLoading || facilityLoading) && <div className="empty-state">Loading...</div>}
+
+        <div className="cal-grid">
+          {WEEKDAY_LABELS.map((d) => (
+            <div key={d} className="cal-dow">
+              {d}
+            </div>
+          ))}
+          {Array.from({ length: leadingBlanks }).map((_, i) => (
+            <div key={`blank-${i}`} className="cal-cell cal-empty" />
+          ))}
+          {days.map((day) => {
+            const key = dateKey(day);
+            const facility = facilityByDate[key];
+            const students = studentByDate[key] || [];
+            const statusesPresent = [...new Set(students.map((s) => s.status))];
+            return (
+              <div
+                key={key}
+                className={`cal-cell${isToday(day) ? " cal-today" : ""}${selectedDate === key ? " cal-selected" : ""}`}
+                onClick={() => setSelectedDate(key)}
+              >
+                <span className="cal-daynum">{format(day, "d")}</span>
+                <div className="cal-dots">
+                  {facility && (
+                    <span
+                      className="cal-dot"
+                      style={{ background: FACILITY_DOT_COLOR[facility.status] || "var(--text-muted)" }}
+                      title={`Facility: ${facility.status}`}
+                    />
+                  )}
+                  {statusesPresent.map((st) => (
+                    <span key={st} className="cal-dot" style={{ background: STUDENT_DOT_COLOR[st] || "var(--text-muted)" }} title={st} />
+                  ))}
+                </div>
+                {students.length > 0 && (
+                  <span className="cal-count">
+                    {students.length} student{students.length > 1 ? "s" : ""}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="card">
+        <h3 style={{ marginTop: 0 }}>
+          {selectedDate ? format(new Date(`${selectedDate}T00:00:00`), "EEEE, MMM d, yyyy") : "Attendance for the day"}
+        </h3>
+
+        {!selectedDate ? (
+          <div className="empty-state">Click a day on the calendar above to view its attendance.</div>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Student</th>
-                <th>Activity</th>
-                <th>Class Date</th>
-                <th>Status</th>
-                <th>Admin Review</th>
-                <th>Marked At</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {records.map((r) => (
-                <tr key={r.id}>
-                  <td>{r.student_name}</td>
-                  <td>{r.activity_name}</td>
-                  <td>{r.class_date}</td>
-                  <td>
-                    <StatusBadge status={r.status} />
-                  </td>
-                  <td>{approvalBadge(r.approval_status)}</td>
-                  <td>{new Date(r.timestamp).toLocaleString()}</td>
-                  <td>
-                    {r.has_selfie ? (
-                      <button className="btn btn-secondary btn-sm" onClick={() => viewSelfie(r)}>
-                        View Photo
-                      </button>
-                    ) : (
-                      <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Locked</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <>
+            <div style={{ marginBottom: 16 }}>
+              <h4 style={{ margin: "0 0 8px" }}>My Facility Attendance</h4>
+              {selectedFacility ? (
+                <div className="table-actions">
+                  <StatusBadge status={selectedFacility.status} />
+                  <span style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                    Marked at {selectedFacility.entry_time ? new Date(selectedFacility.entry_time).toLocaleTimeString() : "-"} — locked
+                  </span>
+                </div>
+              ) : (
+                <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", margin: 0 }}>No facility attendance marked on this date.</p>
+              )}
+            </div>
+
+            <div>
+              <h4 style={{ margin: "0 0 8px" }}>Student Attendance</h4>
+              {selectedStudentRecords.length === 0 ? (
+                <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", margin: 0 }}>No student attendance marked on this date.</p>
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Student</th>
+                      <th>Activity</th>
+                      <th>Status</th>
+                      <th>Admin Review</th>
+                      <th>Marked At</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedStudentRecords.map((r) => (
+                      <tr key={r.id}>
+                        <td>{r.student_name}</td>
+                        <td>{r.activity_name}</td>
+                        <td>
+                          <StatusBadge status={r.status} />
+                        </td>
+                        <td>{approvalBadge(r.approval_status)}</td>
+                        <td>{new Date(r.timestamp).toLocaleString()}</td>
+                        <td>
+                          {r.has_selfie ? (
+                            <button className="btn btn-secondary btn-sm" onClick={() => viewSelfie(r)}>
+                              View Photo
+                            </button>
+                          ) : (
+                            <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Locked</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </>
         )}
       </div>
 

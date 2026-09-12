@@ -22,6 +22,7 @@ export default function CoachClasses() {
   const [roster, setRoster] = useState([]);
   const [rosterLoading, setRosterLoading] = useState(false);
   const [done, setDone] = useState({}); // studentId -> {status, id, approval_status, has_selfie}
+  const [pending, setPending] = useState({}); // studentId -> status staged, not yet submitted
   const [markingId, setMarkingId] = useState(null);
   const [selfieUrl, setSelfieUrl] = useState(null);
 
@@ -41,6 +42,7 @@ export default function CoachClasses() {
   const openRoster = (cls) => {
     setRosterFor(cls);
     setDone({});
+    setPending({});
     setRosterLoading(true);
     Promise.all([ActivitiesAPI.roster(cls.activity_id), CoachSelfAPI.myStudentAttendance({ class_id: cls.id })])
       .then(([rosterRes, attendanceRes]) => {
@@ -70,11 +72,20 @@ export default function CoachClasses() {
         ...d,
         [studentId]: { status, id: data.id, approval_status: data.approval_status, has_selfie: data.has_selfie },
       }));
+      setPending((p) => {
+        const next = { ...p };
+        delete next[studentId];
+        return next;
+      });
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to mark attendance");
     } finally {
       setMarkingId(null);
     }
+  };
+
+  const selectPending = (studentId, status) => {
+    setPending((p) => ({ ...p, [studentId]: status }));
   };
 
   const viewSelfie = async (record) => {
@@ -132,8 +143,8 @@ export default function CoachClasses() {
       {rosterFor && (
         <Modal title={`Mark Attendance — ${activityNames[rosterFor.activity_id] || ""}`} onClose={() => setRosterFor(null)}>
           <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginTop: -8 }}>
-            Manual entry — no location or photo needed. Once submitted, a mark cannot be changed;
-            only admin can correct it.
+            Manual entry — no location or photo needed. Pick a status, change it as many times as you like, then
+            press Submit to lock it in. Once submitted, only admin can correct it.
           </p>
           {rosterLoading ? (
             <div className="empty-state">Loading roster...</div>
@@ -175,17 +186,24 @@ export default function CoachClasses() {
                           <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Locked</span>
                         </div>
                       ) : (
-                        <div className="table-actions">
+                        <div className="table-actions" style={{ flexWrap: "wrap" }}>
                           {Object.keys(STATUS_LABELS).map((st) => (
                             <button
                               key={st}
-                              className={st === "PRESENT" ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
+                              className={pending[s.id] === st ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"}
                               disabled={markingId === s.id}
-                              onClick={() => handleMark(s.id, st)}
+                              onClick={() => selectPending(s.id, st)}
                             >
                               {STATUS_LABELS[st]}
                             </button>
                           ))}
+                          <button
+                            className="btn btn-primary btn-sm"
+                            disabled={!pending[s.id] || markingId === s.id}
+                            onClick={() => handleMark(s.id, pending[s.id])}
+                          >
+                            {markingId === s.id ? "Submitting..." : "Submit"}
+                          </button>
                         </div>
                       )}
                     </td>

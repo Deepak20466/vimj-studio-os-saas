@@ -24,6 +24,7 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
   String? _error;
   String _coachName = '';
   String? _myStatus;
+  String? _pendingStatus;
   bool _actionLoading = false;
   int _pendingSync = 0;
 
@@ -76,12 +77,16 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
     }
   }
 
-  Future<void> _markMyAttendance(String mstatus) async {
+  Future<void> _submitMyAttendance() async {
+    if (_pendingStatus == null) return;
     setState(() => _actionLoading = true);
     try {
-      await ApiClient.instance.post('/attendance/coach-mark', body: {'status': mstatus});
-      setState(() => _myStatus = mstatus);
-      if (mounted) _showSnack('Marked ${_myAttendanceStatusLabels[mstatus]} — submitted, awaiting admin');
+      await ApiClient.instance.post('/attendance/coach-mark', body: {'status': _pendingStatus});
+      setState(() {
+        _myStatus = _pendingStatus;
+        _pendingStatus = null;
+      });
+      if (mounted) _showSnack('Marked ${_myAttendanceStatusLabels[_myStatus]} — submitted, awaiting admin');
     } on ApiException catch (e) {
       if (mounted) _showSnack(e.message, isError: true);
     } finally {
@@ -127,27 +132,34 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
                   if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
                   Text('My Attendance Today', style: Theme.of(context).textTheme.titleMedium),
                   const Text(
-                    'Manual entry — no location needed. Once submitted it can\'t be changed; only admin can correct it.',
+                    'Manual entry — no location needed. Pick a status, change it as needed, then press Submit to '
+                    'lock it in. Once submitted, only admin can correct it.',
                     style: TextStyle(fontSize: 12, color: Colors.black54),
                   ),
                   const SizedBox(height: 8),
                   if (_myStatus != null)
                     Chip(label: Text('${_myAttendanceStatusLabels[_myStatus] ?? _myStatus} — locked'))
-                  else
+                  else ...[
                     Wrap(
                       spacing: 8,
                       children: _myAttendanceStatusLabels.entries
-                          .map((e) => e.key == 'PRESENT'
+                          .map((e) => _pendingStatus == e.key
                               ? ElevatedButton(
-                                  onPressed: _actionLoading ? null : () => _markMyAttendance(e.key),
+                                  onPressed: _actionLoading ? null : () => setState(() => _pendingStatus = e.key),
                                   child: Text(e.value),
                                 )
                               : OutlinedButton(
-                                  onPressed: _actionLoading ? null : () => _markMyAttendance(e.key),
+                                  onPressed: _actionLoading ? null : () => setState(() => _pendingStatus = e.key),
                                   child: Text(e.value),
                                 ))
                           .toList(),
                     ),
+                    const SizedBox(height: 10),
+                    ElevatedButton(
+                      onPressed: _actionLoading || _pendingStatus == null ? null : _submitMyAttendance,
+                      child: Text(_actionLoading ? 'Submitting...' : 'Submit'),
+                    ),
+                  ],
                   if (_pendingSync > 0)
                     Card(
                       color: Colors.amber.shade50,

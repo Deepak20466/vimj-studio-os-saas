@@ -31,6 +31,7 @@ class MarkAttendanceScreen extends StatefulWidget {
 class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
   List<RosterStudent> _roster = [];
   final Map<int, _MarkedRecord> _marked = {};
+  final Map<int, String> _pending = {}; // studentId -> status staged, not yet submitted
   bool _loading = true;
   int? _busyStudentId;
 
@@ -81,12 +82,15 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
         'status': status,
       }) as Map<String, dynamic>;
       _showSnack('${student.name}: ${_statusLabels[status]} submitted, awaiting admin');
-      setState(() => _marked[student.id] = _MarkedRecord(
-            attendanceId: result['id'] as int,
-            status: status,
-            approvalStatus: result['approval_status'] as String? ?? 'PENDING',
-            hasSelfie: result['has_selfie'] as bool? ?? false,
-          ));
+      setState(() {
+        _marked[student.id] = _MarkedRecord(
+          attendanceId: result['id'] as int,
+          status: status,
+          approvalStatus: result['approval_status'] as String? ?? 'PENDING',
+          hasSelfie: result['has_selfie'] as bool? ?? false,
+        );
+        _pending.remove(student.id);
+      });
     } on ApiException catch (e) {
       // The server responded definitively (validation error, deadline passed,
       // duplicate, etc.) — nothing to gain by queuing this for a retry.
@@ -101,11 +105,18 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
         lng: 0,
         createdAt: DateTime.now(),
       ));
-      setState(() => _marked[student.id] = _MarkedRecord(attendanceId: -1, status: status));
+      setState(() {
+        _marked[student.id] = _MarkedRecord(attendanceId: -1, status: status);
+        _pending.remove(student.id);
+      });
       _showSnack('No connection — queued ${student.name} for sync.');
     } finally {
       if (mounted) setState(() => _busyStudentId = null);
     }
+  }
+
+  void _selectPending(int studentId, String status) {
+    setState(() => _pending[studentId] = status);
   }
 
   Future<void> _viewPhoto(_MarkedRecord record) async {
@@ -182,7 +193,8 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
                 const Padding(
                   padding: EdgeInsets.fromLTRB(12, 12, 12, 0),
                   child: Text(
-                    'Manual entry — no location or photo needed. Once submitted, a mark cannot be changed; only admin can correct it.',
+                    'Manual entry — no location or photo needed. Pick a status, change it as needed, then press '
+                    'Submit to lock it in. Once submitted, only admin can correct it.',
                     style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                   ),
                 ),
@@ -246,17 +258,24 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
                                             : Wrap(
                                                 spacing: 6,
                                                 runSpacing: 6,
-                                                children: _statusLabels.entries
-                                                    .map((e) => e.key == 'PRESENT'
-                                                        ? ElevatedButton(
-                                                            onPressed: () => _markStudent(student, e.key),
-                                                            child: Text(e.value),
-                                                          )
-                                                        : OutlinedButton(
-                                                            onPressed: () => _markStudent(student, e.key),
-                                                            child: Text(e.value),
-                                                          ))
-                                                    .toList(),
+                                                crossAxisAlignment: WrapCrossAlignment.center,
+                                                children: [
+                                                  ..._statusLabels.entries.map((e) => _pending[student.id] == e.key
+                                                      ? ElevatedButton(
+                                                          onPressed: () => _selectPending(student.id, e.key),
+                                                          child: Text(e.value),
+                                                        )
+                                                      : OutlinedButton(
+                                                          onPressed: () => _selectPending(student.id, e.key),
+                                                          child: Text(e.value),
+                                                        )),
+                                                  ElevatedButton(
+                                                    onPressed: _pending[student.id] == null
+                                                        ? null
+                                                        : () => _markStudent(student, _pending[student.id]!),
+                                                    child: const Text('Submit'),
+                                                  ),
+                                                ],
                                               ),
                                       ),
                                   ],

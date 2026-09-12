@@ -14,7 +14,7 @@ class AdminFeesTab extends StatefulWidget {
 
 class _AdminFeesTabState extends State<AdminFeesTab> {
   bool _loading = true;
-  bool _unpaidOnly = true;
+  bool _unpaidOnly = false;
   List<AdminFeeRecord> _fees = [];
   List<FeeReceiptRecord> _pendingReceipts = [];
   List<FeeReceiptRecord> _approvedReceipts = [];
