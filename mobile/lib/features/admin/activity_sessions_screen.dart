@@ -6,9 +6,16 @@ import '../../core/models.dart';
 const _allDays = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 const _allMonths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 const _monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const _statusOptions = ['PRESENT', 'ABSENT', 'LEAVE'];
+const _statusOptions = ['PRESENT', 'ABSENT', 'LEAVE', 'NOT_CONFIRM'];
 
-String _sessionLabel(String s) => s.isEmpty ? s : (s[0] + s.substring(1).toLowerCase());
+String _sessionLabel(String s) => s == 'NOT_CONFIRM' ? 'Not Confirm' : (s.isEmpty ? s : (s[0] + s.substring(1).toLowerCase()));
+
+Color _statusColor(String status) {
+  if (status == 'PRESENT') return AppColors.success;
+  if (status == 'UNMARKED') return AppColors.warning;
+  if (status == 'NOT_CONFIRM') return Colors.indigo;
+  return AppColors.danger;
+}
 
 class ActivitySessionsScreen extends StatefulWidget {
   final Activity activity;
@@ -376,7 +383,7 @@ class _SessionRosterScreenState extends State<_SessionRosterScreen> {
                     children: [
                       OutlinedButton.icon(onPressed: _pickDate, icon: const Icon(Icons.calendar_today, size: 16), label: Text(_classDate.toIso8601String().substring(0, 10))),
                       const SizedBox(width: 16),
-                      if (roster != null) Text('Present: ${roster['present_count']} · Absent/Leave: ${roster['absent_count']} · Unmarked: ${roster['unmarked_count']}', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                      if (roster != null) Text('Present: ${roster['present_count']} · Absent/Leave: ${roster['absent_count']} · Not Confirm: ${roster['not_confirm_count']} · Unmarked: ${roster['unmarked_count']}', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
                     ],
                   ),
                 ),
@@ -408,7 +415,7 @@ class _SessionRosterScreenState extends State<_SessionRosterScreen> {
                                         Expanded(child: Text(s['student_name'] as String, style: const TextStyle(fontWeight: FontWeight.bold))),
                                         Chip(
                                           label: Text(status, style: const TextStyle(fontSize: 10, color: Colors.white)),
-                                          backgroundColor: status == 'PRESENT' ? AppColors.success : (status == 'UNMARKED' ? AppColors.warning : AppColors.danger),
+                                          backgroundColor: _statusColor(status),
                                           visualDensity: VisualDensity.compact,
                                         ),
                                         if (feeStatus != null) ...[

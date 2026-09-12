@@ -27,6 +27,19 @@ Act as a senior developer and build a complete Production-ready Attendance Manag
 > folded together, in the 2026-09-12 admin rebuild) — admin now has no UI to
 > create a new Activity/Batch/manually generate sessions; the underlying data
 > model and every read usage elsewhere is untouched and still works.
+>
+> **⚠️ 2026-09-13 — Activities/Batches restored to admin, same client.** Item
+> (2) above was reversed at the same client's request — see "2026-09-13
+> ACTIVITIES/BATCHES RESTORED" near the end of this file. The admin
+> Activities page (web) and the Activities/Batches tabs (mobile) are back,
+> essentially unchanged from their pre-removal form, now updated to offer
+> **Not Confirm** as a 4th manual-marking option alongside Present/Absent/
+> Leave, and admin can now view a coach's uploaded group/batch photo from the
+> Activities section (the backend endpoint already allowed it; no admin UI
+> ever called it before this round). Item (1) above (no GPS/selfie,
+> submit-time lock) is untouched — this round only restores the admin CRUD UI
+> for Activities/Batches/Sessions, it does not touch attendance marking's
+> verification rules.
 
 # VIMJ Studio Attendance System -
 
@@ -968,6 +981,95 @@ against `https://vimj-backend.onrender.com`. Worth a real-device check of the th
 screens before assuming it's flawless, on top of this project's standing mobile-testing caveat.
 
 ---
+
+## 2026-09-13 ACTIVITIES/BATCHES RESTORED — admin only, same client
+
+Client asked to get the Activities/Batches section back in admin — explicitly scoped to
+**admin only**, coach app untouched. The section had been cut in the "2026-09-13 CLIENT
+FEEDBACK — GPS/selfie removed, Activities/Batches cut" round above (commit `e57967d`), which
+bundled it together with an unrelated attendance-marking change (dropping GPS/selfie for manual
+entry + the new `NOT_CONFIRM` status). This round reverses only the Activities/Batches removal —
+the GPS/selfie-drop, the submit-time coach lock, and `NOT_CONFIRM` itself are all untouched and
+still in effect; restoring Activities/Batches does not resurrect location/selfie verification
+anywhere.
+
+**What came back, essentially unchanged from its pre-removal form:**
+- Web: `frontend/src/pages/Activities.jsx` (Activities CRUD, a "Manage" modal for
+  classes/roster/enrollment, and a "Sessions" modal folding in Batch CRUD + a per-session
+  roster with manual attendance marking — same shape as the 2026-09-12 admin rebuild left it).
+  Re-added to `App.jsx`'s `ADMIN_LINKS`/routes between Attendance and Fees (8 items again:
+  Dashboard, Students, Coaches, Attendance, Activities, Fees, Leave, Settings).
+- Mobile: `admin_activities_tab.dart` and `admin_batches_tab.dart` (the latter's Coverage panel
+  and "Generate Sessions" date-range picker included) restored to `admin_home.dart`'s "More"
+  sheet in their original position, before Fees. `activity_sessions_screen.dart` — the
+  per-activity Sessions/Roster screen `admin_activities_tab.dart` pushes to — was never actually
+  deleted in the first place (only its sole importer was), so it had sat orphaned and untouched
+  in the tree since `e57967d`; restoring the tab file alone made it reachable again with no
+  changes needed to it beyond the `NOT_CONFIRM` addition below.
+- None of `ActivitiesAPI`/`BatchesAPI` (web `endpoints.js`) or the backend `activities.py`/
+  `batches.py` routers/schemas ever changed when the UI was cut — CLAUDE.md's own note from
+  that round said as much ("the underlying data model and every read usage elsewhere is
+  untouched"), and it held up: every endpoint these restored screens call (activity/batch/class
+  CRUD, enroll/unenroll, `/batches/{id}/roster`, `/attendance/mark-student/manual`) worked
+  against current backend + current `core/models.dart` field shapes with zero adaptation needed.
+
+**One real adaptation, not just a restore:** `NOT_CONFIRM` didn't exist as a status the last time
+this UI was live (it was added in the very commit that removed the UI), so the roster's manual-
+marking options only offered Present/Absent/Leave. Both roster screens (web `SessionRosterModal`,
+mobile `_SessionRosterScreen`) now offer **Not Confirm** as a 4th option, styled to match the
+existing convention elsewhere in the app (web: `StatusBadge` → `.badge-not_confirm`/`--info`
+indigo; mobile: `Colors.indigo`, same as `mark_attendance_screen.dart`/
+`coach_facility_attendance_tab.dart`).
+
+**One real bug found and fixed while restoring, not pre-existing-and-ignored:**
+`GET /batches/{id}/roster` (`backend/app/routers/batches.py`) computed `present_count`/
+`absent_count`/`unmarked_count` with a 3-way if/elif/else that had never been updated for
+`NOT_CONFIRM` — every `NOT_CONFIRM`-marked student silently fell into the `else` branch and was
+double-counted as `unmarked` even though their individual `attendance_status` field correctly
+said `NOT_CONFIRM`. Invisible until now because the only two UIs that ever read this endpoint's
+summary counts were exactly the ones just deleted. Fixed by adding a genuine `not_confirm_count`
+field (not folding it into `absent_count`, since `NOT_CONFIRM` is deliberately its own status
+system-wide, not a relabeling of Absent — see the 2026-09-13 GPS-removal section above) and
+updating both roster summary lines (web and mobile) to show all four counts.
+
+**Same-round follow-up: admin can now view a coach's uploaded group/batch photo.** The
+"coach group/batch photo" feature (see the 2026-09-13 CLIENT FEEDBACK — coach group/batch
+photo section above) shipped mobile-coach-only, after this Activities/Batches UI had already
+been deleted — so `GET /activities/classes/{class_id}/group-photo` always allowed admin
+(`current_user.role == UserRole.ADMIN`, same check as `GET /attendance/selfie/{id}`) but no
+admin surface ever called it. Now that Activities is back in admin, the client asked for this
+specifically: once a coach submits a group photo, admin should be able to see it from the
+Activities section. Added, no backend changes needed (the endpoint and `ClassOut.has_group_photo`/
+`group_photo_uploaded_at` fields already existed):
+- Web: `ActivitiesAPI.groupPhotoBlob` (new, `endpoints.js`) + a "View Group Photo" button in
+  `Activities.jsx`'s `ActivityManageModal` → Classes tab (shown only when `has_group_photo` is
+  true), opening a `Modal` with the photo — same authenticated-blob-fetch pattern as
+  `Attendance.jsx`'s existing "View Selfie".
+- Mobile: a photo icon button in `admin_activities_tab.dart`'s `_ManageActivityScreen` → Classes
+  tab (same visibility condition), opening an `AlertDialog` with the photo — same
+  `ApiClient.instance.getBytes` + `FutureBuilder<Uint8List>` + `Image.memory` pattern already
+  used by the coach app's own `classes_tab.dart._viewGroupPhoto`.
+
+**Verified live** against a local backend + Postgres (no Playwright/browser-automation tool
+available this session, same limitation as the deadline/Locked-label round above — verification
+stopped at API + build/analyze level, no rendered-screen click-through): created a real Activity,
+assigned a Batch to a coach (confirmed same-day session auto-generation still fires immediately
+on create, per the 2026-09-11 batch-generation fix), enrolled a student, exercised the exact
+`POST /attendance/mark-student/manual` call the roster UI makes — marked `NOT_CONFIRM` then
+`PRESENT`, confirming `not_confirm_count`/`present_count`/fee-status-on-PRESENT all update
+correctly — then edited and deleted the Batch and Activity through their real endpoints, and
+cleaned up all test rows afterward. Separately, exercised the group-photo path end-to-end: created
+an already-ended class, uploaded a real (PIL-generated) JPEG as the assigned coach via
+`POST /activities/classes/{id}/group-photo`, confirmed `GET /activities/{id}/classes` (what the
+admin Manage>Classes tab loads) reported `has_group_photo: true`, and confirmed
+`GET /activities/classes/{id}/group-photo` returned the same valid JPEG bytes back to admin —
+then deleted the test class/activity. `npm run build` clean (web). `flutter analyze` clean (0
+errors/warnings, 16 pre-existing info-level notices — 4 more than the last recorded count,
+accounted for exactly by the two restored files' own pre-existing `prefer_final_fields` infos,
+same class already present elsewhere in this codebase, nothing new introduced). **Not done this
+round**: no mobile release was built/shipped — these are source changes only; a coach/admin
+running an already-installed APK won't see Activities/Batches back until a new `mobile-vX.Y.Z`
+is built and released the same way as prior rounds (see `mobile/README.md`).
 
 ## SUCCESS CHECKLIST
 ✅ All 15 requirements implemented

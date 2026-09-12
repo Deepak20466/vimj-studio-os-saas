@@ -43,6 +43,9 @@ export const ActivitiesAPI = {
   enroll: (payload) => client.post("/activities/enroll", payload),
   unenroll: (enrollmentId) => client.delete(`/activities/enroll/${enrollmentId}`),
   roster: (activityId) => client.get(`/activities/${activityId}/roster`),
+  // A plain <img src> can't attach the Bearer token this API requires, so the
+  // group photo has to be fetched as an authenticated blob (like AttendanceAPI.selfieBlob).
+  groupPhotoBlob: (classId) => client.get(`/activities/classes/${classId}/group-photo`, { responseType: "blob" }),
 };
 
 export const AttendanceAPI = {

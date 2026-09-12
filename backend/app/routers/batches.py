@@ -114,6 +114,7 @@ def batch_roster(
     students = []
     present_count = 0
     absent_count = 0
+    not_confirm_count = 0
     unmarked_count = 0
     for student, enrollment_id in enrolled:
         record = attendance_by_student.get(student.id)
@@ -122,6 +123,8 @@ def batch_roster(
             present_count += 1
         elif attendance_status in (AttendanceStatus.ABSENT.value, AttendanceStatus.LEAVE.value):
             absent_count += 1
+        elif attendance_status == AttendanceStatus.NOT_CONFIRM.value:
+            not_confirm_count += 1
         else:
             unmarked_count += 1
 
@@ -144,6 +147,7 @@ def batch_roster(
         "class_id": class_session.id if class_session else None,
         "present_count": present_count,
         "absent_count": absent_count,
+        "not_confirm_count": not_confirm_count,
         "unmarked_count": unmarked_count,
         "students": students,
     }
