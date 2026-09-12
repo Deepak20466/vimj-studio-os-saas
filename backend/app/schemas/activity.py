@@ -55,6 +55,8 @@ class ClassOut(BaseModel):
     date: date
     start_time: time
     end_time: time
+    has_group_photo: bool = False
+    group_photo_uploaded_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -63,3 +65,7 @@ class ClassOut(BaseModel):
 class EnrollmentCreate(BaseModel):
     student_id: int
     activity_id: int
+
+
+class GroupPhotoUpload(BaseModel):
+    photo_base64: str

@@ -80,6 +80,7 @@ class ClassSession {
   final String date;
   final String startTime;
   final String endTime;
+  final bool hasGroupPhoto;
 
   ClassSession({
     required this.id,
@@ -88,6 +89,7 @@ class ClassSession {
     required this.date,
     required this.startTime,
     required this.endTime,
+    this.hasGroupPhoto = false,
   });
 
   factory ClassSession.fromJson(Map<String, dynamic> json) => ClassSession(
@@ -97,6 +99,7 @@ class ClassSession {
         date: json['date'] as String,
         startTime: json['start_time'] as String,
         endTime: json['end_time'] as String,
+        hasGroupPhoto: json['has_group_photo'] as bool? ?? false,
       );
 }
 

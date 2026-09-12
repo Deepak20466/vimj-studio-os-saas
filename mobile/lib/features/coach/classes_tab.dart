@@ -1,4 +1,7 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../core/api_client.dart';
 import '../../core/models.dart';
@@ -16,6 +19,8 @@ class _ClassesTabState extends State<ClassesTab> {
   DateTime _selectedDate = DateTime.now();
   List<ClassSession> _classes = [];
   bool _loading = true;
+  final Map<int, bool> _groupPhotoOverride = {}; // classId -> has photo, for instant UI feedback after upload
+  int? _photoBusyClassId;
 
   @override
   void initState() {
@@ -47,6 +52,60 @@ class _ClassesTabState extends State<ClassesTab> {
       int.parse(timeParts[1]),
     );
     return DateTime.now().isAfter(endDt);
+  }
+
+  bool _hasGroupPhoto(ClassSession c) => _groupPhotoOverride[c.id] ?? c.hasGroupPhoto;
+
+  Future<void> _captureGroupPhoto(ClassSession c) async {
+    XFile? photo;
+    try {
+      final picker = ImagePicker();
+      photo = await picker.pickImage(source: ImageSource.camera, imageQuality: 70, preferredCameraDevice: CameraDevice.rear);
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open camera — check camera permission')));
+      return;
+    }
+    if (photo == null) return;
+
+    setState(() => _photoBusyClassId = c.id);
+    try {
+      final bytes = await photo.readAsBytes();
+      await ApiClient.instance.post('/activities/classes/${c.id}/group-photo', body: {'photo_base64': base64Encode(bytes)});
+      if (mounted) {
+        setState(() => _groupPhotoOverride[c.id] = true);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Group photo saved')));
+      }
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _photoBusyClassId = null);
+    }
+  }
+
+  void _viewGroupPhoto(ClassSession c) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Group Photo'),
+        content: SizedBox(
+          width: 320,
+          height: 320,
+          child: FutureBuilder<Uint8List>(
+            future: ApiClient.instance.getBytes('/activities/classes/${c.id}/group-photo').then((b) => Uint8List.fromList(b)),
+            builder: (ctx, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError || !snapshot.hasData) {
+                return const Center(child: Text('Photo not available.'));
+              }
+              return ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.memory(snapshot.data!, fit: BoxFit.contain));
+            },
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+      ),
+    );
   }
 
   Future<void> _pickDate() async {
@@ -118,9 +177,30 @@ class _ClassesTabState extends State<ClassesTab> {
                                     ),
                                   ),
                                   if (ended)
-                                    const Padding(
-                                      padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                                      child: Text('Class ended', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                                      child: Wrap(
+                                        spacing: 8,
+                                        runSpacing: 4,
+                                        crossAxisAlignment: WrapCrossAlignment.center,
+                                        children: [
+                                          const Text('Class ended', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                          if (_photoBusyClassId == c.id)
+                                            const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                                          else if (_hasGroupPhoto(c))
+                                            OutlinedButton.icon(
+                                              onPressed: () => _viewGroupPhoto(c),
+                                              icon: const Icon(Icons.photo, size: 16),
+                                              label: const Text('View Group Photo'),
+                                            )
+                                          else
+                                            OutlinedButton.icon(
+                                              onPressed: () => _captureGroupPhoto(c),
+                                              icon: const Icon(Icons.camera_alt, size: 16),
+                                              label: const Text('Group Photo'),
+                                            ),
+                                        ],
+                                      ),
                                     ),
                                 ],
                               ),

@@ -1,9 +1,9 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
-from datetime import date
+from datetime import date, datetime
 
 from app.database import get_db
 from app.models.user import User, UserRole
@@ -20,9 +20,11 @@ from app.schemas.activity import (
     ClassUpdate,
     ClassOut,
     EnrollmentCreate,
+    GroupPhotoUpload,
 )
-from app.security import get_current_user, require_admin
+from app.security import get_current_user, require_admin, require_coach
 from app.services.audit import log_action
+from app.services.storage import save_class_photo
 
 router = APIRouter(prefix="/activities", tags=["activities"])
 
@@ -212,6 +214,50 @@ def class_summary(
         "fee_paid_count": fee_paid_count,
         "fee_unpaid_count": fee_unpaid_count,
     }
+
+
+@router.post("/classes/{class_id}/group-photo", response_model=ClassOut)
+def upload_group_photo(
+    class_id: int,
+    payload: GroupPhotoUpload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_coach),
+):
+    """Coach captures one group photo covering the whole class roster, after the
+    session has finished. Mobile coach app only — re-uploading replaces the photo."""
+    cls = db.query(ClassSession).filter(ClassSession.id == class_id).first()
+    if not cls:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+    if cls.coach_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your class")
+
+    class_end_dt = datetime.combine(cls.date, cls.end_time)
+    if datetime.now() < class_end_dt:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="The class hasn't finished yet")
+
+    cls.group_photo = save_class_photo(payload.photo_base64)
+    cls.group_photo_uploaded_at = datetime.now()
+    log_action(db, current_user.id, "UPLOAD_GROUP_PHOTO", "Class", cls.id)
+    db.commit()
+    db.refresh(cls)
+    return cls
+
+
+@router.get("/classes/{class_id}/group-photo")
+def get_group_photo(
+    class_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    cls = db.query(ClassSession).filter(ClassSession.id == class_id).first()
+    if not cls or not cls.group_photo:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group photo not found")
+
+    allowed = current_user.role == UserRole.ADMIN or current_user.id == cls.coach_id
+    if not allowed:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to view this photo")
+
+    return Response(content=cls.group_photo, media_type="image/jpeg")
 
 
 @router.post("/enroll", status_code=status.HTTP_201_CREATED)

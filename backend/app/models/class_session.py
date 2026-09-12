@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, ForeignKey, Date, Time, DateTime
+from sqlalchemy import Column, Integer, ForeignKey, Date, Time, DateTime, LargeBinary
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -15,9 +15,18 @@ class ClassSession(Base):
     date = Column(Date, nullable=False, index=True)
     start_time = Column(Time, nullable=False)
     end_time = Column(Time, nullable=False)
+    # One coach-captured group photo of the whole class, taken after the session ends
+    # (mobile coach app only). Stored as bytes in Postgres, same rationale as every other
+    # photo in this app — see services/storage.py.
+    group_photo = Column(LargeBinary, nullable=True)
+    group_photo_uploaded_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     activity = relationship("Activity", back_populates="classes")
     coach = relationship("User", foreign_keys=[coach_id])
     batch = relationship("Batch")
     student_attendance = relationship("StudentAttendance", back_populates="class_session", passive_deletes=True)
+
+    @property
+    def has_group_photo(self) -> bool:
+        return self.group_photo is not None

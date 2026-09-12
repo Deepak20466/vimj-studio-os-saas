@@ -860,6 +860,55 @@ lists Activities or Batches.
 
 ---
 
+## 2026-09-13 CLIENT FEEDBACK — coach group/batch photo (mobile only)
+
+New, small feature request from the same client: one photo per finished class,
+covering the whole roster, captured by the assigned coach — distinct from the
+old compliance-era `ClassPhoto` feature (deleted in the 2026-09-12 admin round;
+allowed many disk-stored photos per class with skip-reason/late-mark tracking
+attached). This is a single photo per `ClassSession`, bytes-in-Postgres like
+every other photo in this app. **Mobile coach app only**, by explicit client
+choice — no web dashboard changes.
+
+- `classes.group_photo` (`LargeBinary`) + `classes.group_photo_uploaded_at`
+  columns added via Alembic `0016` (additive, no table rename/recreate).
+  `ClassSession.has_group_photo` mirrors the `StudentAttendance.has_selfie`
+  property pattern.
+- `POST /activities/classes/{class_id}/group-photo` (`{photo_base64}`,
+  `require_coach`) — only the class's assigned coach, and only after
+  `now() >= class_end_dt` ("the class hasn't finished yet" 400 otherwise, same
+  style as the existing mark-deadline checks). Re-uploading replaces the photo
+  — no lock, unlike attendance marks. Reuses `services/storage.py`'s
+  pre-existing (previously unused) `save_class_photo`.
+- `GET /activities/classes/{class_id}/group-photo` — admin or the owning
+  coach only, same authorization shape as `GET /attendance/selfie/{id}`.
+- `ClassOut` gained `has_group_photo`/`group_photo_uploaded_at` so both
+  `/activities/{id}/classes` and `/activities/classes/my` surface it without a
+  separate call.
+- Mobile: `classes_tab.dart`'s per-class row shows a "Group Photo" button once
+  a class has ended (rear camera via the existing `image_picker` dependency —
+  `CameraDevice.rear`, unlike the front-camera selfie/student-photo captures
+  elsewhere in this app, since this photo is of the group, not the coach) and
+  a "View Group Photo" button once one exists, with the same authenticated-
+  blob `Image.memory` pattern as `mark_attendance_screen.dart`'s existing
+  "View Photo" action.
+
+**Verified live**: backend curl-tested directly against the local dev DB
+(upload before class-end 400s with the expected message; upload after class-
+end by the assigned coach succeeds and round-trips a real JPEG; a different
+coach gets 403 on both upload and view of another coach's class; admin can
+view any class's photo; unauthenticated requests 401). `flutter analyze`
+clean (0 errors/warnings, same 12 pre-existing info-level notices as the prior
+round — no new ones introduced). Hit the login rate limiter again from
+repeated test logins — bumped `LOGIN_RATE_LIMIT` to `200/15minutes`, restarted
+the backend, tested, then **restored it to `5/15minutes` and restarted again**.
+No Android emulator/Flutter-web-server pass done this round (small, additive
+UI change reusing an already-proven camera-capture pattern) — worth a real-
+device smoke test of the camera flow before assuming it's flawless, consistent
+with this project's standing mobile-testing caveat.
+
+---
+
 ## SUCCESS CHECKLIST
 ✅ All 15 requirements implemented
 ✅ Coaches see only their own data (API enforced)
