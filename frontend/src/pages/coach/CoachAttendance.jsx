@@ -209,12 +209,10 @@ export default function CoachAttendance() {
                         <td>{approvalBadge(r.approval_status)}</td>
                         <td>{new Date(r.timestamp).toLocaleString()}</td>
                         <td>
-                          {r.has_selfie ? (
+                          {r.has_selfie && (
                             <button className="btn btn-secondary btn-sm" onClick={() => viewSelfie(r)}>
                               View Photo
                             </button>
-                          ) : (
-                            <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Locked</span>
                           )}
                         </td>
                       </tr>

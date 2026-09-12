@@ -230,11 +230,6 @@ def receipt_pdf(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Receipt not found")
     if current_user.role == UserRole.COACH and receipt.coach_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your receipt")
-    if receipt.status != ReceiptStatus.APPROVED:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Receipt must be approved by admin before a PDF can be issued",
-        )
 
     student = db.query(User).filter(User.id == receipt.student_id).first()
     approver = db.query(User).filter(User.id == receipt.approved_by_admin_id).first() if receipt.approved_by_admin_id else None
@@ -257,13 +252,15 @@ def receipt_pdf(
         .first()
     )
     balance_amount = fee.balance_amount if fee else Decimal("0")
-    paid_date = receipt.decided_at.date() if receipt.decided_at else date.today()
+    paid_date = (receipt.decided_at or receipt.created_at).date()
+    approved_by_name = approver.name if (receipt.status == ReceiptStatus.APPROVED and approver) else None
     disposition = "inline" if disposition == "inline" else "attachment"
 
     if fmt == "csv":
-        headers = ["Receipt No", "Student", "Coach", "Activities", "Period", "Amount", "Balance", "Payment Mode", "Paid Date", "Approved By"]
+        headers = ["Receipt No", "Status", "Student", "Coach", "Activities", "Period", "Amount", "Balance", "Payment Mode", "Date", "Approved By"]
         rows = [[
             f"RCPT-{receipt.id:06d}",
+            receipt.status.value,
             student.name if student else "Unknown",
             current_user.name if current_user.role == UserRole.COACH else (approver.name if approver else "-"),
             ", ".join(activity_names) or "N/A",
@@ -272,7 +269,7 @@ def receipt_pdf(
             balance_amount,
             receipt.payment_mode,
             paid_date.isoformat(),
-            approver.name if approver else "-",
+            approved_by_name or "-",
         ]]
         buffer = rows_to_csv(headers, rows)
         log_action(db, current_user.id, "DOWNLOAD_RECEIPT_CSV", "FeeReceipt", receipt.id)
@@ -293,7 +290,8 @@ def receipt_pdf(
         balance_amount=balance_amount,
         payment_mode=receipt.payment_mode,
         paid_date=paid_date,
-        approved_by=approver.name if approver else None,
+        approved_by=approved_by_name,
+        receipt_status=receipt.status.value,
     )
     log_action(db, current_user.id, "DOWNLOAD_RECEIPT_PDF", "FeeReceipt", receipt.id)
     db.commit()

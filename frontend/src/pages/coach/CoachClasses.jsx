@@ -183,7 +183,6 @@ export default function CoachClasses() {
                               View Photo
                             </button>
                           )}
-                          <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Locked</span>
                         </div>
                       ) : (
                         <div className="table-actions" style={{ flexWrap: "wrap" }}>

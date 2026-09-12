@@ -252,7 +252,6 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
                                                       onPressed: () => _viewPhoto(record),
                                                       child: const Text('View Photo'),
                                                     ),
-                                                  const Text('Locked', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
                                                 ],
                                               )
                                             : Wrap(

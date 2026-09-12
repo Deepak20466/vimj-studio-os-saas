@@ -38,6 +38,7 @@ def build_fee_receipt_pdf(
     payment_mode: str,
     paid_date: date,
     approved_by: Optional[str] = None,
+    receipt_status: str = "APPROVED",
     academy_name: str = "VIMJ Studio",
     academy_contact: str = "hello@vimjstudio.com  |  +91 98000 00000",
     student_contact: Optional[str] = None,
@@ -74,8 +75,9 @@ def build_fee_receipt_pdf(
     c.setFont("Helvetica-Oblique", 9)
     c.drawString(text_x, height - 27 * mm, "Fee Payment Receipt")
 
+    receipt_title = "RECEIPT" if receipt_status == "APPROVED" else f"RECEIPT ({receipt_status})"
     c.setFont("Helvetica-Bold", 20)
-    c.drawRightString(width - margin, height - 14 * mm, "RECEIPT")
+    c.drawRightString(width - margin, height - 14 * mm, receipt_title)
     c.setFont("Helvetica-Bold", 10)
     c.drawRightString(width - margin, height - 21 * mm, f"Receipt No: {receipt_no}")
     c.setFont("Helvetica", 9)
@@ -205,7 +207,12 @@ def build_fee_receipt_pdf(
     y -= 4.5 * mm
     c.drawString(margin, y, "Retain this receipt for your records.")
 
-    sig_note = f"Approved by: {approved_by}" if approved_by else "Approved by academy admin"
+    if receipt_status == "APPROVED":
+        sig_note = f"Approved by: {approved_by}" if approved_by else "Approved by academy admin"
+    elif receipt_status == "REJECTED":
+        sig_note = "Rejected by admin — not a valid payment confirmation"
+    else:
+        sig_note = "Pending admin approval — not yet confirmed"
     c.setFont("Helvetica-Oblique", 9)
     c.drawString(margin + col_w + 10 * mm, y + 4.5 * mm, sig_note)
     c.setStrokeColor(TEXT_MUTED)

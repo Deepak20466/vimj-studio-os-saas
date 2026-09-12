@@ -1,4 +1,4 @@
-from datetime import date as date_type, datetime, timedelta
+from datetime import date as date_type, datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -36,9 +36,6 @@ from app.services.notifications import notify_and_push
 
 router = APIRouter(prefix="/attendance", tags=["attendance"])
 
-# How long after a class ends a coach is still allowed to mark attendance for it.
-MARK_DEADLINE_MINUTES = 60
-
 
 def _resolve_marking_coach(db: Session, class_session: ClassSession, current_user: User) -> int:
     """Return the coach_id allowed to mark this class: only the assigned coach."""
@@ -58,13 +55,6 @@ def mark_student_attendance(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
 
     coach_id = _resolve_marking_coach(db, class_session, current_user)
-
-    class_end_dt = datetime.combine(class_session.date, class_session.end_time)
-    if datetime.now() > class_end_dt + timedelta(minutes=MARK_DEADLINE_MINUTES):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Attendance marking deadline has passed for this class",
-        )
 
     enrolled = (
         db.query(StudentEnrollment)

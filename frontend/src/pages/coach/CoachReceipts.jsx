@@ -126,21 +126,15 @@ export default function CoachReceipts() {
                   </td>
                   <td>{r.decision_note || "-"}</td>
                   <td className="table-actions">
-                    {r.status === "APPROVED" ? (
-                      <>
-                        <button className="btn btn-secondary btn-sm" onClick={() => viewReceipt(r)}>
-                          View
-                        </button>
-                        <button className="btn btn-primary btn-sm" onClick={() => downloadReceipt(r, "pdf")}>
-                          PDF
-                        </button>
-                        <button className="btn btn-primary btn-sm" onClick={() => downloadReceipt(r, "csv")}>
-                          CSV
-                        </button>
-                      </>
-                    ) : (
-                      "-"
-                    )}
+                    <button className="btn btn-secondary btn-sm" onClick={() => viewReceipt(r)}>
+                      View
+                    </button>
+                    <button className="btn btn-primary btn-sm" onClick={() => downloadReceipt(r, "pdf")}>
+                      PDF
+                    </button>
+                    <button className="btn btn-primary btn-sm" onClick={() => downloadReceipt(r, "csv")}>
+                      CSV
+                    </button>
                   </td>
                 </tr>
               ))}
