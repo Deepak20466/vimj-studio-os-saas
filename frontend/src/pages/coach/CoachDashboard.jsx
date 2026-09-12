@@ -6,8 +6,11 @@ import { CoachSelfAPI, ActivitiesAPI } from "../../api/endpoints";
 const POLL_MS = 30000;
 const STATUS_LABELS = { PRESENT: "Present", ABSENT: "Absent", NOT_CONFIRM: "Not Confirm" };
 
+// Local calendar date, not new Date().toISOString() — that converts to UTC, which shows
+// yesterday's date for IST users between midnight and 5:30am.
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export default function CoachDashboard() {

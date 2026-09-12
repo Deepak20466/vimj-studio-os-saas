@@ -4,7 +4,12 @@ import { AttendanceAPI, ActivitiesAPI, StudentsAPI, CoachesAPI } from "../api/en
 import StatusBadge from "../components/StatusBadge";
 import Modal from "../components/Modal";
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
+// Local calendar date, not new Date().toISOString() — that converts to UTC, which shows
+// yesterday's date for IST users between midnight and 5:30am.
+const todayStr = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
 
 export default function Attendance() {
   const [missing, setMissing] = useState([]);

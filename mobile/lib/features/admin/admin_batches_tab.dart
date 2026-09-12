@@ -205,7 +205,20 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
       appBar: AppBar(title: const Text('Batches')),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'admin-batches-fab',
-        onPressed: _activities.isEmpty ? null : () => _openForm(),
+        onPressed: () {
+          if (_activities.isEmpty) {
+            showDialog(
+              context: context,
+              builder: (_) => AlertDialog(
+                title: const Text('No activities yet'),
+                content: const Text('Create an Activity first, then come back here to add a Batch for it.'),
+                actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
+              ),
+            );
+            return;
+          }
+          _openForm();
+        },
         icon: const Icon(Icons.add),
         label: const Text('Add Batch'),
       ),

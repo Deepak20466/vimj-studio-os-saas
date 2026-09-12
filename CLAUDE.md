@@ -1066,10 +1066,52 @@ admin Manage>Classes tab loads) reported `has_group_photo: true`, and confirmed
 then deleted the test class/activity. `npm run build` clean (web). `flutter analyze` clean (0
 errors/warnings, 16 pre-existing info-level notices — 4 more than the last recorded count,
 accounted for exactly by the two restored files' own pre-existing `prefer_final_fields` infos,
-same class already present elsewhere in this codebase, nothing new introduced). **Not done this
-round**: no mobile release was built/shipped — these are source changes only; a coach/admin
-running an already-installed APK won't see Activities/Batches back until a new `mobile-vX.Y.Z`
-is built and released the same way as prior rounds (see `mobile/README.md`).
+same class already present elsewhere in this codebase, nothing new introduced). Released as
+`mobile-v1.18.0`, built against `https://vimj-backend.onrender.com`.
+
+**Same-round follow-up: 3 more bugs found and fixed on a closer pass, all pre-existing (not
+introduced by the restore itself — just newly reachable now that this screen is back), released
+as `mobile-v1.19.0`:**
+1. **Dead "Add Batch" FAB (mobile)** — `admin_batches_tab.dart`'s FAB was
+   `onPressed: _activities.isEmpty ? null : () => _openForm()`. This app never styles a disabled
+   FAB differently (no `floatingActionButtonTheme` anywhere in `app_theme.dart`), so with zero
+   Activities the button looked fully live but did nothing when tapped — the exact "dead FAB"
+   anti-pattern already documented and fixed elsewhere in the coach app back on 2026-09-10, never
+   applied here. Fixed the same way: `onPressed` is never null now — with no activities it shows
+   an explanatory `AlertDialog` ("Create an Activity first...") instead of silently doing nothing.
+2. **No double-submit / stale-row (404) handling on Sessions deletes** — web `Activities.jsx`'s
+   `remove` (Activity), `removeBatch` (Session), `removeClass`, and `unenroll` handlers, plus
+   mobile `activity_sessions_screen.dart`'s `_remove` (batch delete), all fired straight to the
+   API with no guard against a duplicate click and no graceful handling of a 404 (a stale row —
+   deleted elsewhere, or a raced duplicate tap). The rest of the app got this hardening in the
+   2026-09-11 round (see that section above), but it landed on the *old standalone* `Batches.jsx`
+   page; when Batches got folded into `Activities.jsx` a day later, the hardening didn't carry
+   over into the new `SessionsModal`/`ActivityManageModal` code, and mobile's
+   `activity_sessions_screen.dart` (which predates the 2026-09-11 round entirely — written
+   2026-09-08) never had it either. Fixed to match the established pattern exactly: web's four
+   handlers now catch a 404 specifically and show "Already deleted/removed — refreshing list"
+   instead of a raw error; mobile's `_remove` now has a `_removingId` busy-guard (ignores a
+   second tap while one is in flight, shows a spinner in place of the row's menu) plus the same
+   404-graceful-reload, matching `admin_batches_tab.dart`'s own `_remove` — which already had
+   this, an inconsistency within the very files this round restored.
+3. **Pre-existing timezone bug in "today" defaults (web-wide, not Activities-specific)** —
+   `todayStr()` in `Activities.jsx` (and, found on the same pass, in `Attendance.jsx`,
+   `coach/CoachClasses.jsx`, and `coach/CoachDashboard.jsx`) computed today's date as
+   `new Date().toISOString().slice(0, 10)` — `toISOString()` converts to UTC, so for an IST user
+   (UTC+5:30) any time between midnight and 5:30am local shows *yesterday's* date instead of
+   today's. This silently defaulted the Sessions roster's date picker (and the equivalent pickers
+   on Attendance, CoachClasses, and CoachDashboard) to the wrong day during that window. Fixed
+   all four `todayStr()` definitions to build the date string from `getFullYear()`/`getMonth()`/
+   `getDate()` (local-time getters) instead. No `toISOString()`-derived date computation remains
+   anywhere in `frontend/src` (verified by grep after the fix).
+
+**Verified**: backend curl-tested the 404 scenario directly (create batch → delete → delete again
+→ confirms the real 404 + `{"detail":"Batch not found"}` shape both platforms' new handling now
+catches). `npm run build` clean (web). `flutter analyze` clean (0 errors/warnings, same 16
+pre-existing infos, nothing new). No Playwright/browser-automation tool available this session
+(same limitation as every round noted above without one) — the dead-FAB dialog and the
+busy-spinner/404-toast paths were verified by code inspection and the backend 404 test, not a
+rendered click-through; worth a quick manual look on a real device before assuming flawless.
 
 ## SUCCESS CHECKLIST
 ✅ All 15 requirements implemented

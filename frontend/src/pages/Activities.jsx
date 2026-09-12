@@ -4,7 +4,12 @@ import { ActivitiesAPI, CoachesAPI, StudentsAPI, BatchesAPI, AttendanceAPI } fro
 import Modal from "../components/Modal";
 import StatusBadge from "../components/StatusBadge";
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
+// Local calendar date, not new Date().toISOString() — that converts to UTC, which shows
+// yesterday's date for IST users between midnight and 5:30am.
+const todayStr = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
 const STATUS_OPTIONS = ["PRESENT", "ABSENT", "LEAVE", "NOT_CONFIRM"];
 const DAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 const SESSION_PERIODS = ["MORNING", "AFTERNOON", "EVENING"];
@@ -89,6 +94,13 @@ export default function Activities() {
       toast.success("Activity deleted");
       load();
     } catch (err) {
+      if (err.response?.status === 404) {
+        // Already gone (deleted elsewhere, or a duplicate click raced this same
+        // request) — refresh instead of leaving a stale row with a dead-end error.
+        toast("Already deleted — refreshing list");
+        load();
+        return;
+      }
       toast.error(err.response?.data?.detail || "Delete failed");
     }
   };
@@ -217,6 +229,11 @@ function SessionsModal({ activity, onClose }) {
       toast.success("Session deleted");
       load();
     } catch (err) {
+      if (err.response?.status === 404) {
+        toast("Already deleted — refreshing list");
+        load();
+        return;
+      }
       toast.error(err.response?.data?.detail || "Delete failed");
     }
   };
@@ -611,6 +628,11 @@ function ActivityManageModal({ activity, onClose }) {
       toast.success("Student removed from activity");
       loadAll();
     } catch (err) {
+      if (err.response?.status === 404) {
+        toast("Already removed — refreshing list");
+        loadAll();
+        return;
+      }
       toast.error(err.response?.data?.detail || "Failed to remove student");
     }
   };
@@ -658,6 +680,11 @@ function ActivityManageModal({ activity, onClose }) {
       toast.success("Class deleted");
       loadAll();
     } catch (err) {
+      if (err.response?.status === 404) {
+        toast("Already deleted — refreshing list");
+        loadAll();
+        return;
+      }
       toast.error(err.response?.data?.detail || "Delete failed");
     }
   };

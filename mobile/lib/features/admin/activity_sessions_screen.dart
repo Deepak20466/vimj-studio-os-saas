@@ -29,6 +29,7 @@ class _ActivitySessionsScreenState extends State<ActivitySessionsScreen> {
   List<Batch> _batches = [];
   List<Coach> _coaches = [];
   bool _loading = true;
+  int? _removingId;
 
   @override
   void initState() {
@@ -68,6 +69,7 @@ class _ActivitySessionsScreenState extends State<ActivitySessionsScreen> {
   }
 
   Future<void> _remove(Batch b) async {
+    if (_removingId == b.id) return; // already in flight — ignore a double tap
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -80,11 +82,21 @@ class _ActivitySessionsScreenState extends State<ActivitySessionsScreen> {
       ),
     );
     if (confirmed != true) return;
+    setState(() => _removingId = b.id);
     try {
       await ApiClient.instance.delete('/batches/${b.id}');
       _load();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted) {
+        // A 404 means this session is already gone (deleted elsewhere, or a
+        // duplicate tap raced this same request) — refresh instead of leaving
+        // a stale card on screen with a confusing permanent error.
+        final message = e.statusCode == 404 ? 'Already deleted — refreshing list' : e.message;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        if (e.statusCode == 404) _load();
+      }
+    } finally {
+      if (mounted) setState(() => _removingId = null);
     }
   }
 
@@ -123,18 +135,20 @@ class _ActivitySessionsScreenState extends State<ActivitySessionsScreen> {
                                 Row(
                                   children: [
                                     Expanded(child: Text('${_sessionLabel(b.sessionPeriod)} · ${b.startTime}-${b.endTime}', style: const TextStyle(fontWeight: FontWeight.bold))),
-                                    PopupMenuButton<String>(
-                                      onSelected: (v) {
-                                        if (v == 'roster') _openRoster(b);
-                                        if (v == 'edit') _openForm(batch: b);
-                                        if (v == 'delete') _remove(b);
-                                      },
-                                      itemBuilder: (_) => [
-                                        const PopupMenuItem(value: 'roster', child: Text('Roster')),
-                                        const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                                        const PopupMenuItem(value: 'delete', child: Text('Delete')),
-                                      ],
-                                    ),
+                                    _removingId == b.id
+                                        ? const Padding(padding: EdgeInsets.all(10), child: SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)))
+                                        : PopupMenuButton<String>(
+                                            onSelected: (v) {
+                                              if (v == 'roster') _openRoster(b);
+                                              if (v == 'edit') _openForm(batch: b);
+                                              if (v == 'delete') _remove(b);
+                                            },
+                                            itemBuilder: (_) => [
+                                              const PopupMenuItem(value: 'roster', child: Text('Roster')),
+                                              const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                                              const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                                            ],
+                                          ),
                                   ],
                                 ),
                                 Text('Days: ${b.daysOfWeek.join(", ")}', style: const TextStyle(color: AppColors.textMuted)),
