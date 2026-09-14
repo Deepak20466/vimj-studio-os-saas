@@ -1113,6 +1113,118 @@ pre-existing infos, nothing new). No Playwright/browser-automation tool availabl
 busy-spinner/404-toast paths were verified by code inspection and the backend 404 test, not a
 rendered click-through; worth a quick manual look on a real device before assuming flawless.
 
+## 2026-09-14 CLIENT FEEDBACK — search/tags polish, Activities/Batches hardening, persistent login
+
+Five items from the same client, all confirmed as genuine requests rather than missing test
+data, implemented on **both** web and mobile per an explicit "whatever this requirements it
+should be in mobile app fully implemented" instruction:
+
+1. **Fees search (admin)** — `frontend/src/pages/Fees.jsx` gained a search box above the main
+   fee-records table, filtering by student name or `month/year` (client-side, over the
+   already-loaded `fees` list — no new endpoint). Mobile `admin_fees_tab.dart` got the same
+   `TextField` + client-side filter over `_fees`, with a matching "No fee records match ..."
+   empty state on both platforms.
+2. **Activities roster search (admin)** — added to *both* roster surfaces in the Activities
+   section, not just the one named "managing roster," since both list students and both benefit:
+   - Web `ActivityManageModal`'s Roster tab (enroll/unenroll list) and `SessionRosterModal`
+     (the per-session attendance-marking roster) in `Activities.jsx`.
+   - Mobile `_ManageActivityScreen`'s Roster tab (`admin_activities_tab.dart`) and
+     `_SessionRosterScreen` (`activity_sessions_screen.dart`).
+   All four are simple client-side `.filter()`/`.where()` over the already-fetched roster list.
+3. **Paid/unpaid tag on the Students list (admin)** — `Students.jsx` and `admin_students_tab.dart`
+   now fetch `GET /fees?month=<current>&year=<current>` (existing endpoint, no backend change) on
+   load, build a `student_id → status` map, and render a badge/chip per row: PAID (green),
+   UNPAID/OVERDUE (warning/danger, reusing the existing `StatusBadge`/`badge-*` classes), or a
+   neutral "No Record" (new `.badge-norecord` class in `theme.css`, `AppColors.textMuted`-styled
+   chip on mobile) when the student has no fee row for the current month at all.
+4. **Activities/Batches: tested end-to-end, 3 real bugs found and fixed** (per this repo's
+   "test, don't trust" convention — curl-tested every backend endpoint directly, then drove both
+   the web app and a `flutter run -d web-server` build through real click-throughs with
+   Playwright/Firefox, the same technique documented in earlier rounds):
+   - **`PUT /activities/classes/{id}` always 422'd on any `date` change** — a genuine
+     pre-existing bug, not introduced this round, that broke "Edit Class" on both web and mobile
+     for as long as `ClassUpdate` has existed. Root cause: `backend/app/schemas/activity.py`
+     declared `date: Optional[date] = None` — a field *named* `date` whose default makes Pydantic
+     v2 set a class attribute of the same name, which then shadows the `datetime.date` type import
+     when Pydantic resolves the annotation via `typing.get_type_hints()` (which consults the
+     class's own namespace). The field silently became `Optional[NoneType]`, so submitting any
+     real date failed with "Input should be None." `ClassCreate.date`/`ClassOut.date` (no default,
+     so no class attribute, so no shadowing) were unaffected — only `ClassUpdate` broke, which is
+     why this had never shown up in this file's own create-class testing. Fixed by importing
+     `date` under an alias (`from datetime import date as _Date`) and using `_Date` for all three
+     annotations in that file — a type-alias-only change, the JSON field name `date` and API
+     contract are untouched. Verified via direct Python (`ClassUpdate(date='2026-09-21', ...)`
+     round-trips correctly now) and a full HTTP PUT round-trip, then via the actual web and mobile
+     "Edit Class" UI (mobile: date picker → new date persists and displays in the list).
+   - **Admin Dashboard crashed to a blank error state if its data fetch failed or was
+     interrupted** — `frontend/src/pages/Dashboard.jsx` guarded rendering with `if (loading)
+     return <Loading/>`, but `Promise.all([...]).catch(...).finally(() => setLoading(false))` left
+     `summary` at its initial `null` on any failure, so the very next line
+     (`summary.total_students`) threw. Reliably reproduced by a Playwright test that navigated
+     away from the Dashboard immediately after login, which aborts the in-flight requests — a
+     real-world equivalent of a flaky network or a user clicking away fast. Fixed with a
+     `loadFailed` state: `if (loadFailed || !summary) return <div className="empty-state">Failed
+     to load dashboard data. Please refresh the page.</div>` instead of crashing. Checked the
+     equivalent mobile (`admin_dashboard_tab.dart`, already defensive via `_summary ?? {}`) and
+     coach web (`CoachDashboard.jsx`, already defaults every piece of state to `[]`/`{}`/`null`
+     with guarded rendering) — neither had this gap.
+   - **Mobile Batches "Coverage" panel went stale after any batch create/edit/delete/generate-
+     sessions** — `admin_batches_tab.dart`'s `_openForm`, `_generateSessions`, and `_remove` all
+     called `_load()` (refreshes the batch list) but never `_loadCoverage()` (the "no coach
+     assigned" / "scheduled today but not generated" / "who takes which activity" summary card),
+     so deleting a batch left it still listed under "Batches with no coach assigned" until the
+     user pulled to refresh or left and re-entered the tab. Reproduced live: created a batch,
+     confirmed Coverage correctly listed it, deleted it, and Coverage still showed it. Fixed by
+     calling `_loadCoverage()` alongside `_load()` in all three handlers (including the existing
+     404-graceful-reload branch in `_remove`). Verified live — Coverage now updates in the same
+     session immediately after delete, no manual refresh needed.
+   Everything else exercised (activity/batch/class CRUD, enroll/unenroll, session roster
+   attendance marking with all 4 statuses, group-photo upload/view/cross-coach-403, coverage
+   summary, generate-sessions) worked correctly on the first try — see Verified below for the
+   full list actually driven through the UI.
+5. **Persistent login — mobile no longer re-locks on every app open.** The client's ask: log in
+   once, stay logged in, and only `Logout` should end the session. Web already satisfied this
+   (rotating 30-day sliding refresh token + `localStorage`, survives browser restarts — see
+   AUTHENTICATION above) and needed no change. **Mobile was the real gap**: `splash_screen.dart`
+   unconditionally called `BiometricService.isAvailable()` on every cold start and, if the device
+   supported biometrics, forced a fingerprint prompt (`stickyAuth`) before letting a *perfectly
+   valid stored session* through — declining or failing that prompt dumped the user back to full
+   password login. There was no settings toggle anywhere to turn this off, so it was pure friction
+   with no escape hatch; this is what actually read as "the app keeps locking me out." Fixed by
+   deleting the biometric gate from `_bootstrap()` entirely: a stored session now goes straight to
+   `AdminHome`/`CoachHome`, matching the backend's own sliding-session design (see
+   `ApiClient._tryRefresh`, `POST /auth/refresh`) — the only way to end a session is
+   `AuthApi.logout()` (`AuthStorage.clear()`), called solely from each app's explicit Logout
+   button. `biometric_service.dart` and the `local_auth` dependency are left in the tree unused,
+   same precedent as `notification_service.dart` (see the 2026-09-11 NOTIFICATIONS entry above) —
+   harmless, and re-wiring biometric *unlock* behind an opt-in settings toggle later is a small,
+   contained change if ever wanted back, not a rebuild. Verified live: full login → reload
+   (Flutter web's equivalent of relaunching the app) → lands on the Dashboard with zero
+   re-authentication prompt, on both the admin and coach accounts.
+
+**Verified live** (backend + web + mobile, per this repo's testing convention): backend
+curl-tested directly (activity/batch/class CRUD including the fixed date-edit PUT, enroll/
+unenroll incl. 404-on-double-unenroll, batch roster with `NOT_CONFIRM`/`PRESENT` marking and
+correct `not_confirm_count`, group-photo upload/view/cross-coach-403, `GET /fees?month&year`).
+Web driven end-to-end with Playwright/Firefox across three separate scripted passes (14/14,
+9/9, and a 47/47 smoke pass across every admin and coach page) — login, Students paid/unpaid
+tags rendering real PAID/UNPAID/No-Record badges, Fees search narrowing/restoring the table,
+Activities create → Manage → Roster search → enroll → Classes create/edit-date/delete →
+cleanup delete, and Sessions → Add Session → Roster search → mark attendance → delete, plus a
+clean no-page-error smoke pass over all 8 admin and all 8 coach routes. Mobile driven via
+`flutter run -d web-server --web-port 8082` + Playwright/Firefox coordinate-click screenshots
+(Flutter web renders to canvas with no accessible DOM, same limitation noted in every prior
+mobile round) covering: Students paid/unpaid chips, Fees search with match and empty states,
+Activities Manage>Roster search with match and empty states, Manage>Classes edit-date round
+trip, Batches Add/Delete with the Coverage-panel fix, and the coach app's Dashboard/Classes/
+Students/Attendance tabs plus its More sheet — zero page errors across all of it.
+`flutter analyze`: 0 errors/warnings, 17 pre-existing info-level notices (one more than the
+prior round's 16, accounted for exactly by the new fee-chip's own `withOpacity` call, same
+deprecated-API style already used elsewhere in this codebase — not a new class of issue).
+`npm run build` clean. `LOGIN_RATE_LIMIT` was bumped to `200/15minutes` for repeated test
+logins and **restored to `5/15minutes`**, backend restarted both times, per the existing
+gotcha noted in earlier rounds.
+
 ## SUCCESS CHECKLIST
 ✅ All 15 requirements implemented
 ✅ Coaches see only their own data (API enforced)

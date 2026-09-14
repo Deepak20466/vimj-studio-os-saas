@@ -22,11 +22,13 @@ class _AdminStudentsTabState extends State<AdminStudentsTab> {
   List<Student> _students = [];
   bool _loading = true;
   String _search = '';
+  Map<int, String> _feeStatusByStudent = {};
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadFeeStatus();
   }
 
   Future<void> _load() async {
@@ -38,6 +40,19 @@ class _AdminStudentsTabState extends State<AdminStudentsTab> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadFeeStatus() async {
+    try {
+      final now = DateTime.now();
+      final data = await ApiClient.instance.get('/fees', query: {'month': now.month, 'year': now.year}) as List;
+      if (!mounted) return;
+      setState(() {
+        _feeStatusByStudent = {for (final f in data) (f['student_id'] as int): f['status'] as String};
+      });
+    } on ApiException catch (_) {
+      // Non-critical — the fee tag just won't show if this fails.
     }
   }
 
@@ -95,6 +110,27 @@ class _AdminStudentsTabState extends State<AdminStudentsTab> {
     );
   }
 
+  Widget _feeChip(Student s) {
+    final status = _feeStatusByStudent[s.id];
+    Color color;
+    String label;
+    if (status == null) {
+      color = AppColors.textMuted;
+      label = 'No Record';
+    } else {
+      label = status;
+      color = status == 'PAID' ? AppColors.success : (status == 'OVERDUE' ? AppColors.danger : AppColors.warning);
+    }
+    return Chip(
+      label: Text(label, style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.bold)),
+      backgroundColor: color.withOpacity(0.12),
+      side: BorderSide.none,
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -120,7 +156,7 @@ class _AdminStudentsTabState extends State<AdminStudentsTab> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : RefreshIndicator(
-                    onRefresh: _load,
+                    onRefresh: () => Future.wait([_load(), _loadFeeStatus()]),
                     child: _students.isEmpty
                         ? ListView(children: const [Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No students found.')))])
                         : ListView.builder(
@@ -131,7 +167,13 @@ class _AdminStudentsTabState extends State<AdminStudentsTab> {
                               return Card(
                                 margin: const EdgeInsets.only(bottom: 10),
                                 child: ListTile(
-                                  title: Text(s.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  title: Row(
+                                    children: [
+                                      Flexible(child: Text(s.name, style: const TextStyle(fontWeight: FontWeight.bold))),
+                                      const SizedBox(width: 8),
+                                      _feeChip(s),
+                                    ],
+                                  ),
                                   subtitle: Text('${s.email.endsWith("@no-login.internal") ? "-" : s.email}\n${s.phone ?? "-"}'),
                                   isThreeLine: true,
                                   leading: CircleAvatar(

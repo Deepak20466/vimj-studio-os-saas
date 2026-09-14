@@ -15,6 +15,15 @@ attendance are gone system-wide; do not re-add any of them without an explicit d
 so. The admin Activities/Batches UI, cut in one of those rounds, was restored afterward at the
 same client's request — see CLAUDE.md's "ACTIVITIES/BATCHES RESTORED" section.
 
+The most recent round (2026-09-14 — see CLAUDE.md's "2026-09-14 CLIENT FEEDBACK" section) added
+search boxes to the admin Fees list and the Activities roster views, a paid/unpaid fee tag on
+the admin Students list (web and mobile, full parity per an explicit client instruction), fixed
+three real bugs found while testing Activities/Batches end-to-end (a backend schema bug that
+broke editing a class's date, an admin Dashboard crash on a failed data fetch, and a mobile
+Batches "Coverage" panel going stale after edits), and removed a mobile-only biometric-unlock
+gate that was forcing re-authentication on every app open even with a valid session — sessions
+now persist until the user explicitly logs out, on both platforms.
+
 ## Structure
 
 ```

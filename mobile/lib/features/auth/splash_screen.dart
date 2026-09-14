@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
 import '../../core/auth_storage.dart';
-import '../../core/biometric_service.dart';
 import '../admin/admin_home.dart';
 import '../coach/coach_home.dart';
 import 'login_screen.dart';
@@ -21,24 +20,22 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _bootstrap() async {
+    // A stored session is trusted on its own — no re-authentication gate on every
+    // app open. The client's explicit ask (2026-09-14): once logged in, stay logged
+    // in until Logout is pressed; the backend's rotating 30-day refresh token
+    // already keeps the session alive indefinitely with normal use (see
+    // ApiClient._tryRefresh). A prior biometric-unlock-on-launch gate used to force
+    // a fingerprint (or password-login fallback on decline/failure) every single
+    // time the app opened even with a perfectly valid session — that was the actual
+    // cause of the app feeling like it "locked" on its own. Removed rather than
+    // made optional: there was no settings toggle for it anywhere, so it was pure
+    // friction with no way to turn it off.
     final session = await AuthStorage.load();
     if (!mounted) return;
 
     if (session == null) {
       _goToLogin();
       return;
-    }
-
-    final biometricAvailable = await BiometricService.isAvailable();
-    if (biometricAvailable) {
-      final ok = await BiometricService.authenticate();
-      if (!mounted) return;
-      if (!ok) {
-        // Biometric declined/failed — fall back to password login rather than
-        // silently letting them in.
-        _goToLogin();
-        return;
-      }
     }
 
     _goToHome(session.role);

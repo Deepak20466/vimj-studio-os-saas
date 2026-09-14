@@ -84,7 +84,10 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
       useSafeArea: true,
       builder: (_) => _BatchForm(batch: batch, activities: _activities, coaches: _coaches),
     );
-    if (saved == true) _load();
+    if (saved == true) {
+      _load();
+      _loadCoverage();
+    }
   }
 
   Future<void> _generateSessions(Batch b) async {
@@ -101,6 +104,7 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['detail'] as String? ?? 'Sessions generated')));
       }
+      _loadCoverage();
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     }
@@ -124,6 +128,7 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
     try {
       await ApiClient.instance.delete('/batches/${b.id}');
       _load();
+      _loadCoverage();
     } on ApiException catch (e) {
       if (mounted) {
         // A 404 means this batch is already gone (deleted elsewhere, or a
@@ -131,7 +136,10 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
         // a stale card on screen with a confusing permanent error.
         final message = e.statusCode == 404 ? 'Already deleted — refreshing list' : e.message;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-        if (e.statusCode == 404) _load();
+        if (e.statusCode == 404) {
+          _load();
+          _loadCoverage();
+        }
       }
     } finally {
       if (mounted) setState(() => _removingId = null);

@@ -209,6 +209,13 @@ class _ManageActivityScreenState extends State<_ManageActivityScreen> with Singl
   List<Coach> _coaches = [];
   List<Student> _allStudents = [];
   bool _loading = true;
+  String _rosterSearch = '';
+
+  List<RosterStudent> get _visibleRoster {
+    final q = _rosterSearch.trim().toLowerCase();
+    if (q.isEmpty) return _roster;
+    return _roster.where((s) => s.name.toLowerCase().contains(q) || s.email.toLowerCase().contains(q)).toList();
+  }
 
   @override
   void initState() {
@@ -406,25 +413,40 @@ class _ManageActivityScreenState extends State<_ManageActivityScreen> with Singl
                           },
                         ),
                 ),
-                RefreshIndicator(
-                  onRefresh: _load,
-                  child: _roster.isEmpty
-                      ? ListView(children: const [Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No students enrolled yet.')))])
-                      : ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
-                          itemCount: _roster.length,
-                          itemBuilder: (context, i) {
-                            final s = _roster[i];
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              child: ListTile(
-                                title: Text(s.name),
-                                subtitle: Text(s.email.endsWith('@no-login.internal') ? '-' : s.email),
-                                trailing: IconButton(icon: const Icon(Icons.person_remove_outlined, color: AppColors.danger), onPressed: () => _unenroll(s)),
-                              ),
-                            );
-                          },
-                        ),
+                Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                      child: TextField(
+                        decoration: const InputDecoration(hintText: 'Search roster by name or email...', prefixIcon: Icon(Icons.search)),
+                        onChanged: (v) => setState(() => _rosterSearch = v),
+                      ),
+                    ),
+                    Expanded(
+                      child: RefreshIndicator(
+                        onRefresh: _load,
+                        child: _roster.isEmpty
+                            ? ListView(children: const [Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No students enrolled yet.')))])
+                            : _visibleRoster.isEmpty
+                                ? ListView(children: [Padding(padding: const EdgeInsets.all(32), child: Center(child: Text('No roster matches "$_rosterSearch".')))])
+                                : ListView.builder(
+                                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
+                                    itemCount: _visibleRoster.length,
+                                    itemBuilder: (context, i) {
+                                      final s = _visibleRoster[i];
+                                      return Card(
+                                        margin: const EdgeInsets.only(bottom: 8),
+                                        child: ListTile(
+                                          title: Text(s.name),
+                                          subtitle: Text(s.email.endsWith('@no-login.internal') ? '-' : s.email),
+                                          trailing: IconButton(icon: const Icon(Icons.person_remove_outlined, color: AppColors.danger), onPressed: () => _unenroll(s)),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

@@ -337,6 +337,7 @@ class _SessionRosterScreenState extends State<_SessionRosterScreen> {
   Map<String, dynamic>? _roster;
   bool _loading = true;
   int? _updatingId;
+  String _search = '';
 
   @override
   void initState() {
@@ -384,7 +385,9 @@ class _SessionRosterScreenState extends State<_SessionRosterScreen> {
   @override
   Widget build(BuildContext context) {
     final roster = _roster;
-    final students = (roster?['students'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final allStudents = (roster?['students'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final q = _search.trim().toLowerCase();
+    final students = q.isEmpty ? allStudents : allStudents.where((s) => (s['student_name'] as String).toLowerCase().contains(q)).toList();
     return Scaffold(
       appBar: AppBar(title: Text('${widget.activity.name} — ${_sessionLabel(widget.batch.sessionPeriod)} (${widget.batch.startTime}-${widget.batch.endTime})')),
       body: _loading
@@ -392,13 +395,26 @@ class _SessionRosterScreenState extends State<_SessionRosterScreen> {
           : Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
                   child: Row(
                     children: [
                       OutlinedButton.icon(onPressed: _pickDate, icon: const Icon(Icons.calendar_today, size: 16), label: Text(_classDate.toIso8601String().substring(0, 10))),
                       const SizedBox(width: 16),
-                      if (roster != null) Text('Present: ${roster['present_count']} · Absent/Leave: ${roster['absent_count']} · Not Confirm: ${roster['not_confirm_count']} · Unmarked: ${roster['unmarked_count']}', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                      if (roster != null)
+                        Expanded(
+                          child: Text(
+                            'Present: ${roster['present_count']} · Absent/Leave: ${roster['absent_count']} · Not Confirm: ${roster['not_confirm_count']} · Unmarked: ${roster['unmarked_count']}',
+                            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                          ),
+                        ),
                     ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: TextField(
+                    decoration: const InputDecoration(hintText: 'Search students...', prefixIcon: Icon(Icons.search)),
+                    onChanged: (v) => setState(() => _search = v),
                   ),
                 ),
                 if (roster != null && roster['class_id'] == null)
@@ -408,7 +424,7 @@ class _SessionRosterScreenState extends State<_SessionRosterScreen> {
                   ),
                 Expanded(
                   child: students.isEmpty
-                      ? const Center(child: Text('No students enrolled in this activity yet.'))
+                      ? Center(child: Text(allStudents.isEmpty ? 'No students enrolled in this activity yet.' : 'No students match "$_search".'))
                       : ListView.builder(
                           padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
                           itemCount: students.length,

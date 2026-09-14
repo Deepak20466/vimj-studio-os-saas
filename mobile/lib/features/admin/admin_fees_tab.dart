@@ -15,6 +15,7 @@ class AdminFeesTab extends StatefulWidget {
 class _AdminFeesTabState extends State<AdminFeesTab> {
   bool _loading = true;
   bool _unpaidOnly = false;
+  String _search = '';
   List<AdminFeeRecord> _fees = [];
   List<FeeReceiptRecord> _pendingReceipts = [];
   List<FeeReceiptRecord> _approvedReceipts = [];
@@ -57,6 +58,12 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
 
   String _feeStudentName(AdminFeeRecord f) => f.studentName ?? _studentNames[f.studentId] ?? 'Student #${f.studentId}';
   String _receiptStudentName(FeeReceiptRecord r) => r.studentName ?? _studentNames[r.studentId] ?? 'Student #${r.studentId}';
+
+  List<AdminFeeRecord> get _visibleFees {
+    final q = _search.trim().toLowerCase();
+    if (q.isEmpty) return _fees;
+    return _fees.where((f) => _feeStudentName(f).toLowerCase().contains(q) || '${f.month}/${f.year}'.contains(q)).toList();
+  }
 
   Future<String?> _promptReason(String title) {
     final ctrl = TextEditingController();
@@ -341,13 +348,23 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                     ],
                   ),
                   const SizedBox(height: 8),
+                  TextField(
+                    decoration: const InputDecoration(hintText: 'Search by student name or month/year...', prefixIcon: Icon(Icons.search)),
+                    onChanged: (v) => setState(() => _search = v),
+                  ),
+                  const SizedBox(height: 8),
                   if (_fees.isEmpty)
                     Padding(
                       padding: const EdgeInsets.all(20),
                       child: Center(child: Text(_unpaidOnly ? 'No outstanding fees. Everyone is paid up.' : 'No fee records yet.')),
                     )
+                  else if (_visibleFees.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Center(child: Text('No fee records match "$_search".')),
+                    )
                   else
-                    ..._fees.map(
+                    ..._visibleFees.map(
                       (f) => Card(
                         margin: const EdgeInsets.only(bottom: 10),
                         child: Padding(

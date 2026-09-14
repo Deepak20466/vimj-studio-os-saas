@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { StudentsAPI } from "../api/endpoints";
+import { StudentsAPI, FeesAPI } from "../api/endpoints";
 import Modal from "../components/Modal";
 import SelfieCapture from "../components/SelfieCapture";
+import StatusBadge from "../components/StatusBadge";
 
 export default function Students() {
   const [students, setStudents] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [feeStatusByStudent, setFeeStatusByStudent] = useState({});
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: "", email: "", phone: "", phone_secondary: "", password: "", additional_details: "" });
@@ -29,6 +31,21 @@ export default function Students() {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
+
+  useEffect(() => {
+    const now = new Date();
+    FeesAPI.list({ month: now.getMonth() + 1, year: now.getFullYear() })
+      .then((r) => {
+        const map = {};
+        r.data.forEach((f) => {
+          map[f.student_id] = f.status;
+        });
+        setFeeStatusByStudent(map);
+      })
+      .catch(() => {
+        // Non-critical — the fee tag just won't show if this fails.
+      });
+  }, []);
 
   const openCreate = () => {
     setEditing(null);
@@ -155,6 +172,7 @@ export default function Students() {
                 <th>Phone</th>
                 <th>Emergency Contact</th>
                 <th>Status</th>
+                <th>Fee (this month)</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -167,6 +185,13 @@ export default function Students() {
                   <td>{s.phone_secondary || "-"}</td>
                   <td>
                     <span className={`badge ${s.is_active ? "badge-present" : "badge-absent"}`}>{s.is_active ? "Active" : "Inactive"}</span>
+                  </td>
+                  <td>
+                    {feeStatusByStudent[s.id] ? (
+                      <StatusBadge status={feeStatusByStudent[s.id]} />
+                    ) : (
+                      <span className="badge badge-norecord">No Record</span>
+                    )}
                   </td>
                   <td className="table-actions">
                     <button className="btn btn-secondary btn-sm" onClick={() => openProfile(s)}>

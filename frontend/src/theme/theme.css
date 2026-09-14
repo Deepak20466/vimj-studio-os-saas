@@ -512,6 +512,11 @@ tbody tr:hover {
   color: var(--info);
 }
 
+.badge-norecord {
+  background: var(--brand-light);
+  color: var(--text-muted);
+}
+
 .btn {
   display: inline-flex;
   align-items: center;

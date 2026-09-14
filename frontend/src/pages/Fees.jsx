@@ -10,6 +10,7 @@ export default function Fees() {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [unpaidOnly, setUnpaidOnly] = useState(false);
+  const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ student_id: "", month: new Date().getMonth() + 1, year: new Date().getFullYear(), amount: "", due_date: "" });
@@ -219,6 +220,12 @@ export default function Fees() {
 
   const studentName = (fee) => fee.student_name || students.find((s) => s.id === fee.student_id)?.name || `#${fee.student_id}`;
 
+  const visibleFees = fees.filter((f) => {
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return studentName(f).toLowerCase().includes(q) || `${f.month}/${f.year}`.includes(q);
+  });
+
   return (
     <div>
       <div className="page-header">
@@ -374,6 +381,12 @@ export default function Fees() {
 
       <div className="card">
         <div className="toolbar" style={{ marginBottom: 12 }}>
+          <input
+            placeholder="Search by student name or month/year..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ maxWidth: 320 }}
+          />
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.85rem" }}>
             <input type="checkbox" checked={unpaidOnly} onChange={(e) => setUnpaidOnly(e.target.checked)} />
             Show unpaid/overdue only
@@ -383,6 +396,8 @@ export default function Fees() {
           <div className="empty-state">Loading...</div>
         ) : fees.length === 0 ? (
           <div className="empty-state">{unpaidOnly ? "No outstanding fees. Everyone is paid up." : "No fee records yet."}</div>
+        ) : visibleFees.length === 0 ? (
+          <div className="empty-state">No fee records match "{search}".</div>
         ) : (
           <table>
             <thead>
@@ -397,7 +412,7 @@ export default function Fees() {
               </tr>
             </thead>
             <tbody>
-              {fees.map((f) => (
+              {visibleFees.map((f) => (
                 <tr key={f.id}>
                   <td>{studentName(f)}</td>
                   <td>

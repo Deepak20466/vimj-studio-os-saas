@@ -12,6 +12,7 @@ export default function Dashboard() {
   const [missing, setMissing] = useState([]);
   const [activityAttendance, setActivityAttendance] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -26,13 +27,21 @@ export default function Dashboard() {
         setMissing(m.data);
         setActivityAttendance(a.data.points);
       })
-      .catch((err) => toast.error(err.response?.data?.detail || "Failed to load dashboard"))
+      .catch((err) => {
+        toast.error(err.response?.data?.detail || "Failed to load dashboard");
+        setLoadFailed(true);
+      })
       .finally(() => setLoading(false));
   }, []);
 
   useResizeAfterLoad(!loading);
 
   if (loading) return <div className="empty-state">Loading dashboard...</div>;
+  // A failed/interrupted fetch leaves `summary` null even after loading finishes —
+  // render a recoverable state instead of crashing on summary.total_students.
+  if (loadFailed || !summary) {
+    return <div className="empty-state">Failed to load dashboard data. Please refresh the page.</div>;
+  }
 
   const feeData = feeGraph
     ? [

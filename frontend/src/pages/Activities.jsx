@@ -460,6 +460,7 @@ function SessionRosterModal({ activity, batch, onClose }) {
   const [roster, setRoster] = useState(null);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState(null);
+  const [search, setSearch] = useState("");
 
   const load = () => {
     setLoading(true);
@@ -500,6 +501,12 @@ function SessionRosterModal({ activity, batch, onClose }) {
           Date
           <input type="date" value={classDate} onChange={(e) => setClassDate(e.target.value)} />
         </label>
+        <input
+          placeholder="Search students..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ maxWidth: 220 }}
+        />
       </div>
 
       {loading || !roster ? (
@@ -531,7 +538,9 @@ function SessionRosterModal({ activity, batch, onClose }) {
                 </tr>
               </thead>
               <tbody>
-                {roster.students.map((s) => (
+                {roster.students
+                  .filter((s) => s.student_name.toLowerCase().includes(search.trim().toLowerCase()))
+                  .map((s) => (
                   <tr key={s.student_id}>
                     <td>{s.student_name}</td>
                     <td>
@@ -587,6 +596,7 @@ function ActivityManageModal({ activity, onClose }) {
   const [groupPhotoFor, setGroupPhotoFor] = useState(null);
   const [groupPhotoUrl, setGroupPhotoUrl] = useState(null);
   const [groupPhotoLoading, setGroupPhotoLoading] = useState(false);
+  const [rosterSearch, setRosterSearch] = useState("");
 
   const loadAll = () => {
     ActivitiesAPI.classes(activity.id).then((r) => setClasses(r.data));
@@ -780,28 +790,47 @@ function ActivityManageModal({ activity, onClose }) {
             </select>
             <button className="btn btn-primary">Enroll</button>
           </form>
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {roster.map((s) => (
-                <tr key={s.id}>
-                  <td>{s.name}</td>
-                  <td>{s.email}</td>
-                  <td className="table-actions">
-                    <button className="btn btn-danger btn-sm" onClick={() => unenroll(s)}>
-                      Remove
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="toolbar" style={{ marginBottom: 12 }}>
+            <input
+              placeholder="Search roster by name or email..."
+              value={rosterSearch}
+              onChange={(e) => setRosterSearch(e.target.value)}
+              style={{ maxWidth: 280 }}
+            />
+          </div>
+          {(() => {
+            const q = rosterSearch.trim().toLowerCase();
+            const visibleRoster = q
+              ? roster.filter((s) => s.name.toLowerCase().includes(q) || (s.email || "").toLowerCase().includes(q))
+              : roster;
+            if (visibleRoster.length === 0) {
+              return <div className="empty-state">{roster.length === 0 ? "No students enrolled yet." : `No roster matches "${rosterSearch}".`}</div>;
+            }
+            return (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleRoster.map((s) => (
+                    <tr key={s.id}>
+                      <td>{s.name}</td>
+                      <td>{s.email}</td>
+                      <td className="table-actions">
+                        <button className="btn btn-danger btn-sm" onClick={() => unenroll(s)}>
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            );
+          })()}
         </div>
       )}
     </Modal>
