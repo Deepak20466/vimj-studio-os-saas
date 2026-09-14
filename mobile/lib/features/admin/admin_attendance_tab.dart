@@ -2,7 +2,10 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
+import '../../core/dismissed_items.dart';
 import '../../core/models.dart';
+
+const _missingAttendanceDismissKey = 'missing_attendance';
 
 class AdminAttendanceTab extends StatefulWidget {
   const AdminAttendanceTab({super.key});
@@ -50,7 +53,8 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
         ApiClient.instance.get('/activities'),
         ApiClient.instance.get('/coaches'),
       ]);
-      _missing = (results[0] as List).map((e) => DailyMissingRow.fromJson(e as Map<String, dynamic>)).toList();
+      final rawMissing = (results[0] as List).map((e) => DailyMissingRow.fromJson(e as Map<String, dynamic>)).toList();
+      _missing = await DismissedItems.filter(_missingAttendanceDismissKey, rawMissing, (m) => m.classId);
       _activities = (results[1] as List).map((e) => Activity.fromJson(e as Map<String, dynamic>)).toList();
       _coaches = (results[2] as List).map((e) => Coach.fromJson(e as Map<String, dynamic>)).toList();
     } on ApiException catch (e) {
@@ -58,6 +62,11 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _dismissMissing(DailyMissingRow m) async {
+    await DismissedItems.dismiss(_missingAttendanceDismissKey, m.classId);
+    if (mounted) setState(() => _missing = _missing.where((x) => x.classId != m.classId).toList());
   }
 
   Future<void> _loadRecords() async {
@@ -414,6 +423,11 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                             leading: const Icon(Icons.warning_amber_rounded, color: AppColors.warning),
                             title: Text(m.coachName),
                             subtitle: Text('${m.activityName} · ${m.date} · ends ${m.endTime}'),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline, color: AppColors.danger),
+                              tooltip: 'Dismiss this alert',
+                              onPressed: () => _dismissMissing(m),
+                            ),
                           ),
                         )),
                   const SizedBox(height: 20),

@@ -591,6 +591,7 @@ function ActivityManageModal({ activity, onClose }) {
   const [students, setStudents] = useState([]);
   const [classForm, setClassForm] = useState({ coach_id: "", date: "", start_time: "", end_time: "" });
   const [enrollStudentId, setEnrollStudentId] = useState("");
+  const [enrollSearch, setEnrollSearch] = useState("");
   const [editingClass, setEditingClass] = useState(null);
   const [editClassForm, setEditClassForm] = useState({ coach_id: "", date: "", start_time: "", end_time: "" });
   const [groupPhotoFor, setGroupPhotoFor] = useState(null);
@@ -699,6 +700,11 @@ function ActivityManageModal({ activity, onClose }) {
     }
   };
 
+  const enrollQ = enrollSearch.trim().toLowerCase();
+  const enrollableStudents = enrollQ
+    ? students.filter((s) => s.name.toLowerCase().includes(enrollQ) || (s.email || "").toLowerCase().includes(enrollQ))
+    : students;
+
   return (
     <>
     <Modal title={`Manage: ${activity.name}`} onClose={onClose}>
@@ -780,15 +786,26 @@ function ActivityManageModal({ activity, onClose }) {
       {tab === "roster" && (
         <div>
           <form onSubmit={enroll} className="toolbar">
+            <input
+              placeholder="Search students to enroll..."
+              value={enrollSearch}
+              onChange={(e) => {
+                setEnrollSearch(e.target.value);
+                setEnrollStudentId("");
+              }}
+              style={{ maxWidth: 220 }}
+            />
             <select value={enrollStudentId} onChange={(e) => setEnrollStudentId(e.target.value)} required style={{ maxWidth: 260 }}>
-              <option value="">Select student to enroll</option>
-              {students.map((s) => (
+              <option value="">{enrollableStudents.length ? "Select student to enroll" : "No matching students"}</option>
+              {enrollableStudents.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
                 </option>
               ))}
             </select>
-            <button className="btn btn-primary">Enroll</button>
+            <button className="btn btn-primary" disabled={enrollableStudents.length === 0}>
+              Enroll
+            </button>
           </form>
           <div className="toolbar" style={{ marginBottom: 12 }}>
             <input

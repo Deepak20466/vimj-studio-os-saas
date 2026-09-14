@@ -1225,6 +1225,71 @@ deprecated-API style already used elsewhere in this codebase — not a new class
 logins and **restored to `5/15minutes`**, backend restarted both times, per the existing
 gotcha noted in earlier rounds.
 
+## 2026-09-14 CLIENT FEEDBACK — round 2: enroll-search dialog + missing-attendance dismiss
+
+Two more small requests from the same client, same day as the round above:
+
+1. **Search when enrolling a new student into an Activity.** The roster search added in the
+   round above only filtered the *already-enrolled* roster list — the separate "pick a student
+   to enroll" control had no search at all: a plain `<select>` on web
+   (`frontend/src/pages/Activities.jsx`'s `ActivityManageModal` → Roster tab) and an unsearchable
+   `SimpleDialog` listing every not-yet-enrolled student on mobile
+   (`admin_activities_tab.dart`'s `_enrollStudent()`). Fixed on both platforms by adding a live
+   text filter in front of the picker: web gained an `enrollSearch` state that filters `students`
+   by name/email before rendering `<option>`s (clearing the current selection whenever the search
+   text changes, so a stale out-of-list value can't linger), and mobile's `SimpleDialog` was
+   replaced with an `AlertDialog` containing a `TextField` + `StatefulBuilder`-driven `ListView`
+   of matches — tapping a row selects it exactly as the old `SimpleDialogOption` did. No backend
+   change (`GET /students` / `POST /activities/enroll` were already correct) — purely a
+   "the list is long, let me search it" UI gap, same class as the Fees/roster search fixed in the
+   round above.
+2. **A "delete" (dismiss) action on generated alert lists, generalized from a named example.**
+   The client's own example was an entry like "ankith (Yoga · 6:00-7:00am · 2026-09-14 · ends
+   07:00:00)" that they want to read and then clear, and asked that the same affordance apply
+   "wherever like this messages appear in any section in admin or coaches dashboard." Audited
+   both dashboards for other passive, no-existing-action report lists — Batches' "Coverage"
+   panel and the coach Dashboard's "Today's Classes" were both considered and ruled out: Coverage
+   rows are just an alternate view of real, already-editable `Batch` records (edit/delete already
+   live on the Batches list itself), and Today's Classes is an actionable schedule, not a
+   read-or-ignore alert. The one concrete match, appearing in exactly 4 places (`Dashboard.jsx`,
+   `Attendance.jsx`, `admin_dashboard_tab.dart`, `admin_attendance_tab.dart`), is "Coaches Missing
+   Attendance Today" — a computed report row (from `GET /attendance/daily-missing`) with **no
+   backing DB row** to actually delete, so "delete" here means a per-item, per-browser/device
+   dismiss rather than a real backend deletion — matching the notification bell's
+   read-or-ignore-then-delete pattern without inventing new backend state for data that's
+   recomputed fresh on every load. New shared utility on each platform
+   (`frontend/src/utils/dismissedItems.js`, `mobile/lib/core/dismissed_items.dart`, mirrored
+   implementations) stores dismissed `class_id`s under one shared key (`"missing_attendance"`) in
+   `localStorage`/`SharedPreferences`, filters them out of every fresh load, and prunes any
+   dismissed id no longer present in the current list (resolved, or the day rolled over) so
+   storage doesn't grow forever. All 4 call sites now filter through it on load and expose a
+   Delete button/trash icon per row that calls the same dismiss + local state removal.
+   **Known limitation, not a bug**: because the admin apps keep every bottom-nav tab alive at
+   once (`IndexedStack`, mobile) or load each page independently (web), a dismissal made on one
+   screen (e.g. the Attendance tab) does not retroactively update a sibling screen that already
+   finished its own load before the dismissal (e.g. the Dashboard tab, until its own
+   pull-to-refresh/reload) — the same pre-existing staleness class documented in the round above
+   for Batches' Coverage panel, not something this change introduces or was asked to solve
+   system-wide.
+
+**Verified live**: backend untouched by this round (both fixes are pure frontend/mobile), so no
+curl testing was needed for the fixes themselves — verified via real click-throughs instead. Web
+driven end-to-end with Playwright/Firefox (14/14 scripted checks: login, Dashboard and Attendance
+page delete buttons present + row removed on click + dismissal survives a full page reload,
+Activities → Manage → Roster → enroll search narrowing a partial name match to the exact single
+result and an impossible query to zero, restoring the full list when cleared). Mobile driven via
+the established `flutter run -d web-server --web-port 8082` + Playwright/Firefox coordinate-click
+technique: screenshotted and exercised the Attendance tab's missing-attendance delete icon (row
+disappears immediately, stays gone across a full app reload + re-login), the Dashboard tab's
+identical card, and Activities → (⋮) → Manage (Classes/Roster) → Roster → Enroll Student —
+confirmed the new search dialog narrows to an exact match, shows "No matching students." on an
+impossible query, and that tapping a result actually enrolls (a test enrollment of Diya Sharma
+into Badminton was created this way and then removed again via a direct API call to leave the
+seed data as found). `flutter analyze`: 0 errors/warnings, same 17 pre-existing info-level
+notices as the round above (none new). `npm run build` clean. `LOGIN_RATE_LIMIT` was bumped to
+`200/15minutes` for repeated test logins and **restored to `5/15minutes`**, backend restarted
+both times, per the standing gotcha noted throughout this file.
+
 ## SUCCESS CHECKLIST
 ✅ All 15 requirements implemented
 ✅ Coaches see only their own data (API enforced)

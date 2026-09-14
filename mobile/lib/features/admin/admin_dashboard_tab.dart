@@ -2,6 +2,9 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
+import '../../core/dismissed_items.dart';
+
+const _missingAttendanceDismissKey = 'missing_attendance';
 
 class AdminDashboardTab extends StatefulWidget {
   const AdminDashboardTab({super.key});
@@ -34,13 +37,19 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
       ]);
       _summary = results[0] as Map<String, dynamic>;
       _feeGraph = results[1] as Map<String, dynamic>;
-      _missing = results[2] as List<dynamic>;
+      final rawMissing = results[2] as List<dynamic>;
+      _missing = await DismissedItems.filter(_missingAttendanceDismissKey, rawMissing, (m) => (m as Map<String, dynamic>)['class_id'] as int);
       _activityBreakdown = (results[3] as Map<String, dynamic>)['points'] as List<dynamic>? ?? [];
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _dismissMissing(Map<String, dynamic> m) async {
+    await DismissedItems.dismiss(_missingAttendanceDismissKey, m['class_id'] as int);
+    if (mounted) setState(() => _missing = _missing.where((x) => (x as Map<String, dynamic>)['class_id'] != m['class_id']).toList());
   }
 
   Widget _statCard(String label, String value) {
@@ -183,6 +192,11 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
                         title: Text(m['coach_name'] ?? '-'),
                         subtitle: Text('${m['activity_name'] ?? '-'} · ${m['date'] ?? ''} · ends ${m['end_time'] ?? ''}'),
                         leading: const Icon(Icons.warning_amber_rounded, color: AppColors.warning),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete_outline, color: AppColors.danger),
+                          tooltip: 'Dismiss this alert',
+                          onPressed: () => _dismissMissing(m as Map<String, dynamic>),
+                        ),
                       )),
               ],
             ),

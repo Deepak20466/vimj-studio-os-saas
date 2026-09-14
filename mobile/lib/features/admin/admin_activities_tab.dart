@@ -297,13 +297,52 @@ class _ManageActivityScreenState extends State<_ManageActivityScreen> with Singl
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All students are already enrolled.')));
       return;
     }
+    String query = '';
     final selected = await showDialog<int>(
       context: context,
-      builder: (_) => SimpleDialog(
-        title: const Text('Enroll Student'),
-        children: available
-            .map((s) => SimpleDialogOption(onPressed: () => Navigator.pop(context, s.id), child: Text(s.name)))
-            .toList(),
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final q = query.trim().toLowerCase();
+          final filtered = q.isEmpty
+              ? available
+              : available.where((s) => s.name.toLowerCase().contains(q) || s.email.toLowerCase().contains(q)).toList();
+          return AlertDialog(
+            title: const Text('Enroll Student'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    autofocus: true,
+                    decoration: const InputDecoration(hintText: 'Search students...', prefixIcon: Icon(Icons.search)),
+                    onChanged: (v) => setDialogState(() => query = v),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.maxFinite,
+                    height: 320,
+                    child: filtered.isEmpty
+                        ? const Center(child: Text('No matching students.'))
+                        : ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: filtered.length,
+                            itemBuilder: (context, i) {
+                              final s = filtered[i];
+                              return ListTile(
+                                title: Text(s.name),
+                                subtitle: s.email.endsWith('@no-login.internal') ? null : Text(s.email),
+                                onTap: () => Navigator.pop(context, s.id),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel'))],
+          );
+        },
       ),
     );
     if (selected == null) return;

@@ -3,6 +3,7 @@ import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Ba
 import { DashboardAPI, AttendanceAPI } from "../api/endpoints";
 import toast from "react-hot-toast";
 import useResizeAfterLoad from "../hooks/useResizeAfterLoad";
+import { dismissItem, filterDismissed } from "../utils/dismissedItems";
 
 const PIE_COLORS = ["#16a34a", "#d97706", "#dc2626"];
 
@@ -24,7 +25,7 @@ export default function Dashboard() {
       .then(([s, f, m, a]) => {
         setSummary(s.data);
         setFeeGraph(f.data);
-        setMissing(m.data);
+        setMissing(filterDismissed("missing_attendance", m.data, (x) => x.class_id));
         setActivityAttendance(a.data.points);
       })
       .catch((err) => {
@@ -55,6 +56,11 @@ export default function Dashboard() {
     name: a.activity_name,
     attendance: a.avg_attendance_pct,
   }));
+
+  const dismissMissing = (classId) => {
+    dismissItem("missing_attendance", classId);
+    setMissing((prev) => prev.filter((m) => m.class_id !== classId));
+  };
 
   return (
     <div>
@@ -127,6 +133,7 @@ export default function Dashboard() {
                 <th>Activity</th>
                 <th>Class Date</th>
                 <th>End Time</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -136,6 +143,11 @@ export default function Dashboard() {
                   <td>{m.activity_name}</td>
                   <td>{m.date}</td>
                   <td>{m.end_time}</td>
+                  <td>
+                    <button className="btn btn-danger btn-sm" title="Dismiss this alert" onClick={() => dismissMissing(m.class_id)}>
+                      Delete
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import { AttendanceAPI, ActivitiesAPI, StudentsAPI, CoachesAPI } from "../api/endpoints";
 import StatusBadge from "../components/StatusBadge";
 import Modal from "../components/Modal";
+import { dismissItem, filterDismissed } from "../utils/dismissedItems";
 
 // Local calendar date, not new Date().toISOString() — that converts to UTC, which shows
 // yesterday's date for IST users between midnight and 5:30am.
@@ -44,9 +45,14 @@ export default function Attendance() {
   const loadMissing = () => {
     setMissingLoading(true);
     AttendanceAPI.dailyMissing()
-      .then((r) => setMissing(r.data))
+      .then((r) => setMissing(filterDismissed("missing_attendance", r.data, (x) => x.class_id)))
       .catch((err) => toast.error(err.response?.data?.detail || "Failed to load"))
       .finally(() => setMissingLoading(false));
+  };
+
+  const dismissMissing = (classId) => {
+    dismissItem("missing_attendance", classId);
+    setMissing((prev) => prev.filter((m) => m.class_id !== classId));
   };
 
   const loadRecords = () => {
@@ -277,6 +283,7 @@ export default function Attendance() {
                 <th>Activity</th>
                 <th>Date</th>
                 <th>End Time</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -286,6 +293,11 @@ export default function Attendance() {
                   <td>{m.activity_name}</td>
                   <td>{m.date}</td>
                   <td>{m.end_time}</td>
+                  <td>
+                    <button className="btn btn-danger btn-sm" title="Dismiss this alert" onClick={() => dismissMissing(m.class_id)}>
+                      Delete
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
