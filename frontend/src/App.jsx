@@ -10,6 +10,7 @@ import Students from "./pages/Students";
 import Coaches from "./pages/Coaches";
 import Activities from "./pages/Activities";
 import Attendance from "./pages/Attendance";
+import Reports from "./pages/Reports";
 import Fees from "./pages/Fees";
 import Leave from "./pages/Leave";
 import Settings from "./pages/Settings";
@@ -28,6 +29,7 @@ const ADMIN_LINKS = [
   { to: "/coaches", label: "Coaches", icon: "coaches" },
   { to: "/attendance", label: "Attendance", icon: "attendance" },
   { to: "/activities", label: "Activities", icon: "activities" },
+  { to: "/reports", label: "Reports", icon: "attendance" },
   { to: "/fees", label: "Fees", icon: "fees" },
   { to: "/leave", label: "Leave", icon: "leave" },
   { to: "/settings", label: "Settings", icon: "settings" },
@@ -66,6 +68,7 @@ export default function App() {
             <Route path="coaches" element={<Coaches />} />
             <Route path="attendance" element={<Attendance />} />
             <Route path="activities" element={<Activities />} />
+            <Route path="reports" element={<Reports />} />
             <Route path="fees" element={<Fees />} />
             <Route path="leave" element={<Leave />} />
             <Route path="settings" element={<Settings />} />

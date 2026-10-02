@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { StudentsAPI, FeesAPI } from "../api/endpoints";
+import { StudentsAPI, FeesAPI, ActivitiesAPI } from "../api/endpoints";
 import Modal from "../components/Modal";
 import SelfieCapture from "../components/SelfieCapture";
 import StatusBadge from "../components/StatusBadge";
 
 export default function Students() {
+  const [activities, setActivities] = useState([]);
+  const [activityId, setActivityId] = useState("");
+  useEffect(() => { ActivitiesAPI.list().then(r => setActivities(r.data)).catch(() => toast.error("Failed to load activities")); }, []);
   const [students, setStudents] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -20,7 +23,7 @@ export default function Students() {
 
   const load = () => {
     setLoading(true);
-    StudentsAPI.list(search)
+    StudentsAPI.list(search, activityId || undefined)
       .then((r) => setStudents(r.data))
       .catch((err) => toast.error(err.response?.data?.detail || "Failed to load students"))
       .finally(() => setLoading(false));
@@ -30,7 +33,7 @@ export default function Students() {
     const t = setTimeout(load, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+  }, [search, activityId]);
 
   useEffect(() => {
     const now = new Date();
@@ -155,6 +158,7 @@ export default function Students() {
       </div>
 
       <div className="toolbar">
+        <select aria-label="Filter activity" value={activityId} onChange={e => setActivityId(e.target.value)}><option value="">All activities</option>{activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
         <input placeholder="Search by name or email..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ maxWidth: 320 }} />
       </div>
 
@@ -168,7 +172,7 @@ export default function Students() {
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Email</th>
+                <th>Activity</th><th>Email</th>
                 <th>Phone</th>
                 <th>Emergency Contact</th>
                 <th>Status</th>
@@ -180,7 +184,7 @@ export default function Students() {
               {students.map((s) => (
                 <tr key={s.id}>
                   <td>{s.name}</td>
-                  <td>{displayEmail(s.email)}</td>
+                  <td>{s.activities.map(a => a.name).join(", ") || "Unassigned"}</td><td>{displayEmail(s.email)}</td>
                   <td>{s.phone || "-"}</td>
                   <td>{s.phone_secondary || "-"}</td>
                   <td>

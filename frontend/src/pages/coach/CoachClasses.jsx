@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { CoachSelfAPI, ActivitiesAPI, AttendanceAPI } from "../../api/endpoints";
+import SelfieCapture from "../../components/SelfieCapture";
 import Modal from "../../components/Modal";
 
 // Local calendar date, not new Date().toISOString() — that converts to UTC, which shows
@@ -17,6 +18,11 @@ function classHasEnded(cls) {
 const STATUS_LABELS = { PRESENT: "Present", ABSENT: "Absent", LEAVE: "Leave", NOT_CONFIRM: "Not Confirm" };
 
 export default function CoachClasses() {
+  const [photoFor, setPhotoFor] = useState(null);
+  const uploadPhoto = async (base64, cls = photoFor) => {
+    try { await ActivitiesAPI.uploadGroupPhoto(cls.id, base64); toast.success("Session photo shared with admin"); setPhotoFor(null); load(); }
+    catch (err) { toast.error(err.response?.data?.detail || "Photo upload failed"); }
+  };
   const [date, setDate] = useState(todayStr());
   const [classes, setClasses] = useState([]);
   const [activityNames, setActivityNames] = useState({});
@@ -133,7 +139,8 @@ export default function CoachClasses() {
                       Mark Attendance
                     </button>
                     {classHasEnded(c) && (
-                      <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Class ended</span>
+                      <div className="table-actions"><button className="btn btn-secondary btn-sm" onClick={() => setPhotoFor(c)}>Take Session Photo</button>
+                        <label className="btn btn-secondary btn-sm">{c.has_group_photo ? "Replace Uploaded Photo" : "Upload Session Photo"}<input type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const file = e.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => uploadPhoto(String(reader.result).split(",")[1], c); reader.onerror = () => toast.error("Could not read photo"); reader.readAsDataURL(file); e.target.value = ""; }} /></label></div>
                     )}
                   </td>
                 </tr>
@@ -143,6 +150,7 @@ export default function CoachClasses() {
         )}
       </div>
 
+      {photoFor && <SelfieCapture title="Session Photo" onClose={() => setPhotoFor(null)} onCapture={uploadPhoto} />}
       {rosterFor && (
         <Modal title={`Mark Attendance — ${activityNames[rosterFor.activity_id] || ""}`} onClose={() => setRosterFor(null)}>
           <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginTop: -8 }}>

@@ -57,6 +57,15 @@ class SelfAccountUpdate(BaseModel):
     new_password: Optional[str] = Field(default=None, min_length=8)
 
 
+class StudentListOut(UserBase):
+    id: int
+    role: UserRole
+    is_active: bool
+    phone_secondary: Optional[str] = None
+    created_at: datetime
+    activities: list[dict] = []
+
+
 class UserOut(UserBase):
     id: int
     role: UserRole

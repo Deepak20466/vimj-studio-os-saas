@@ -104,15 +104,19 @@ class ClassSession {
 }
 
 class RosterStudent {
+  final String? phone;
+  final String? phoneSecondary;
   final int id;
   final String name;
   final String email;
   final int? enrollmentId;
   final String? feeStatus;
 
-  RosterStudent({required this.id, required this.name, required this.email, this.enrollmentId, this.feeStatus});
+  RosterStudent({required this.id, required this.name, required this.email, this.phone, this.phoneSecondary, this.enrollmentId, this.feeStatus});
 
   factory RosterStudent.fromJson(Map<String, dynamic> json) => RosterStudent(
+        phone: json['phone'] as String?,
+        phoneSecondary: json['phone_secondary'] as String?,
         id: json['id'] as int,
         name: json['name'] as String,
         email: json['email'] as String,
@@ -260,6 +264,7 @@ class StudentAttendanceRecord {
 }
 
 class Student {
+  final List<String> activities;
   final int id;
   final String name;
   final String email;
@@ -268,6 +273,7 @@ class Student {
   final bool isActive;
 
   Student({
+    this.activities = const [],
     required this.id,
     required this.name,
     required this.email,
@@ -277,6 +283,7 @@ class Student {
   });
 
   factory Student.fromJson(Map<String, dynamic> json) => Student(
+        activities: (json['activities'] as List? ?? []).map((a) => a['name'].toString()).toList(),
         id: json['id'] as int,
         name: json['name'] as String,
         email: json['email'] as String,
@@ -440,6 +447,8 @@ class AdminFeeRecord {
   final String? studentName;
   final int month;
   final int year;
+  final String productAmount;
+  final String? billingDate;
   final String amount;
   final String balanceAmount;
   final String status;
@@ -451,6 +460,8 @@ class AdminFeeRecord {
     this.studentName,
     required this.month,
     required this.year,
+    this.productAmount = "0",
+    this.billingDate,
     required this.amount,
     required this.balanceAmount,
     required this.status,
@@ -463,6 +474,8 @@ class AdminFeeRecord {
         studentName: json['student_name'] as String?,
         month: json['month'] as int,
         year: json['year'] as int,
+        productAmount: (json['product_amount'] ?? 0).toString(),
+        billingDate: json['billing_date'] as String?,
         amount: json['amount'].toString(),
         balanceAmount: (json['balance_amount'] ?? json['amount']).toString(),
         status: json['status'] as String,
@@ -701,6 +714,8 @@ class FeeReceiptRecord {
   final int id;
   final int studentId;
   final String? studentName;
+  final String productAmount;
+  final String? billingDate;
   final String amount;
   final int month;
   final int year;
@@ -712,6 +727,8 @@ class FeeReceiptRecord {
     required this.id,
     required this.studentId,
     this.studentName,
+    this.productAmount = "0",
+    this.billingDate,
     required this.amount,
     required this.month,
     required this.year,
@@ -724,6 +741,8 @@ class FeeReceiptRecord {
         id: json['id'] as int,
         studentId: json['student_id'] as int,
         studentName: json['student_name'] as String?,
+        productAmount: (json['product_amount'] ?? 0).toString(),
+        billingDate: json['billing_date'] as String?,
         amount: json['amount'].toString(),
         month: json['month'] as int,
         year: json['year'] as int,

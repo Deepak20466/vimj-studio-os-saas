@@ -83,3 +83,6 @@ app.include_router(leave.router)
 @app.get("/health")
 def health_check():
     return {"status": "ok", "service": "VIMJ Studio Attendance System"}
+
+from app.routers import reports
+app.include_router(reports.router)

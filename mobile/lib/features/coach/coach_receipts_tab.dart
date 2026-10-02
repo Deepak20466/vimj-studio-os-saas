@@ -138,8 +138,8 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
                         return Card(
                           margin: const EdgeInsets.only(bottom: 8),
                           child: ListTile(
-                            title: Text('${r.studentName ?? "Student #${r.studentId}"} — ₹${r.amount}'),
-                            subtitle: Text('${r.month}/${r.year} · ${r.paymentMode}${r.decisionNote != null ? "\n${r.decisionNote}" : ""}'),
+                            title: Text('${r.studentName ?? "Student #${r.studentId}"} — ₹${r.amount} + products ${r.productAmount} = ${(double.parse(r.amount) + double.parse(r.productAmount)).toStringAsFixed(2)}'),
+                            subtitle: Text('${r.billingDate ?? "${r.month}/${r.year}"} · ${r.paymentMode}${r.decisionNote != null ? "\n${r.decisionNote}" : ""}'),
                             isThreeLine: r.decisionNote != null,
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -173,7 +173,10 @@ class _ReceiptForm extends StatefulWidget {
 class _ReceiptFormState extends State<_ReceiptForm> {
   late int? _studentId = widget.students.isNotEmpty ? widget.students.first.id : null;
   final _amountCtrl = TextEditingController();
+  final _productCtrl = TextEditingController(text: "0");
+  String _studentSearch = "";
   final _noteCtrl = TextEditingController();
+  DateTime? _billingDate;
   String _paymentMode = 'CASH';
   bool _saving = false;
   String? _error;
@@ -192,8 +195,10 @@ class _ReceiptFormState extends State<_ReceiptForm> {
     });
     try {
       await ApiClient.instance.post('/receipts', body: {
+        'billing_date': _billingDate?.toIso8601String().split('T').first,
         'student_id': _studentId,
         'amount': _amountCtrl.text.trim(),
+        'product_amount': _productCtrl.text.trim(),
         'month': int.tryParse(_monthCtrl.text.trim()) ?? _now.month,
         'year': int.tryParse(_yearCtrl.text.trim()) ?? _now.year,
         'payment_mode': _paymentMode,
@@ -210,6 +215,7 @@ class _ReceiptFormState extends State<_ReceiptForm> {
   @override
   void dispose() {
     _amountCtrl.dispose();
+    _productCtrl.dispose();
     _noteCtrl.dispose();
     _monthCtrl.dispose();
     _yearCtrl.dispose();
@@ -227,10 +233,12 @@ class _ReceiptFormState extends State<_ReceiptForm> {
           children: [
             Text('New Fee Receipt', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
+            TextField(decoration: const InputDecoration(labelText: "Search student"), onChanged: (v) => setState(() => _studentSearch = v)),
+            TextButton(onPressed: () async { final d = await showDatePicker(context: context, initialDate: _billingDate ?? DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2100)); if (d != null) setState(() { _billingDate = d; _monthCtrl.text = d.month.toString(); _yearCtrl.text = d.year.toString(); }); }, child: Text(_billingDate == null ? "Select billing date (optional)" : _billingDate!.toIso8601String().split("T").first)),
             DropdownButtonFormField<int>(
               initialValue: _studentId,
               decoration: const InputDecoration(labelText: 'Student'),
-              items: widget.students.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
+              items: widget.students.where((s) => s.id == _studentId || s.name.toLowerCase().contains(_studentSearch.toLowerCase())).map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
               onChanged: (v) => setState(() => _studentId = v),
             ),
             const SizedBox(height: 12),
@@ -254,6 +262,7 @@ class _ReceiptFormState extends State<_ReceiptForm> {
               ],
             ),
             const SizedBox(height: 12),
+            TextField(controller: _productCtrl, decoration: const InputDecoration(labelText: "Product Amount"), keyboardType: const TextInputType.numberWithOptions(decimal: true)),
             TextField(controller: _amountCtrl, decoration: const InputDecoration(labelText: 'Amount (₹)'), keyboardType: const TextInputType.numberWithOptions(decimal: true)),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(

@@ -35,6 +35,8 @@ def create_receipt(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_coach),
 ):
+    if payload.billing_date and (payload.billing_date.month != payload.month or payload.billing_date.year != payload.year):
+        raise HTTPException(status_code=400, detail="Billing date must match the selected month and year")
     student = db.query(User).filter(User.id == payload.student_id, User.role == UserRole.STUDENT).first()
     if not student:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Student not found")
@@ -48,6 +50,8 @@ def create_receipt(
         student_id=payload.student_id,
         coach_id=current_user.id,
         amount=payload.amount,
+        product_amount=payload.product_amount,
+        billing_date=payload.billing_date,
         month=payload.month,
         year=payload.year,
         payment_mode=payload.payment_mode,
@@ -109,6 +113,8 @@ def _to_admin_out(db: Session, receipts: List[FeeReceipt]) -> List[FeeReceiptAdm
             coach_id=r.coach_id,
             coach_name=names.get(r.coach_id, "Unknown"),
             amount=r.amount,
+            product_amount=r.product_amount,
+            billing_date=r.billing_date,
             month=r.month,
             year=r.year,
             payment_mode=r.payment_mode,
@@ -150,13 +156,22 @@ def approve_receipt(
             month=receipt.month,
             year=receipt.year,
             amount=receipt.amount,
+            product_amount=receipt.product_amount,
             balance_amount=Decimal("0"),
             due_date=date(receipt.year, receipt.month, 10),
         )
         db.add(fee)
-    fee.status = FeeStatus.PAID
-    fee.balance_amount = Decimal("0")
-    fee.paid_date = date.today()
+    if fee.id is not None:
+        if fee.status == FeeStatus.PAID:
+            fee.amount += receipt.amount
+            fee.product_amount += receipt.product_amount
+        else:
+            # Product charges already on the invoice must not be billed twice.
+            additional_products = max(Decimal("0"), receipt.product_amount - fee.product_amount)
+            fee.product_amount += additional_products
+            fee.balance_amount = max(Decimal("0"), fee.balance_amount + additional_products - receipt.amount - receipt.product_amount)
+    fee.status = FeeStatus.PAID if fee.balance_amount == 0 else FeeStatus.UNPAID
+    fee.paid_date = (receipt.billing_date or date.today()) if fee.status == FeeStatus.PAID else None
 
     receipt.status = ReceiptStatus.APPROVED
     receipt.decision_note = payload.decision_note
@@ -252,12 +267,12 @@ def receipt_pdf(
         .first()
     )
     balance_amount = fee.balance_amount if fee else Decimal("0")
-    paid_date = (receipt.decided_at or receipt.created_at).date()
+    paid_date = receipt.billing_date or (receipt.decided_at or receipt.created_at).date()
     approved_by_name = approver.name if (receipt.status == ReceiptStatus.APPROVED and approver) else None
     disposition = "inline" if disposition == "inline" else "attachment"
 
     if fmt == "csv":
-        headers = ["Receipt No", "Status", "Student", "Coach", "Activities", "Period", "Amount", "Balance", "Payment Mode", "Date", "Approved By"]
+        headers = ["Receipt No", "Status", "Student", "Coach", "Activities", "Period", "Fees Amount", "Product Amount", "Total", "Balance", "Payment Mode", "Date", "Approved By"]
         rows = [[
             f"RCPT-{receipt.id:06d}",
             receipt.status.value,
@@ -266,6 +281,8 @@ def receipt_pdf(
             ", ".join(activity_names) or "N/A",
             f"{receipt.month:02d}/{receipt.year}",
             receipt.amount,
+            receipt.product_amount,
+            receipt.amount + receipt.product_amount,
             balance_amount,
             receipt.payment_mode,
             paid_date.isoformat(),
@@ -287,6 +304,7 @@ def receipt_pdf(
         month=receipt.month,
         year=receipt.year,
         amount_paid=receipt.amount,
+        product_amount=receipt.product_amount,
         balance_amount=balance_amount,
         payment_mode=receipt.payment_mode,
         paid_date=paid_date,

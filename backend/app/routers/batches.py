@@ -145,6 +145,7 @@ def batch_roster(
         "batch": _out(batch),
         "class_date": target_date,
         "class_id": class_session.id if class_session else None,
+        "has_group_photo": bool(class_session and class_session.has_group_photo),
         "present_count": present_count,
         "absent_count": absent_count,
         "not_confirm_count": not_confirm_count,

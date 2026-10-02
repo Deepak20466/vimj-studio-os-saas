@@ -42,6 +42,7 @@ def build_fee_receipt_pdf(
     academy_name: str = "VIMJ Studio",
     academy_contact: str = "hello@vimjstudio.com  |  +91 98000 00000",
     student_contact: Optional[str] = None,
+    product_amount: Decimal = Decimal("0"),
 ) -> bytes:
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
@@ -139,6 +140,8 @@ def build_fee_receipt_pdf(
     y -= header_row_h
 
     line_items = [(f"Fee Payment - {activity_line}", f"{month:02d}/{year}", amount_paid)]
+    if product_amount:
+        line_items.append(("Yoga products", f"{month:02d}/{year}", product_amount))
     c.setFont("Helvetica", 9.5)
     for desc, period, amt in line_items:
         c.setFillColor(TEXT_DARK)
@@ -156,7 +159,7 @@ def build_fee_receipt_pdf(
 
     # ---- Totals ----
     totals_x_label = width - margin - 65 * mm
-    subtotal = amount_paid
+    subtotal = amount_paid + product_amount
 
     c.setFont("Helvetica", 10)
     c.setFillColor(TEXT_MUTED)
@@ -178,7 +181,7 @@ def build_fee_receipt_pdf(
     c.setFillColor(colors.white)
     c.setFont("Helvetica-Bold", 12)
     c.drawString(totals_x_label, y - 3 * mm, "TOTAL PAID")
-    c.drawRightString(col_amount_x, y - 3 * mm, f"Rs {amount_paid}")
+    c.drawRightString(col_amount_x, y - 3 * mm, f"Rs {subtotal}")
     y -= total_band_h + 10 * mm
 
     # ---- Payment mode ----

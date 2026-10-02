@@ -22,6 +22,8 @@ class _AdminStudentsTabState extends State<AdminStudentsTab> {
   List<Student> _students = [];
   bool _loading = true;
   String _search = '';
+  int? _activityId;
+  List<dynamic> _activities = [];
   Map<int, String> _feeStatusByStudent = {};
 
   @override
@@ -29,12 +31,13 @@ class _AdminStudentsTabState extends State<AdminStudentsTab> {
     super.initState();
     _load();
     _loadFeeStatus();
+    ApiClient.instance.get("/activities").then((data) { if (mounted) setState(() => _activities = data as List); });
   }
 
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final data = await ApiClient.instance.get('/students', query: {'search': _search.isEmpty ? null : _search}) as List;
+      final data = await ApiClient.instance.get('/students', query: {'activity_id': _activityId, 'search': _search.isEmpty ? null : _search}) as List;
       _students = data.map((e) => Student.fromJson(e as Map<String, dynamic>)).toList();
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
@@ -142,6 +145,7 @@ class _AdminStudentsTabState extends State<AdminStudentsTab> {
       ),
       body: Column(
         children: [
+          DropdownButton<int>(value: _activityId, hint: const Text("All activities"), items: [const DropdownMenuItem<int>(value: null, child: Text("All activities")), ..._activities.map((a) => DropdownMenuItem<int>(value: a["id"] as int, child: Text(a["name"].toString())))], onChanged: (v) { setState(() => _activityId = v); _load(); }),
           Padding(
             padding: const EdgeInsets.all(12),
             child: TextField(
@@ -174,7 +178,7 @@ class _AdminStudentsTabState extends State<AdminStudentsTab> {
                                       _feeChip(s),
                                     ],
                                   ),
-                                  subtitle: Text('${s.email.endsWith("@no-login.internal") ? "-" : s.email}\n${s.phone ?? "-"}'),
+                                  subtitle: Text('${s.email.endsWith("@no-login.internal") ? "-" : s.email}\n${s.phone ?? "-"}\nActivity: ${s.activities.join(", ")}'),
                                   isThreeLine: true,
                                   leading: CircleAvatar(
                                     backgroundColor: s.isActive ? AppColors.success.withOpacity(0.15) : AppColors.danger.withOpacity(0.15),

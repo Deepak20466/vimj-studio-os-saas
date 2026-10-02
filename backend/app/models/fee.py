@@ -21,6 +21,7 @@ class StudentFee(Base):
     student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     month = Column(Integer, nullable=False)
     year = Column(Integer, nullable=False)
+    product_amount = Column(Numeric(10, 2), nullable=False, default=0)
     amount = Column(Numeric(10, 2), nullable=False)
     balance_amount = Column(Numeric(10, 2), nullable=False, default=0)
     status = Column(Enum(FeeStatus), nullable=False, default=FeeStatus.UNPAID, index=True)

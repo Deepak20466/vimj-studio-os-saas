@@ -456,7 +456,15 @@ function SessionFormModal({ activity, coaches, editing, onClose, onSaved }) {
 }
 
 function SessionRosterModal({ activity, batch, onClose }) {
+  const [sessionPhoto, setSessionPhoto] = useState(null);
+  useEffect(() => { setSessionPhoto(null); }, [batch.id]);
+  useEffect(() => () => { if (sessionPhoto) URL.revokeObjectURL(sessionPhoto); }, [sessionPhoto]);
+  const viewSessionPhoto = async () => {
+    try { const r = await ActivitiesAPI.groupPhotoBlob(roster.class_id); setSessionPhoto(URL.createObjectURL(r.data)); }
+    catch { toast.error("Failed to load session photo"); }
+  };
   const [classDate, setClassDate] = useState(todayStr());
+  useEffect(() => { setSessionPhoto(null); }, [classDate]);
   const [roster, setRoster] = useState(null);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState(null);
@@ -513,6 +521,8 @@ function SessionRosterModal({ activity, batch, onClose }) {
         <div className="empty-state">Loading...</div>
       ) : (
         <>
+          {roster.has_group_photo && <button className="btn btn-secondary" onClick={viewSessionPhoto}>View Session Photo</button>}
+          {sessionPhoto && <img src={sessionPhoto} alt="Session group photo" style={{ maxWidth: "100%", maxHeight: 400 }} />}
           {!roster.class_id && (
             <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
               No class session was generated for this batch on {classDate}. Marking is disabled until one exists.

@@ -232,7 +232,8 @@ def upload_group_photo(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your class")
 
     class_end_dt = datetime.combine(cls.date, cls.end_time)
-    if datetime.now() < class_end_dt:
+    from zoneinfo import ZoneInfo
+    if datetime.now(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None) < class_end_dt:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="The class hasn't finished yet")
 
     cls.group_photo = save_class_photo(payload.photo_base64)
@@ -333,6 +334,8 @@ def activity_roster(
             "id": s.id,
             "name": s.name,
             "email": s.email,
+            "phone": s.phone,
+            "phone_secondary": s.phone_secondary,
             "enrollment_id": enrollment_id,
             "fee_status": fees_by_student.get(s.id, "UNPAID"),
         }

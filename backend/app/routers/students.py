@@ -12,7 +12,7 @@ from app.models.coach_activity import CoachActivity
 from app.models.enrollment import StudentEnrollment
 from app.models.attendance import StudentAttendance
 from app.models.fee import StudentFee
-from app.schemas.user import StudentCreate, UserOut, UserUpdate
+from app.schemas.user import StudentCreate, UserOut, UserUpdate, StudentListOut
 from app.schemas.attendance import StudentAttendanceOut
 from app.schemas.fee import FeeOut
 from app.security import get_current_user, require_admin, require_admin_or_coach, hash_password
@@ -30,9 +30,10 @@ def _assert_self_or_admin(current_user: User, student_id: int):
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to view this student's data")
 
 
-@router.get("", response_model=List[UserOut])
+@router.get("", response_model=List[StudentListOut])
 def list_students(
     search: Optional[str] = None,
+    activity_id: Optional[int] = None,
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
@@ -40,7 +41,13 @@ def list_students(
     if search:
         like = f"%{search}%"
         query = query.filter((User.name.ilike(like)) | (User.email.ilike(like)))
-    return query.order_by(User.name).all()
+    if activity_id:
+        query = query.join(StudentEnrollment).filter(StudentEnrollment.activity_id == activity_id)
+    students = query.order_by(User.name).all()
+    activities = {}
+    for sid, aid, name in db.query(StudentEnrollment.student_id, Activity.id, Activity.name).join(Activity).all():
+        activities.setdefault(sid, []).append({"id": aid, "name": name})
+    return [StudentListOut(**UserOut.model_validate(s).model_dump(), activities=activities.get(s.id, [])) for s in students]
 
 
 @router.post("", response_model=UserOut, status_code=status.HTTP_201_CREATED)

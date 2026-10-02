@@ -255,7 +255,7 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                       (r) => Card(
                         margin: const EdgeInsets.only(bottom: 8),
                         child: ListTile(
-                          title: Text('${_receiptStudentName(r)} — ₹${r.amount}'),
+                          title: Text('${_receiptStudentName(r)} — ₹${r.amount} + products ${r.productAmount} = ${(double.parse(r.amount) + double.parse(r.productAmount)).toStringAsFixed(2)}'),
                           subtitle: Text('${r.month}/${r.year} · ${r.paymentMode}${r.decisionNote != null && r.decisionNote!.isNotEmpty ? "\n${r.decisionNote}" : ""}'),
                           isThreeLine: r.decisionNote != null && r.decisionNote!.isNotEmpty,
                           trailing: _busyReceiptId == r.id
@@ -279,7 +279,7 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                       (r) => Card(
                         margin: const EdgeInsets.only(bottom: 8),
                         child: ListTile(
-                          title: Text('${_receiptStudentName(r)} — ₹${r.amount}'),
+                          title: Text('${_receiptStudentName(r)} — ₹${r.amount} + products ${r.productAmount} = ${(double.parse(r.amount) + double.parse(r.productAmount)).toStringAsFixed(2)}'),
                           subtitle: Text('${r.month}/${r.year}'),
                           trailing: _downloadingReceiptId == r.id
                               ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
@@ -384,7 +384,7 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                                 ],
                               ),
                               const SizedBox(height: 4),
-                              Text('${f.month}/${f.year} · ₹${f.amount} · balance ₹${f.balanceAmount} · due ${f.dueDate}', style: const TextStyle(color: AppColors.textMuted)),
+                              Text('${f.month}/${f.year} · ₹${f.amount} + products ${f.productAmount} = ${(double.parse(f.amount) + double.parse(f.productAmount)).toStringAsFixed(2)} · balance ₹${f.balanceAmount} · due ${f.dueDate}', style: const TextStyle(color: AppColors.textMuted)),
                               const SizedBox(height: 12),
                               Row(
                                 children: [
@@ -440,6 +440,8 @@ class _FeeFormState extends State<_FeeForm> {
   late final _monthCtrl = TextEditingController(text: _now.month.toString());
   late final _yearCtrl = TextEditingController(text: _now.year.toString());
   final _amountCtrl = TextEditingController();
+  final _productCtrl = TextEditingController(text: "0");
+  String _studentSearch = "";
   final _dueDateCtrl = TextEditingController();
   bool _loadingStudents = true;
   bool _saving = false;
@@ -484,6 +486,7 @@ class _FeeFormState extends State<_FeeForm> {
         'month': int.tryParse(_monthCtrl.text.trim()) ?? _now.month,
         'year': int.tryParse(_yearCtrl.text.trim()) ?? _now.year,
         'amount': _amountCtrl.text.trim(),
+        'product_amount': _productCtrl.text.trim(),
         'due_date': _dueDateCtrl.text.trim(),
       });
       if (mounted) Navigator.of(context).pop(true);
@@ -499,6 +502,7 @@ class _FeeFormState extends State<_FeeForm> {
     _monthCtrl.dispose();
     _yearCtrl.dispose();
     _amountCtrl.dispose();
+    _productCtrl.dispose();
     _dueDateCtrl.dispose();
     super.dispose();
   }
@@ -514,12 +518,13 @@ class _FeeFormState extends State<_FeeForm> {
           children: [
             Text('Add Fee', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
+            TextField(decoration: const InputDecoration(labelText: "Search student"), onChanged: (v) => setState(() => _studentSearch = v)),
             _loadingStudents
                 ? const Center(child: CircularProgressIndicator())
                 : DropdownButtonFormField<int>(
                     initialValue: _studentId,
                     decoration: const InputDecoration(labelText: 'Student'),
-                    items: _students.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
+                    items: _students.where((s) => s.id == _studentId || s.name.toLowerCase().contains(_studentSearch.toLowerCase())).map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
                     onChanged: (v) => setState(() => _studentId = v),
                   ),
             const SizedBox(height: 12),
@@ -543,6 +548,7 @@ class _FeeFormState extends State<_FeeForm> {
               ],
             ),
             const SizedBox(height: 12),
+            TextField(controller: _productCtrl, decoration: const InputDecoration(labelText: "Product Amount"), keyboardType: const TextInputType.numberWithOptions(decimal: true)),
             TextField(controller: _amountCtrl, decoration: const InputDecoration(labelText: 'Amount (₹)'), keyboardType: const TextInputType.numberWithOptions(decimal: true)),
             const SizedBox(height: 12),
             TextField(
@@ -574,6 +580,7 @@ class _FeeEditForm extends StatefulWidget {
 
 class _FeeEditFormState extends State<_FeeEditForm> {
   late final _amountCtrl = TextEditingController(text: widget.fee.amount);
+  late final _productCtrl = TextEditingController(text: widget.fee.productAmount);
   late final _balanceCtrl = TextEditingController(text: widget.fee.balanceAmount);
   late final _dueDateCtrl = TextEditingController(text: widget.fee.dueDate);
   late String _status = widget.fee.status;
@@ -590,6 +597,7 @@ class _FeeEditFormState extends State<_FeeEditForm> {
     try {
       await ApiClient.instance.put('/fees/${widget.fee.id}', body: {
         'amount': _amountCtrl.text.trim(),
+        'product_amount': _productCtrl.text.trim(),
         'balance_amount': _balanceCtrl.text.trim(),
         'due_date': _dueDateCtrl.text.trim(),
         'status': _status,
@@ -605,6 +613,7 @@ class _FeeEditFormState extends State<_FeeEditForm> {
   @override
   void dispose() {
     _amountCtrl.dispose();
+    _productCtrl.dispose();
     _balanceCtrl.dispose();
     _dueDateCtrl.dispose();
     super.dispose();
@@ -621,6 +630,7 @@ class _FeeEditFormState extends State<_FeeEditForm> {
           children: [
             Text('Edit Fee — ${widget.studentName}', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
+            TextField(controller: _productCtrl, decoration: const InputDecoration(labelText: "Product Amount"), keyboardType: const TextInputType.numberWithOptions(decimal: true)),
             TextField(controller: _amountCtrl, decoration: const InputDecoration(labelText: 'Amount (₹)'), keyboardType: const TextInputType.numberWithOptions(decimal: true)),
             const SizedBox(height: 12),
             Row(
@@ -630,7 +640,7 @@ class _FeeEditFormState extends State<_FeeEditForm> {
                   child: TextField(controller: _balanceCtrl, decoration: const InputDecoration(labelText: 'Balance Amount (₹)'), keyboardType: const TextInputType.numberWithOptions(decimal: true)),
                 ),
                 const SizedBox(width: 8),
-                OutlinedButton(onPressed: () => setState(() => _balanceCtrl.text = _amountCtrl.text), child: const Text('Generate')),
+                OutlinedButton(onPressed: () => setState(() => _balanceCtrl.text = ((double.tryParse(_amountCtrl.text) ?? 0) + (double.tryParse(_productCtrl.text) ?? 0)).toStringAsFixed(2)), child: const Text('Generate')),
               ],
             ),
             const Padding(

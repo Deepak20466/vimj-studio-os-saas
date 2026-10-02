@@ -1,0 +1,107 @@
+import base64
+import io
+import unittest
+from datetime import date, time
+from decimal import Decimal
+from unittest.mock import patch
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+from PIL import Image
+from app.database import Base, get_db
+from app.models import User, UserRole, Activity, CoachActivity, StudentEnrollment, ClassSession, StudentAttendance, AttendanceStatus, StudentFee
+from app.routers import fees, students, receipts, reports, activities
+from app.security import require_admin, require_coach, require_admin_or_coach, get_current_user
+
+class RequestedChanges(unittest.TestCase):
+    def setUp(self):
+        self.engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+        Base.metadata.create_all(self.engine)
+        self.db = sessionmaker(bind=self.engine)()
+        self.admin = User(name="Admin", email="admin@example.com", role=UserRole.ADMIN, password_hash="unused")
+        self.coach = User(name="Coach", email="coach@example.com", role=UserRole.COACH, password_hash="unused")
+        self.yoga = Activity(name="Yoga")
+        self.dance = Activity(name="Dance")
+        self.s1 = User(name="Yoga Student", email="yoga@example.com", role=UserRole.STUDENT, password_hash="unused", phone="1234567890", phone_secondary="0987654321")
+        self.s2 = User(name="Dance Student", email="dance@example.com", role=UserRole.STUDENT, password_hash="unused")
+        self.db.add_all([self.admin, self.coach, self.yoga, self.dance, self.s1, self.s2]); self.db.flush()
+        self.db.add_all([StudentEnrollment(student_id=self.s1.id, activity_id=self.yoga.id), StudentEnrollment(student_id=self.s2.id, activity_id=self.dance.id), CoachActivity(coach_id=self.coach.id, activity_id=self.yoga.id)])
+        self.cls = ClassSession(activity_id=self.yoga.id, coach_id=self.coach.id, date=date(2026,9,10), start_time=time(9), end_time=time(10))
+        self.db.add(self.cls); self.db.commit()
+        self.app = FastAPI()
+        for router in [fees.router, students.router, receipts.router, reports.router, activities.router]: self.app.include_router(router)
+        self.app.dependency_overrides[get_db] = lambda: self.db
+        self.app.dependency_overrides[require_admin] = lambda: self.admin
+        self.app.dependency_overrides[require_coach] = lambda: self.coach
+        self.app.dependency_overrides[require_admin_or_coach] = lambda: self.admin
+        self.app.dependency_overrides[get_current_user] = lambda: self.admin
+        self.client = TestClient(self.app)
+        self.patches = [patch("app.routers.receipts.notify_and_push"), patch("app.routers.receipts.notify"), patch("app.routers.fees.notify")]
+        for p in self.patches: p.start()
+    def tearDown(self):
+        for p in self.patches: p.stop()
+        self.db.close(); self.engine.dispose()
+    def test_activity_filter_and_contacts(self):
+        result = self.client.get("/students", params={"activity_id": self.yoga.id}).json()
+        self.assertEqual([r['id'] for r in result], [self.s1.id])
+        self.assertEqual(result[0]['activities'][0]['name'], 'Yoga')
+        roster = self.client.get(f"/activities/{self.yoga.id}/roster").json()
+        self.assertEqual(roster[0]['phone'], '1234567890')
+        self.assertEqual(roster[0]['phone_secondary'], '0987654321')
+    def test_product_invoice_receipt_and_reports(self):
+        r = self.client.post('/fees', json={'student_id': self.s1.id, 'month':9, 'year':2026, 'amount':'100', 'product_amount':'25', 'due_date':'2026-09-10'})
+        self.assertEqual(r.status_code,201, r.text)
+        self.assertEqual(Decimal(r.json()['balance_amount']), Decimal('125'))
+        fid = r.json()['id']
+        self.client.post('/fees/mark-paid', json={'fee_id':fid})
+        pdf = self.client.get(f'/fees/{fid}/receipt')
+        self.assertTrue(pdf.content.startswith(b'%PDF'))
+        csv = self.client.get(f'/fees/{fid}/receipt', params={'fmt':'csv'}).text
+        self.assertIn('Product Amount',csv); self.assertIn('125',csv)
+        self.db.add(StudentAttendance(student_id=self.s1.id, class_id=self.cls.id, status=AttendanceStatus.PRESENT)); self.db.commit()
+        result = self.client.get('/reports', params={'month':9,'year':2026}).json()
+        self.assertEqual(Decimal(result['total_revenue']), Decimal('125'))
+        self.assertEqual(result['activities'][0]['present'],1)
+        self.assertEqual(self.client.get('/reports',params={'month':8,'year':2026}).json()['total_revenue'],0)
+        for kind in ['students','attendance','revenue']:
+            r = self.client.get('/reports',params={'month':9,'year':2026,'kind':kind,'fmt':'pdf'})
+            self.assertTrue(r.content.startswith(b'%PDF'),r.text)
+    def test_dated_receipts_and_multiple_collections(self):
+        payload = {'student_id':self.s1.id,'month':9,'year':2026,'amount':'100','product_amount':'25','billing_date':'2026-09-10'}
+        for day in [10,11]:
+            payload['billing_date'] = f'2026-09-{day}'
+            r = self.client.post('/receipts',json=payload)
+            self.assertEqual(r.status_code,201,r.text)
+            rid = r.json()['id']
+            self.assertEqual(self.client.put(f'/receipts/{rid}/approve',json={}).status_code,200)
+            self.assertEqual(self.client.put(f'/receipts/{rid}/approve',json={}).status_code,400)
+            self.assertTrue(self.client.get(f'/receipts/{rid}/pdf').content.startswith(b'%PDF'))
+        fee = self.db.query(StudentFee).one()
+        self.assertEqual(fee.amount + fee.product_amount,Decimal('250'))
+        payload['billing_date']='2026-08-10'
+        self.assertEqual(self.client.post('/receipts',json=payload).status_code,400)
+        payload['amount']='-1'
+        self.assertEqual(self.client.post('/receipts',json=payload).status_code,422)
+    def test_approval_does_not_duplicate_invoiced_products(self):
+        invoice = self.client.post('/fees', json={'student_id': self.s1.id, 'month':9, 'year':2026, 'amount':'100', 'product_amount':'25', 'due_date':'2026-09-10'}).json()
+        receipt = self.client.post('/receipts',json={'student_id':self.s1.id,'month':9,'year':2026,'amount':'100','product_amount':'25'}).json()
+        result = self.client.put(f"/receipts/{receipt['id']}/approve",json={})
+        self.assertEqual(result.status_code,200,result.text)
+        fee = self.db.query(StudentFee).filter_by(id=invoice['id']).one()
+        self.assertEqual(fee.product_amount,Decimal('25'))
+        self.assertEqual(fee.balance_amount,Decimal('0'))
+        self.assertEqual(fee.amount + fee.product_amount,Decimal('125'))
+
+    def test_coach_photo_to_admin(self):
+        image = io.BytesIO(); Image.new('RGB',(20,20),'red').save(image,format='JPEG')
+        r = self.client.post(f'/activities/classes/{self.cls.id}/group-photo', json={'photo_base64':base64.b64encode(image.getvalue()).decode()})
+        self.assertEqual(r.status_code,200,r.text)
+        self.assertTrue(r.json()['has_group_photo'])
+        r = self.client.get(f'/activities/classes/{self.cls.id}/group-photo')
+        self.assertEqual(r.status_code,200); self.assertEqual(r.headers['content-type'],'image/jpeg')
+        self.app.dependency_overrides[get_current_user] = lambda: self.s2
+        self.assertEqual(self.client.get(f'/activities/classes/{self.cls.id}/group-photo').status_code,403)
+
+if __name__ == '__main__': unittest.main()

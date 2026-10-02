@@ -1,3 +1,4 @@
+import 'admin_reports_tab.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
@@ -409,6 +410,8 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
                 children: [
+                  FutureBuilder<dynamic>(future: ApiClient.instance.get('/reports', query: {'month': DateTime.now().month, 'year': DateTime.now().year}), builder: (context, snapshot) { if (snapshot.hasError) return const Text('Revenue could not be loaded'); if (!snapshot.hasData) return const Text('Loading overall revenue...'); return Text('Overall revenue this month: Rs ${snapshot.data['total_revenue']} (products included)', style: const TextStyle(fontWeight: FontWeight.bold)); }),
+                  ElevatedButton.icon(icon: const Icon(Icons.picture_as_pdf), label: const Text("Overall Revenue & Attendance Reports"), onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => Scaffold(appBar: AppBar(title: const Text("Reports")), body: const AdminReportsTab())))),
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 4, horizontal: 4),
                     child: Text('Coaches Missing Attendance Today', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),

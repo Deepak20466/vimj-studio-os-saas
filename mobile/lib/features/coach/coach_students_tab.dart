@@ -123,8 +123,8 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
 
   Future<void> _openEdit(RosterStudent s) async {
     final nameCtrl = TextEditingController(text: s.name);
-    final phoneCtrl = TextEditingController();
-    final phoneSecondaryCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController(text: s.phone);
+    final phoneSecondaryCtrl = TextEditingController(text: s.phoneSecondary);
     String? error;
     bool saving = false;
     final saved = await showModalBottomSheet<bool>(
@@ -265,7 +265,7 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
                                           child: _photos[s.id] == null ? const Icon(Icons.person_outline) : null,
                                         ),
                                         title: Text(s.name),
-                                        subtitle: Text(s.email.endsWith('@no-login.internal') ? '-' : s.email),
+                                        subtitle: Text("${s.phone ?? '-'} / ${s.phoneSecondary ?? '-'}"),
                                         trailing: PopupMenuButton<String>(
                                           onSelected: (v) {
                                             if (v == 'copy') _copyFeeReminder();

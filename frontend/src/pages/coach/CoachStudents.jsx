@@ -145,7 +145,7 @@ export default function CoachStudents() {
                   <tr>
                     <th>Photo</th>
                     <th>Name</th>
-                    <th>Email</th>
+                    <th>Contact Numbers</th><th>Email</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -173,7 +173,7 @@ export default function CoachStudents() {
                           </div>
                         )}
                       </td>
-                      <td>{s.name}</td>
+                      <td>{s.name}</td><td>{s.phone || "-"}<br />{s.phone_secondary || "-"}</td>
                       <td>{displayEmail(s.email)}</td>
                       <td className="table-actions">
                         <button className="btn btn-secondary btn-sm" onClick={copyFeeReminder} title="Copy fee reminder message">

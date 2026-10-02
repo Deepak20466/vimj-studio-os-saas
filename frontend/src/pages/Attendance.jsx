@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { AttendanceAPI, ActivitiesAPI, StudentsAPI, CoachesAPI } from "../api/endpoints";
+import MonthlyReports from "../components/MonthlyReports";
 import StatusBadge from "../components/StatusBadge";
 import Modal from "../components/Modal";
 import { dismissItem, filterDismissed } from "../utils/dismissedItems";
@@ -265,6 +266,7 @@ export default function Attendance() {
 
   return (
     <div>
+      <MonthlyReports />
       <div className="page-header">
         <h1>Attendance</h1>
       </div>

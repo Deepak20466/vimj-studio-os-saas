@@ -10,6 +10,7 @@ export default function CoachReceipts() {
   const { user } = useAuth();
   const [receipts, setReceipts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [studentSearch, setStudentSearch] = useState("");
   const [students, setStudents] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
@@ -52,6 +53,7 @@ export default function CoachReceipts() {
     try {
       await ReceiptsAPI.create({
         ...form,
+        billing_date: form.billing_date || null,
         student_id: Number(form.student_id),
         amount: Number(form.amount),
         month: Number(form.month),
@@ -106,7 +108,7 @@ export default function CoachReceipts() {
             <thead>
               <tr>
                 <th>Period</th>
-                <th>Amount</th>
+                <th>Fees Amount</th><th>Product Amount</th><th>Total</th>
                 <th>Mode</th>
                 <th>Status</th>
                 <th>Note</th>
@@ -117,9 +119,9 @@ export default function CoachReceipts() {
               {receipts.map((r) => (
                 <tr key={r.id}>
                   <td>
-                    {r.month}/{r.year}
+                    {r.billing_date || `${r.month}/${r.year}`}
                   </td>
-                  <td>₹{r.amount}</td>
+                  <td>₹{r.amount}</td><td>₹{r.product_amount || 0}</td><td>₹{(Number(r.amount) + Number(r.product_amount || 0)).toFixed(2)}</td>
                   <td>{r.payment_mode}</td>
                   <td>
                     <StatusBadge status={statusFor(r)} />
@@ -147,16 +149,17 @@ export default function CoachReceipts() {
         <Modal title="New Fee Receipt" onClose={() => setShowForm(false)}>
           <form onSubmit={submit}>
             <div className="field">
-              <label>Student</label>
+              <label>Student</label><input placeholder="Search student" value={studentSearch} onChange={e => setStudentSearch(e.target.value)} />
               <select value={form.student_id} onChange={(e) => setForm({ ...form, student_id: e.target.value })} required>
                 <option value="">Select student</option>
-                {students.map((s) => (
+                {students.filter(s => `${s.name} ${s.phone || ""}`.toLowerCase().includes(studentSearch.toLowerCase()) || String(s.id) === form.student_id).map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>
                 ))}
               </select>
             </div>
+            <div className="field"><label>Billing Date (optional for monthly fees)</label><input type="date" value={form.billing_date || ""} onChange={e => { const value = e.target.value; setForm({ ...form, billing_date: value, ...(value ? { month: Number(value.slice(5, 7)), year: Number(value.slice(0, 4)) } : {}) }); }} /></div>
             <div className="form-grid">
               <div>
                 <label>Month</label>
@@ -172,7 +175,7 @@ export default function CoachReceipts() {
               <input type="number" min={0} step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
             </div>
             <div className="field">
-              <label>Payment Mode</label>
+              <label>Product Amount</label><input type="number" min="0" step="0.01" value={form.product_amount || "0"} onChange={e => setForm({ ...form, product_amount: e.target.value })} /></div><div className="field"><label>Payment Mode</label>
               <select value={form.payment_mode} onChange={(e) => setForm({ ...form, payment_mode: e.target.value })}>
                 <option value="CASH">Cash</option>
                 <option value="UPI">UPI</option>

@@ -9,6 +9,7 @@ import 'admin_activities_tab.dart';
 import 'admin_batches_tab.dart';
 import 'admin_attendance_tab.dart';
 import 'admin_fees_tab.dart';
+import 'admin_reports_tab.dart';
 import 'admin_leave_tab.dart';
 import 'admin_settings_tab.dart';
 import '../shared/notification_bell_action.dart';
@@ -42,6 +43,7 @@ class _AdminHomeState extends State<AdminHome> {
     _NavItem('Attendance', Icons.fact_check_outlined, AdminAttendanceTab()),
     _NavItem('Activities', Icons.event_outlined, AdminActivitiesTab()),
     _NavItem('Batches', Icons.calendar_month_outlined, AdminBatchesTab()),
+    _NavItem('Reports', Icons.picture_as_pdf_outlined, AdminReportsTab()),
     _NavItem('Fees', Icons.payments_outlined, AdminFeesTab()),
     _NavItem('Leave', Icons.beach_access_outlined, AdminLeaveTab()),
     _NavItem('Settings', Icons.settings_outlined, AdminSettingsTab()),

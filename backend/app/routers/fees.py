@@ -40,7 +40,7 @@ def create_fee(
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Fee record already exists for this period")
 
-    fee = StudentFee(**payload.model_dump(), balance_amount=payload.amount)
+    fee = StudentFee(**payload.model_dump(), balance_amount=payload.amount + payload.product_amount)
     db.add(fee)
     db.flush()
     log_action(db, current_user.id, "CREATE", "StudentFee", fee.id)
@@ -88,6 +88,7 @@ def list_fees(
             month=f.month,
             year=f.year,
             amount=f.amount,
+            product_amount=f.product_amount,
             balance_amount=f.balance_amount,
             status=f.status,
             due_date=f.due_date,
@@ -148,7 +149,7 @@ def update_fee(
             fee.balance_amount = Decimal("0")
             fee.paid_date = fee.paid_date or date.today()
         elif fee.balance_amount <= 0:
-            fee.balance_amount = fee.amount
+            fee.balance_amount = fee.amount + fee.product_amount
 
     log_action(db, current_user.id, "UPDATE", "StudentFee", fee.id)
     db.commit()
@@ -220,13 +221,15 @@ def fee_receipt(
     disposition = "inline" if disposition == "inline" else "attachment"
 
     if fmt == "csv":
-        headers = ["Receipt No", "Student", "Activities", "Period", "Amount Paid", "Balance", "Paid Date", "Approved By"]
+        headers = ["Receipt No", "Student", "Activities", "Period", "Fees Amount", "Product Amount", "Total", "Balance", "Paid Date", "Approved By"]
         rows = [[
             f"FEE-{fee.id:06d}",
             student.name if student else "Unknown",
             ", ".join(activity_names) or "N/A",
             f"{fee.month:02d}/{fee.year}",
             fee.amount,
+            fee.product_amount,
+            fee.amount + fee.product_amount,
             fee.balance_amount,
             (fee.paid_date or date.today()).isoformat(),
             current_user.name,
@@ -247,6 +250,7 @@ def fee_receipt(
         month=fee.month,
         year=fee.year,
         amount_paid=fee.amount,
+        product_amount=fee.product_amount,
         balance_amount=fee.balance_amount,
         payment_mode="N/A",
         paid_date=fee.paid_date or date.today(),

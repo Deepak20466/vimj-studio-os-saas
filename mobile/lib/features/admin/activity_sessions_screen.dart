@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
@@ -417,6 +418,8 @@ class _SessionRosterScreenState extends State<_SessionRosterScreen> {
                     onChanged: (v) => setState(() => _search = v),
                   ),
                 ),
+                if (roster?['has_group_photo'] == true)
+                  TextButton.icon(icon: const Icon(Icons.photo), label: const Text('View Session Photo'), onPressed: () => showDialog<void>(context: context, builder: (_) => AlertDialog(title: const Text('Session Photo'), content: FutureBuilder<List<int>>(future: ApiClient.instance.getBytes('/activities/classes/${roster!['class_id']}/group-photo'), builder: (context, snapshot) { if (snapshot.hasError) return const Text('Photo could not be loaded'); if (!snapshot.hasData) return const CircularProgressIndicator(); return Image.memory(Uint8List.fromList(snapshot.data!)); }), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))]))),
                 if (roster != null && roster['class_id'] == null)
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 12),

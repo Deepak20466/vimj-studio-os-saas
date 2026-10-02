@@ -7,6 +7,7 @@ import { downloadBlob, blobErrorDetail } from "../utils/download";
 
 export default function Fees() {
   const [fees, setFees] = useState([]);
+  const [studentSearch, setStudentSearch] = useState("");
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [unpaidOnly, setUnpaidOnly] = useState(false);
@@ -187,7 +188,7 @@ export default function Fees() {
 
   const openEdit = (fee) => {
     setEditing(fee);
-    setEditForm({ amount: String(fee.amount), balance_amount: String(fee.balance_amount), due_date: fee.due_date, status: fee.status });
+    setEditForm({ product_amount: String(fee.product_amount || 0), amount: String(fee.amount), balance_amount: String(fee.balance_amount), due_date: fee.due_date, status: fee.status });
   };
 
   const submitEdit = async (e) => {
@@ -203,7 +204,7 @@ export default function Fees() {
   };
 
   const regenerateBalance = () => {
-    setEditForm((f) => ({ ...f, balance_amount: f.amount }));
+    setEditForm((f) => ({ ...f, balance_amount: Number(f.amount) + Number(f.product_amount || 0) }));
   };
 
   const remove = async (fee) => {
@@ -251,7 +252,7 @@ export default function Fees() {
                 <th>Student</th>
                 <th>Coach</th>
                 <th>Period</th>
-                <th>Amount</th>
+                <th>Fees Amount</th><th>Product Amount</th><th>Total</th>
                 <th>Mode</th>
                 <th>Note</th>
                 <th>Actions</th>
@@ -265,7 +266,7 @@ export default function Fees() {
                   <td>
                     {r.month}/{r.year}
                   </td>
-                  <td>₹{r.amount}</td>
+                  <td>₹{r.amount}</td><td>₹{r.product_amount || 0}</td><td>₹{(Number(r.amount) + Number(r.product_amount || 0)).toFixed(2)}</td>
                   <td>{r.payment_mode}</td>
                   <td>{r.note || "-"}</td>
                   <td className="table-actions">
@@ -300,7 +301,7 @@ export default function Fees() {
                 <th>Student</th>
                 <th>Coach</th>
                 <th>Period</th>
-                <th>Amount</th>
+                <th>Fees Amount</th><th>Product Amount</th><th>Total</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -312,7 +313,7 @@ export default function Fees() {
                   <td>
                     {r.month}/{r.year}
                   </td>
-                  <td>₹{r.amount}</td>
+                  <td>₹{r.amount}</td><td>₹{r.product_amount || 0}</td><td>₹{(Number(r.amount) + Number(r.product_amount || 0)).toFixed(2)}</td>
                   <td className="table-actions">
                     <button className="btn btn-secondary btn-sm" onClick={() => viewReceipt(r)}>
                       View
@@ -404,7 +405,7 @@ export default function Fees() {
               <tr>
                 <th>Student</th>
                 <th>Period</th>
-                <th>Amount</th>
+                <th>Fees Amount</th><th>Product Amount</th><th>Total</th>
                 <th>Balance</th>
                 <th>Due Date</th>
                 <th>Status</th>
@@ -418,7 +419,7 @@ export default function Fees() {
                   <td>
                     {f.month}/{f.year}
                   </td>
-                  <td>₹{f.amount}</td>
+                  <td>₹{f.amount}</td><td>₹{f.product_amount || 0}</td><td>₹{(Number(f.amount) + Number(f.product_amount || 0)).toFixed(2)}</td>
                   <td>
                     {Number(f.balance_amount) > 0 ? (
                       <span style={{ color: "var(--danger)", fontWeight: 600 }}>₹{f.balance_amount}</span>
@@ -472,9 +473,10 @@ export default function Fees() {
           <form onSubmit={createFee}>
             <div className="field">
               <label>Student</label>
+              <input placeholder="Search student by name or phone" value={studentSearch} onChange={e => setStudentSearch(e.target.value)} />
               <select value={form.student_id} onChange={(e) => setForm({ ...form, student_id: e.target.value })} required>
                 <option value="">Select student</option>
-                {students.map((s) => (
+                {students.filter(s => `${s.name} ${s.phone || ""}`.toLowerCase().includes(studentSearch.toLowerCase()) || String(s.id) === form.student_id).map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>
@@ -496,7 +498,7 @@ export default function Fees() {
               <input type="number" min={0} step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
             </div>
             <div className="field">
-              <label>Due Date</label>
+              <label>Product Amount</label><input type="number" min="0" step="0.01" value={form.product_amount || "0"} onChange={e => setForm({ ...form, product_amount: e.target.value })} /></div><div className="field"><label>Due Date</label>
               <input type="date" value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} required />
             </div>
             <div className="modal-actions">
@@ -517,7 +519,7 @@ export default function Fees() {
               <input type="number" min={0} step="0.01" value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} required />
             </div>
             <div className="field">
-              <label>Balance Amount (₹)</label>
+              <label>Product Amount</label><input type="number" min="0" step="0.01" value={editForm.product_amount || "0"} onChange={e => setEditForm({ ...editForm, product_amount: e.target.value })} /></div><div className="field"><label>Balance Amount (₹)</label>
               <div style={{ display: "flex", gap: 8 }}>
                 <input
                   type="number"

@@ -10,7 +10,7 @@ export const AuthAPI = {
 };
 
 export const StudentsAPI = {
-  list: (search) => client.get("/students", { params: { search } }),
+  list: (search, activity_id) => client.get("/students", { params: { search, activity_id } }),
   create: (payload) => client.post("/students", payload),
   update: (id, payload) => client.put(`/students/${id}`, payload),
   remove: (id) => client.delete(`/students/${id}`),
@@ -45,6 +45,7 @@ export const ActivitiesAPI = {
   roster: (activityId) => client.get(`/activities/${activityId}/roster`),
   // A plain <img src> can't attach the Bearer token this API requires, so the
   // group photo has to be fetched as an authenticated blob (like AttendanceAPI.selfieBlob).
+  uploadGroupPhoto: (classId, photo_base64) => client.post(`/activities/classes/${classId}/group-photo`, { photo_base64 }),
   groupPhotoBlob: (classId) => client.get(`/activities/classes/${classId}/group-photo`, { responseType: "blob" }),
 };
 
@@ -162,3 +163,5 @@ export const ResetAPI = {
   // Coach-only: wipes only the caller's own attendance history.
   mine: () => client.post("/reset/mine"),
 };
+
+export const ReportsAPI = { summary: (params) => client.get("/reports", { params }), pdf: (params) => client.get("/reports", { params: { ...params, fmt: "pdf" }, responseType: "blob" }) };
