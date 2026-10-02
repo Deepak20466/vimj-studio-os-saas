@@ -28,6 +28,7 @@ Release verification (2026-10-02):
 - APK signatures verified and matched the previous mobile-v1.21.0 signing certificate.
 - Backend URL compiled into APKs: https://vimj-backend.onrender.com.
 - Database revision verified: 0017 (head).
+- Production backend rollout confirmed: OpenAPI exposes the new /reports endpoint.
 - GitHub release: https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.22.0
 
 APK SHA-256 checksums:
