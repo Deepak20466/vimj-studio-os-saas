@@ -34,3 +34,11 @@ APK SHA-256 checksums:
 - app-arm64-v8a-release.apk: 2e16168b60871678dba5d84d5390551ea65bc5922be1a36e718406e11df40caf
 - app-armeabi-v7a-release.apk: bbe66349d3dc853951e085020b7035fedf921f3fcf7bf4f907d8fb1f2985f8e2
 - app-x86_64-release.apk: 2061fd63a1d468a421559ddff8dccb6f09e947561399f14c3ad794219d19519a
+
+Final release checks (2026-10-02):
+- Feature commit: b7fe22fb4b7399d849327470d2b4e8bdf48cf61c, pushed to origin/master.
+- Release tag: mobile-v1.22.0, points to the feature commit.
+- Re-ran all 5 backend regression tests, the web production build, Flutter analysis, and the Flutter startup test: passed; existing informational notices remain.
+- Rechecked the configured PostgreSQL database: 0017 (head).
+- Verified all three APK signatures and the SHA-256 values above; the ARM64 signing certificate matches mobile-v1.21.0.
+- Recommended download for most Android phones: app-arm64-v8a-release.apk from the release linked above.
