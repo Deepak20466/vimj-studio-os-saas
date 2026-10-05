@@ -1,7 +1,11 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'api_config.dart';
 import 'auth_storage.dart';
+
+const _requestTimeout = Duration(seconds: 25);
+const _loginTimeout = Duration(seconds: 75);
 
 class ApiException implements Exception {
   final int statusCode;
@@ -71,7 +75,7 @@ class ApiClient {
         _uri('/auth/refresh'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'refresh_token': session.refreshToken}),
-      );
+      ).timeout(_requestTimeout);
       if (response.statusCode != 200) return false;
       final data = await _decode(response) as Map<String, dynamic>;
       await AuthStorage.updateAccessToken(
@@ -97,21 +101,28 @@ class ApiClient {
     final encodedBody = body != null ? jsonEncode(body) : null;
 
     http.Response response;
-    switch (method) {
-      case 'GET':
-        response = await _http.get(uri, headers: headers);
-        break;
-      case 'POST':
-        response = await _http.post(uri, headers: headers, body: encodedBody);
-        break;
-      case 'PUT':
-        response = await _http.put(uri, headers: headers, body: encodedBody);
-        break;
-      case 'DELETE':
-        response = await _http.delete(uri, headers: headers);
-        break;
-      default:
-        throw ApiException(0, 'Unsupported method $method');
+    try {
+      switch (method) {
+        case 'GET':
+          response = await _http.get(uri, headers: headers).timeout(_requestTimeout);
+          break;
+        case 'POST':
+          response = await _http.post(uri, headers: headers, body: encodedBody).timeout(path == '/auth/login' ? _loginTimeout : _requestTimeout);
+          break;
+        case 'PUT':
+          response = await _http.put(uri, headers: headers, body: encodedBody).timeout(_requestTimeout);
+          break;
+        case 'DELETE':
+          response = await _http.delete(uri, headers: headers).timeout(_requestTimeout);
+          break;
+        default:
+          throw ApiException(0, 'Unsupported method $method');
+      }
+    } on TimeoutException {
+      if (path == '/auth/login') {
+        throw ApiException(0, 'The server is taking too long to wake up. Please try signing in again in a moment.');
+      }
+      throw ApiException(0, 'The server did not respond in time. Check your connection and try again.');
     }
 
     if (response.statusCode == 401 && auth && !isRetry) {
@@ -155,7 +166,7 @@ class ApiClient {
   Future<List<int>> getBytes(String path, {Map<String, dynamic>? query}) async {
     final uri = _uri(path, query);
     final headers = await _headers();
-    final response = await _http.get(uri, headers: headers);
+    final response = await _http.get(uri, headers: headers).timeout(_requestTimeout);
     if (response.statusCode == 401) {
       final refreshed = await _tryRefresh();
       if (refreshed) return getBytes(path, query: query);

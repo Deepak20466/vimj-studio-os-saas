@@ -51,3 +51,11 @@ All requested changes have been fully implemented across the Mobile App (Flutter
 - **Backend Regression Tests**: 5/5 unit tests passed cleanly (`backend/tests/test_requested_changes.py`).
 - **Flutter Mobile Analysis**: `flutter analyze --no-pub --no-fatal-infos` verified with 0 errors/warnings.
 
+## Mobile Login Responsiveness Update
+- Login allows time for the production backend to wake from an idle Render free-tier instance,
+  then shows a clear retry message instead of waiting indefinitely.
+- Other API requests have bounded timeouts and display actionable errors.
+- Admin and Coach dashboard shells render while their initial data loads, so a successful login
+  does not remain blocked behind dashboard requests.
+- Verified with the live health endpoint, which responded in 43.66 seconds during a cold start.
+- Android release APKs built successfully for armeabi-v7a, arm64-v8a, and x86_64.

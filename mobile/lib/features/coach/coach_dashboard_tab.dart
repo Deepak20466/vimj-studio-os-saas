@@ -20,7 +20,7 @@ class CoachDashboardTab extends StatefulWidget {
 class _CoachDashboardTabState extends State<CoachDashboardTab> {
   List<ClassSession> _classes = [];
   Map<int, Map<String, dynamic>> _summaries = {};
-  bool _loading = true;
+  bool _loading = false;
   String? _error;
   String _coachName = '';
   String? _myStatus;
@@ -124,12 +124,12 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
       ),
       body: RefreshIndicator(
         onRefresh: _load,
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : ListView(
+        child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
+                  if (_loading) const LinearProgressIndicator(),
+                  if (_error != null)
+                    Card(child: ListTile(title: Text(_error!, style: const TextStyle(color: Colors.red)), trailing: IconButton(icon: const Icon(Icons.refresh), onPressed: _load))),
                   Text('My Attendance Today', style: Theme.of(context).textTheme.titleMedium),
                   const Text(
                     'Manual entry — no location needed. Pick a status, change it as needed, then press Submit to '

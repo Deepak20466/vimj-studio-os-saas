@@ -14,7 +14,7 @@ class AdminDashboardTab extends StatefulWidget {
 }
 
 class _AdminDashboardTabState extends State<AdminDashboardTab> {
-  bool _loading = true;
+  bool _loading = false;
   Map<String, dynamic>? _summary;
   Map<String, dynamic>? _feeGraph;
   List<dynamic> _missing = [];
@@ -73,7 +73,6 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
     final s = _summary ?? {};
     final fees = _feeGraph ?? {'paid': 0, 'unpaid': 0, 'overdue': 0};
     final paid = (fees['paid'] as num?)?.toDouble() ?? 0;
@@ -86,6 +85,9 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (_loading) const LinearProgressIndicator(),
+          if (_summary == null && !_loading)
+            Card(child: ListTile(title: const Text('Dashboard data is unavailable'), trailing: IconButton(icon: const Icon(Icons.refresh), onPressed: _load))),
           GridView.count(
             crossAxisCount: 2,
             shrinkWrap: true,
