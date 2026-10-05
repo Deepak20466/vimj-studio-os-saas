@@ -84,5 +84,8 @@ All requested changes have been fully implemented across the Mobile App (Flutter
   instead of hiding the control when the coach has not uploaded a photo yet.
 - Admin Activities also includes a Coach Session Photos gallery sourced directly from all
   uploaded class photos, including older/manual classes not attached to a scheduled batch.
+- The gallery supports text search, day/month/year/custom-date filtering, photo download, and
+  confirmed deletion. Coaches see and manage only their own session photos; Admins can manage
+  all coaches' photos.
 - Admin and Coach navigation initializes tabs only when first opened, reducing unnecessary
   startup API requests while retaining loaded tab state.

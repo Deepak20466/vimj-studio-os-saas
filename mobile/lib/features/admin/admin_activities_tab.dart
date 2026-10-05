@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/models.dart';
+import '../shared/session_photo_gallery.dart';
 import 'activity_sessions_screen.dart';
 
 class AdminActivitiesTab extends StatefulWidget {
@@ -78,7 +79,7 @@ class _AdminActivitiesTabState extends State<AdminActivitiesTab> {
 
   void _openSessionPhotos() {
     Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => const _SessionPhotoGallery()));
+        .push(MaterialPageRoute(builder: (_) => const SessionPhotoGallery()));
   }
 
   @override

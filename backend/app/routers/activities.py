@@ -170,9 +170,11 @@ def my_classes(
 
 
 @router.get("/session-photos")
-def session_photos(db: Session = Depends(get_db), _: User = Depends(require_admin)):
-    """List every uploaded coach class photo, including classes not linked to a batch."""
-    rows = (
+def session_photos(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Admins see all session photos; coaches see only their own uploads."""
+    if current_user.role not in (UserRole.ADMIN, UserRole.COACH):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to view session photos")
+    query = (
         db.query(
             ClassSession.id,
             ClassSession.date,
@@ -185,10 +187,10 @@ def session_photos(db: Session = Depends(get_db), _: User = Depends(require_admi
         .join(Activity, Activity.id == ClassSession.activity_id)
         .join(User, User.id == ClassSession.coach_id)
         .filter(ClassSession.group_photo.is_not(None))
-        .order_by(ClassSession.date.desc(), ClassSession.start_time.desc())
-        .limit(500)
-        .all()
     )
+    if current_user.role == UserRole.COACH:
+        query = query.filter(ClassSession.coach_id == current_user.id)
+    rows = query.order_by(ClassSession.date.desc(), ClassSession.start_time.desc()).limit(500).all()
     return [
         {
             "class_id": class_id,
@@ -293,6 +295,26 @@ def get_group_photo(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to view this photo")
 
     return Response(content=cls.group_photo, media_type="image/jpeg")
+
+
+@router.delete("/classes/{class_id}/group-photo", status_code=status.HTTP_204_NO_CONTENT)
+def delete_group_photo(
+    class_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Allow admins or the owning coach to remove a photo without deleting its class."""
+    cls = db.query(ClassSession).filter(ClassSession.id == class_id).first()
+    if not cls or not cls.group_photo:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session photo not found")
+    if current_user.role == UserRole.COACH and cls.coach_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your session photo")
+    if current_user.role not in (UserRole.ADMIN, UserRole.COACH):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to delete session photos")
+    cls.group_photo = None
+    cls.group_photo_uploaded_at = None
+    log_action(db, current_user.id, "DELETE_GROUP_PHOTO", "Class", cls.id)
+    db.commit()
 
 
 @router.post("/enroll", status_code=status.HTTP_201_CREATED)

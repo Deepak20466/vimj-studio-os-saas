@@ -105,7 +105,24 @@ class RequestedChanges(unittest.TestCase):
         self.assertEqual(gallery.json()[0]['activity_name'], 'Yoga')
         r = self.client.get(f'/activities/classes/{self.cls.id}/group-photo')
         self.assertEqual(r.status_code,200); self.assertEqual(r.headers['content-type'],'image/jpeg')
+        other_coach = User(name="Other Coach", email="other@example.com", role=UserRole.COACH, password_hash="unused")
+        self.db.add(other_coach); self.db.flush()
+        other_class = ClassSession(activity_id=self.yoga.id, coach_id=other_coach.id, date=date(2026,9,11), start_time=time(9), end_time=time(10), group_photo=image.getvalue())
+        self.db.add(other_class); self.db.commit()
+        self.app.dependency_overrides[get_current_user] = lambda: self.coach
+        coach_gallery = self.client.get('/activities/session-photos')
+        self.assertEqual(coach_gallery.status_code, 200)
+        self.assertEqual([p['class_id'] for p in coach_gallery.json()], [self.cls.id])
+        self.assertEqual(self.client.get(f'/activities/classes/{other_class.id}/group-photo').status_code, 403)
+        self.assertEqual(self.client.delete(f'/activities/classes/{other_class.id}/group-photo').status_code, 403)
+        self.assertEqual(self.client.delete(f'/activities/classes/{self.cls.id}/group-photo').status_code, 204)
+        self.assertEqual(self.client.get('/activities/session-photos').json(), [])
+        self.app.dependency_overrides[get_current_user] = lambda: self.admin
+        self.assertEqual(self.client.get('/activities/session-photos').json()[0]['class_id'], other_class.id)
+        self.assertEqual(self.client.delete(f'/activities/classes/{other_class.id}/group-photo').status_code, 204)
+        self.assertEqual(self.client.get(f'/activities/classes/{other_class.id}/group-photo').status_code, 404)
         self.app.dependency_overrides[get_current_user] = lambda: self.s2
-        self.assertEqual(self.client.get(f'/activities/classes/{self.cls.id}/group-photo').status_code,403)
+        self.assertEqual(self.client.get('/activities/session-photos').status_code, 403)
+        self.assertEqual(self.client.get(f'/activities/classes/{self.cls.id}/group-photo').status_code,404)
 
 if __name__ == '__main__': unittest.main()

@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../core/api_client.dart';
 import '../../core/models.dart';
+import '../shared/session_photo_gallery.dart';
 import 'mark_attendance_screen.dart';
 import '../shared/notification_bell_action.dart';
 
@@ -19,7 +20,8 @@ class _ClassesTabState extends State<ClassesTab> {
   DateTime _selectedDate = DateTime.now();
   List<ClassSession> _classes = [];
   bool _loading = true;
-  final Map<int, bool> _groupPhotoOverride = {}; // classId -> has photo, for instant UI feedback after upload
+  final Map<int, bool> _groupPhotoOverride =
+      {}; // classId -> has photo, for instant UI feedback after upload
   int? _photoBusyClassId;
 
   @override
@@ -32,10 +34,15 @@ class _ClassesTabState extends State<ClassesTab> {
     setState(() => _loading = true);
     try {
       final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
-      final data = await ApiClient.instance.get('/activities/classes/my', query: {'class_date': dateStr}) as List;
-      _classes = data.map((e) => ClassSession.fromJson(e as Map<String, dynamic>)).toList();
+      final data = await ApiClient.instance.get('/activities/classes/my',
+          query: {'class_date': dateStr}) as List;
+      _classes = data
+          .map((e) => ClassSession.fromJson(e as Map<String, dynamic>))
+          .toList();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -54,15 +61,21 @@ class _ClassesTabState extends State<ClassesTab> {
     return DateTime.now().isAfter(endDt);
   }
 
-  bool _hasGroupPhoto(ClassSession c) => _groupPhotoOverride[c.id] ?? c.hasGroupPhoto;
+  bool _hasGroupPhoto(ClassSession c) =>
+      _groupPhotoOverride[c.id] ?? c.hasGroupPhoto;
 
   Future<void> _captureGroupPhoto(ClassSession c) async {
     XFile? photo;
     try {
       final picker = ImagePicker();
-      photo = await picker.pickImage(source: ImageSource.camera, imageQuality: 70, preferredCameraDevice: CameraDevice.rear);
+      photo = await picker.pickImage(
+          source: ImageSource.camera,
+          imageQuality: 70,
+          preferredCameraDevice: CameraDevice.rear);
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open camera — check camera permission')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Could not open camera — check camera permission')));
       return;
     }
     if (photo == null) return;
@@ -70,13 +83,17 @@ class _ClassesTabState extends State<ClassesTab> {
     setState(() => _photoBusyClassId = c.id);
     try {
       final bytes = await photo.readAsBytes();
-      await ApiClient.instance.post('/activities/classes/${c.id}/group-photo', body: {'photo_base64': base64Encode(bytes)});
+      await ApiClient.instance.post('/activities/classes/${c.id}/group-photo',
+          body: {'photo_base64': base64Encode(bytes)});
       if (mounted) {
         setState(() => _groupPhotoOverride[c.id] = true);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Group photo saved')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Group photo saved')));
       }
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _photoBusyClassId = null);
     }
@@ -91,7 +108,9 @@ class _ClassesTabState extends State<ClassesTab> {
           width: 320,
           height: 320,
           child: FutureBuilder<Uint8List>(
-            future: ApiClient.instance.getBytes('/activities/classes/${c.id}/group-photo').then((b) => Uint8List.fromList(b)),
+            future: ApiClient.instance
+                .getBytes('/activities/classes/${c.id}/group-photo')
+                .then((b) => Uint8List.fromList(b)),
             builder: (ctx, snapshot) {
               if (snapshot.connectionState != ConnectionState.done) {
                 return const Center(child: CircularProgressIndicator());
@@ -99,11 +118,16 @@ class _ClassesTabState extends State<ClassesTab> {
               if (snapshot.hasError || !snapshot.hasData) {
                 return const Center(child: Text('Photo not available.'));
               }
-              return ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.memory(snapshot.data!, fit: BoxFit.contain));
+              return ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.memory(snapshot.data!, fit: BoxFit.contain));
             },
           ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Close'))
+        ],
       ),
     );
   }
@@ -121,13 +145,19 @@ class _ClassesTabState extends State<ClassesTab> {
     }
   }
 
+  void _openSessionPhotos() {
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const SessionPhotoGallery()));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Classes'),
         actions: [
-          IconButton(icon: const Icon(Icons.calendar_month), onPressed: _pickDate),
+          IconButton(
+              icon: const Icon(Icons.calendar_month), onPressed: _pickDate),
           const NotificationBellAction(),
           const SizedBox(width: 4),
         ],
@@ -136,7 +166,19 @@ class _ClassesTabState extends State<ClassesTab> {
         children: [
           Padding(
             padding: const EdgeInsets.all(12),
-            child: Text(DateFormat('EEEE, MMM d, yyyy').format(_selectedDate), style: Theme.of(context).textTheme.titleMedium),
+            child: Text(DateFormat('EEEE, MMM d, yyyy').format(_selectedDate),
+                style: Theme.of(context).textTheme.titleMedium),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _openSessionPhotos,
+                icon: const Icon(Icons.photo_library_outlined),
+                label: const Text('My Session Photos'),
+              ),
+            ),
           ),
           Expanded(
             child: _loading
@@ -159,7 +201,8 @@ class _ClassesTabState extends State<ClassesTab> {
                           final c = _classes[i];
                           final ended = _hasEnded(c);
                           return Card(
-                            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            margin: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 6),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(vertical: 4),
                               child: Column(
@@ -167,36 +210,57 @@ class _ClassesTabState extends State<ClassesTab> {
                                 children: [
                                   ListTile(
                                     leading: const Icon(Icons.fitness_center),
-                                    title: Text('${c.startTime} - ${c.endTime}'),
-                                    subtitle: Text('Class #${c.id} · Activity #${c.activityId}'),
+                                    title:
+                                        Text('${c.startTime} - ${c.endTime}'),
+                                    subtitle: Text(
+                                        'Class #${c.id} · Activity #${c.activityId}'),
                                     trailing: ElevatedButton(
-                                      onPressed: () => Navigator.of(context).push(
-                                        MaterialPageRoute(builder: (_) => MarkAttendanceScreen(classSession: c)),
+                                      onPressed: () =>
+                                          Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                            builder: (_) =>
+                                                MarkAttendanceScreen(
+                                                    classSession: c)),
                                       ),
                                       child: const Text('Mark'),
                                     ),
                                   ),
                                   if (ended)
                                     Padding(
-                                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                                      padding: const EdgeInsets.fromLTRB(
+                                          16, 0, 16, 8),
                                       child: Wrap(
                                         spacing: 8,
                                         runSpacing: 4,
-                                        crossAxisAlignment: WrapCrossAlignment.center,
+                                        crossAxisAlignment:
+                                            WrapCrossAlignment.center,
                                         children: [
-                                          const Text('Class ended', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                          const Text('Class ended',
+                                              style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.grey)),
                                           if (_photoBusyClassId == c.id)
-                                            const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                                            const SizedBox(
+                                                width: 16,
+                                                height: 16,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                        strokeWidth: 2))
                                           else if (_hasGroupPhoto(c))
                                             OutlinedButton.icon(
-                                              onPressed: () => _viewGroupPhoto(c),
-                                              icon: const Icon(Icons.photo, size: 16),
-                                              label: const Text('View Group Photo'),
+                                              onPressed: () =>
+                                                  _viewGroupPhoto(c),
+                                              icon: const Icon(Icons.photo,
+                                                  size: 16),
+                                              label: const Text(
+                                                  'View Group Photo'),
                                             )
                                           else
                                             OutlinedButton.icon(
-                                              onPressed: () => _captureGroupPhoto(c),
-                                              icon: const Icon(Icons.camera_alt, size: 16),
+                                              onPressed: () =>
+                                                  _captureGroupPhoto(c),
+                                              icon: const Icon(Icons.camera_alt,
+                                                  size: 16),
                                               label: const Text('Group Photo'),
                                             ),
                                         ],
