@@ -41,28 +41,46 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
         ApiClient.instance.get('/fee-reminders/pending'),
         ApiClient.instance.get('/students'),
       ]);
-      _fees = (results[0] as List).map((e) => AdminFeeRecord.fromJson(e as Map<String, dynamic>)).toList();
-      _pendingReceipts = (results[1] as List).map((e) => FeeReceiptRecord.fromJson(e as Map<String, dynamic>)).toList();
+      _fees = (results[0] as List)
+          .map((e) => AdminFeeRecord.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _pendingReceipts = (results[1] as List)
+          .map((e) => FeeReceiptRecord.fromJson(e as Map<String, dynamic>))
+          .toList();
       _approvedReceipts = (results[2] as List)
           .map((e) => FeeReceiptRecord.fromJson(e as Map<String, dynamic>))
           .where((r) => r.status == 'APPROVED')
           .toList();
-      _pendingReminders = (results[3] as List).map((e) => FeeReminderDraftRecord.fromJson(e as Map<String, dynamic>)).toList();
-      _studentNames = {for (final s in (results[4] as List)) (s['id'] as int): s['name'] as String};
+      _pendingReminders = (results[3] as List)
+          .map(
+              (e) => FeeReminderDraftRecord.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _studentNames = {
+        for (final s in (results[4] as List))
+          (s['id'] as int): s['name'] as String
+      };
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  String _feeStudentName(AdminFeeRecord f) => f.studentName ?? _studentNames[f.studentId] ?? 'Student #${f.studentId}';
-  String _receiptStudentName(FeeReceiptRecord r) => r.studentName ?? _studentNames[r.studentId] ?? 'Student #${r.studentId}';
+  String _feeStudentName(AdminFeeRecord f) =>
+      f.studentName ?? _studentNames[f.studentId] ?? 'Student #${f.studentId}';
+  String _receiptStudentName(FeeReceiptRecord r) =>
+      r.studentName ?? _studentNames[r.studentId] ?? 'Student #${r.studentId}';
 
   List<AdminFeeRecord> get _visibleFees {
     final q = _search.trim().toLowerCase();
     if (q.isEmpty) return _fees;
-    return _fees.where((f) => _feeStudentName(f).toLowerCase().contains(q) || '${f.month}/${f.year}'.contains(q)).toList();
+    return _fees
+        .where((f) =>
+            _feeStudentName(f).toLowerCase().contains(q) ||
+            '${f.month}/${f.year}'.contains(q))
+        .toList();
   }
 
   Future<String?> _promptReason(String title) {
@@ -71,10 +89,17 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
       context: context,
       builder: (_) => AlertDialog(
         title: Text(title),
-        content: TextField(controller: ctrl, decoration: const InputDecoration(labelText: 'Reason (optional)'), maxLines: 2),
+        content: TextField(
+            controller: ctrl,
+            decoration: const InputDecoration(labelText: 'Reason (optional)'),
+            maxLines: 2),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, ctrl.text.trim()), child: const Text('Confirm')),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, ctrl.text.trim()),
+              child: const Text('Confirm')),
         ],
       ),
     ).then((value) {
@@ -92,27 +117,38 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
     }
     setState(() => _busyReceiptId = r.id);
     try {
-      await ApiClient.instance.put('/receipts/${r.id}/${approve ? 'approve' : 'reject'}', body: {'decision_note': note});
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(approve ? 'Receipt approved — fee marked paid' : 'Receipt rejected')));
+      await ApiClient.instance.put(
+          '/receipts/${r.id}/${approve ? 'approve' : 'reject'}',
+          body: {'decision_note': note});
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(approve
+                ? 'Receipt approved — fee marked paid'
+                : 'Receipt rejected')));
       _load();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _busyReceiptId = null);
     }
   }
 
   Future<void> _downloadReceipt(int receiptId, String fmt) async {
-    if (_downloadingReceiptId == receiptId) return; // already in flight — ignore a double tap
+    if (_downloadingReceiptId == receiptId)
+      return; // already in flight — ignore a double tap
     setState(() => _downloadingReceiptId = receiptId);
     try {
-      final bytes = await ApiClient.instance.getBytes('/receipts/$receiptId/pdf', query: {'fmt': fmt});
+      final bytes = await ApiClient.instance
+          .getBytes('/receipts/$receiptId/pdf', query: {'fmt': fmt});
       await shareExportedFile(bytes, 'receipt_$receiptId.$fmt');
     } on ApiException catch (e) {
       if (mounted) {
         // A 404 means this receipt no longer exists (deleted/changed elsewhere) —
         // refresh so the stale row disappears instead of repeatedly 404ing.
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
         if (e.statusCode == 404) _load();
       }
     } finally {
@@ -121,14 +157,17 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
   }
 
   Future<void> _downloadFeeReceipt(AdminFeeRecord f, String fmt) async {
-    if (_downloadingReceiptId == f.id) return; // already in flight — ignore a double tap
+    if (_downloadingReceiptId == f.id)
+      return; // already in flight — ignore a double tap
     setState(() => _downloadingReceiptId = f.id);
     try {
-      final bytes = await ApiClient.instance.getBytes('/fees/${f.id}/receipt', query: {'fmt': fmt});
+      final bytes = await ApiClient.instance
+          .getBytes('/fees/${f.id}/receipt', query: {'fmt': fmt});
       await shareExportedFile(bytes, 'receipt_${f.id}.$fmt');
     } on ApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
         if (e.statusCode == 404) _load();
       }
     } finally {
@@ -145,11 +184,18 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
     }
     setState(() => _busyReminderId = d.id);
     try {
-      await ApiClient.instance.put('/fee-reminders/${d.id}/${approve ? 'approve' : 'reject'}', body: {'decision_note': note});
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(approve ? 'Reminder approved and sent' : 'Reminder rejected')));
+      await ApiClient.instance.put(
+          '/fee-reminders/${d.id}/${approve ? 'approve' : 'reject'}',
+          body: {'decision_note': note});
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                approve ? 'Reminder approved and sent' : 'Reminder rejected')));
       _load();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _busyReminderId = null);
     }
@@ -157,25 +203,35 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
 
   Future<void> _copyMessage(String message) async {
     await Clipboard.setData(ClipboardData(text: message));
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Message copied — paste it into WhatsApp')));
+    if (mounted)
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Message copied — paste it into WhatsApp')));
   }
 
   Future<void> _markPaid(AdminFeeRecord f) async {
     try {
       await ApiClient.instance.post('/fees/mark-paid', body: {'fee_id': f.id});
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Marked as paid')));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Marked as paid')));
       _load();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
   Future<void> _remind(AdminFeeRecord f) async {
     try {
       await ApiClient.instance.post('/fees/${f.id}/remind');
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Reminder sent')));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Reminder sent')));
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -204,20 +260,30 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Delete fee record?'),
-        content: Text('Delete the ${f.month}/${f.year} fee record for ${_feeStudentName(f)}?'),
+        content: Text(
+            'Delete the ${f.month}/${f.year} fee record for ${_feeStudentName(f)}?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete', style: TextStyle(color: AppColors.danger))),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete',
+                  style: TextStyle(color: AppColors.danger))),
         ],
       ),
     );
     if (confirmed != true) return;
     try {
       await ApiClient.instance.delete('/fees/${f.id}');
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Fee record deleted')));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Fee record deleted')));
       _load();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -249,22 +315,38 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                 padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
                 children: [
                   if (_pendingReceipts.isNotEmpty) ...[
-                    Text('Pending Fee Receipts (from Coaches)', style: Theme.of(context).textTheme.titleMedium),
+                    Text('Pending Fee Receipts (from Coaches)',
+                        style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 8),
                     ..._pendingReceipts.map(
                       (r) => Card(
                         margin: const EdgeInsets.only(bottom: 8),
                         child: ListTile(
-                          title: Text('${_receiptStudentName(r)} — ₹${r.amount} + products ${r.productAmount} = ${(double.parse(r.amount) + double.parse(r.productAmount)).toStringAsFixed(2)}'),
-                          subtitle: Text('${r.month}/${r.year} · ${r.paymentMode}${r.decisionNote != null && r.decisionNote!.isNotEmpty ? "\n${r.decisionNote}" : ""}'),
-                          isThreeLine: r.decisionNote != null && r.decisionNote!.isNotEmpty,
+                          title: Text(
+                              '${_receiptStudentName(r)} — ${r.productName?.isNotEmpty == true ? "${r.productName}: " : ""}₹${r.amount} + product ${r.productAmount} = ${(double.parse(r.amount) + double.parse(r.productAmount)).toStringAsFixed(2)}'),
+                          subtitle: Text(
+                              '${r.month}/${r.year} · ${r.paymentMode}${r.decisionNote != null && r.decisionNote!.isNotEmpty ? "\n${r.decisionNote}" : ""}'),
+                          isThreeLine: r.decisionNote != null &&
+                              r.decisionNote!.isNotEmpty,
                           trailing: _busyReceiptId == r.id
-                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2))
                               : Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    IconButton(icon: const Icon(Icons.check_circle, color: AppColors.success), onPressed: () => _decideReceipt(r, true)),
-                                    IconButton(icon: const Icon(Icons.cancel, color: AppColors.danger), onPressed: () => _decideReceipt(r, false)),
+                                    IconButton(
+                                        icon: const Icon(Icons.check_circle,
+                                            color: AppColors.success),
+                                        onPressed: () =>
+                                            _decideReceipt(r, true)),
+                                    IconButton(
+                                        icon: const Icon(Icons.cancel,
+                                            color: AppColors.danger),
+                                        onPressed: () =>
+                                            _decideReceipt(r, false)),
                                   ],
                                 ),
                         ),
@@ -273,21 +355,37 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                     const SizedBox(height: 16),
                   ],
                   if (_approvedReceipts.isNotEmpty) ...[
-                    Text('Approved Fee Receipts', style: Theme.of(context).textTheme.titleMedium),
+                    Text('Approved Fee Receipts',
+                        style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 8),
                     ..._approvedReceipts.map(
                       (r) => Card(
                         margin: const EdgeInsets.only(bottom: 8),
                         child: ListTile(
-                          title: Text('${_receiptStudentName(r)} — ₹${r.amount} + products ${r.productAmount} = ${(double.parse(r.amount) + double.parse(r.productAmount)).toStringAsFixed(2)}'),
+                          title: Text(
+                              '${_receiptStudentName(r)} — ${r.productName?.isNotEmpty == true ? "${r.productName}: " : ""}₹${r.amount} + product ${r.productAmount} = ${(double.parse(r.amount) + double.parse(r.productAmount)).toStringAsFixed(2)}'),
                           subtitle: Text('${r.month}/${r.year}'),
                           trailing: _downloadingReceiptId == r.id
-                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2))
                               : Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    IconButton(icon: const Icon(Icons.picture_as_pdf_outlined), tooltip: 'Receipt (PDF)', onPressed: () => _downloadReceipt(r.id, 'pdf')),
-                                    IconButton(icon: const Icon(Icons.table_chart_outlined), tooltip: 'Receipt (CSV)', onPressed: () => _downloadReceipt(r.id, 'csv')),
+                                    IconButton(
+                                        icon: const Icon(
+                                            Icons.picture_as_pdf_outlined),
+                                        tooltip: 'Receipt (PDF)',
+                                        onPressed: () =>
+                                            _downloadReceipt(r.id, 'pdf')),
+                                    IconButton(
+                                        icon: const Icon(
+                                            Icons.table_chart_outlined),
+                                        tooltip: 'Receipt (CSV)',
+                                        onPressed: () =>
+                                            _downloadReceipt(r.id, 'csv')),
                                   ],
                                 ),
                         ),
@@ -296,7 +394,8 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                     const SizedBox(height: 16),
                   ],
                   if (_pendingReminders.isNotEmpty) ...[
-                    Text('Pending Fee Reminder Drafts (from Coaches)', style: Theme.of(context).textTheme.titleMedium),
+                    Text('Pending Fee Reminder Drafts (from Coaches)',
+                        style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 8),
                     ..._pendingReminders.map(
                       (d) => Card(
@@ -306,19 +405,39 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('${d.studentName ?? _studentNames[d.studentId] ?? "Student #${d.studentId}"} · ${d.month}/${d.year}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              Text(
+                                  '${d.studentName ?? _studentNames[d.studentId] ?? "Student #${d.studentId}"} · ${d.month}/${d.year}',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold)),
                               const SizedBox(height: 4),
                               Text(d.message),
                               const SizedBox(height: 8),
                               _busyReminderId == d.id
-                                  ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+                                  ? const Center(
+                                      child: SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2)))
                                   : Row(
                                       children: [
-                                        OutlinedButton(onPressed: () => _copyMessage(d.message), child: const Text('Copy')),
+                                        OutlinedButton(
+                                            onPressed: () =>
+                                                _copyMessage(d.message),
+                                            child: const Text('Copy')),
                                         const SizedBox(width: 10),
-                                        Expanded(child: OutlinedButton(onPressed: () => _decideReminder(d, false), child: const Text('Reject'))),
+                                        Expanded(
+                                            child: OutlinedButton(
+                                                onPressed: () =>
+                                                    _decideReminder(d, false),
+                                                child: const Text('Reject'))),
                                         const SizedBox(width: 10),
-                                        Expanded(child: ElevatedButton(onPressed: () => _decideReminder(d, true), child: const Text('Approve & Send'))),
+                                        Expanded(
+                                            child: ElevatedButton(
+                                                onPressed: () =>
+                                                    _decideReminder(d, true),
+                                                child: const Text(
+                                                    'Approve & Send'))),
                                       ],
                                     ),
                             ],
@@ -331,11 +450,16 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(_unpaidOnly ? 'Unpaid / Overdue Fees' : 'All Fee Records', style: Theme.of(context).textTheme.titleMedium),
+                      Text(
+                          _unpaidOnly
+                              ? 'Unpaid / Overdue Fees'
+                              : 'All Fee Records',
+                          style: Theme.of(context).textTheme.titleMedium),
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text('Unpaid only', style: TextStyle(fontSize: 12)),
+                          const Text('Unpaid only',
+                              style: TextStyle(fontSize: 12)),
                           Switch(
                             value: _unpaidOnly,
                             onChanged: (v) {
@@ -349,19 +473,25 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                   ),
                   const SizedBox(height: 8),
                   TextField(
-                    decoration: const InputDecoration(hintText: 'Search by student name or month/year...', prefixIcon: Icon(Icons.search)),
+                    decoration: const InputDecoration(
+                        hintText: 'Search by student name or month/year...',
+                        prefixIcon: Icon(Icons.search)),
                     onChanged: (v) => setState(() => _search = v),
                   ),
                   const SizedBox(height: 8),
                   if (_fees.isEmpty)
                     Padding(
                       padding: const EdgeInsets.all(20),
-                      child: Center(child: Text(_unpaidOnly ? 'No outstanding fees. Everyone is paid up.' : 'No fee records yet.')),
+                      child: Center(
+                          child: Text(_unpaidOnly
+                              ? 'No outstanding fees. Everyone is paid up.'
+                              : 'No fee records yet.')),
                     )
                   else if (_visibleFees.isEmpty)
                     Padding(
                       padding: const EdgeInsets.all(20),
-                      child: Center(child: Text('No fee records match "$_search".')),
+                      child: Center(
+                          child: Text('No fee records match "$_search".')),
                     )
                   else
                     ..._visibleFees.map(
@@ -373,42 +503,76 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Expanded(child: Text(_feeStudentName(f), style: const TextStyle(fontWeight: FontWeight.bold))),
+                                  Expanded(
+                                      child: Text(_feeStudentName(f),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.bold))),
                                   Chip(
-                                    label: Text(f.status, style: const TextStyle(color: Colors.white, fontSize: 11)),
+                                    label: Text(f.status,
+                                        style: const TextStyle(
+                                            color: Colors.white, fontSize: 11)),
                                     backgroundColor: _statusColor(f.status),
                                     visualDensity: VisualDensity.compact,
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 4),
-                              Text('${f.month}/${f.year} · ₹${f.amount} + products ${f.productAmount} = ${(double.parse(f.amount) + double.parse(f.productAmount)).toStringAsFixed(2)} · balance ₹${f.balanceAmount} · due ${f.dueDate}', style: const TextStyle(color: AppColors.textMuted)),
+                              Text(
+                                  '${f.month}/${f.year} · ₹${f.amount} + products ${f.productAmount} = ${(double.parse(f.amount) + double.parse(f.productAmount)).toStringAsFixed(2)} · balance ₹${f.balanceAmount} · due ${f.dueDate}',
+                                  style: const TextStyle(
+                                      color: AppColors.textMuted)),
                               const SizedBox(height: 12),
                               Row(
                                 children: [
                                   if (f.status != 'PAID') ...[
-                                    Expanded(child: OutlinedButton(onPressed: () => _remind(f), child: const Text('Remind'))),
+                                    Expanded(
+                                        child: OutlinedButton(
+                                            onPressed: () => _remind(f),
+                                            child: const Text('Remind'))),
                                     const SizedBox(width: 10),
-                                    Expanded(child: ElevatedButton(onPressed: () => _markPaid(f), child: const Text('Mark Paid'))),
+                                    Expanded(
+                                        child: ElevatedButton(
+                                            onPressed: () => _markPaid(f),
+                                            child: const Text('Mark Paid'))),
                                   ] else if (_downloadingReceiptId == f.id)
-                                    const Expanded(child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))))
+                                    const Expanded(
+                                        child: Center(
+                                            child: SizedBox(
+                                                width: 20,
+                                                height: 20,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                        strokeWidth: 2))))
                                   else ...[
-                                    Expanded(child: OutlinedButton(onPressed: () => _downloadFeeReceipt(f, 'pdf'), child: const Text('PDF'))),
+                                    Expanded(
+                                        child: OutlinedButton(
+                                            onPressed: () =>
+                                                _downloadFeeReceipt(f, 'pdf'),
+                                            child: const Text('PDF'))),
                                     const SizedBox(width: 10),
-                                    Expanded(child: OutlinedButton(onPressed: () => _downloadFeeReceipt(f, 'csv'), child: const Text('CSV'))),
+                                    Expanded(
+                                        child: OutlinedButton(
+                                            onPressed: () =>
+                                                _downloadFeeReceipt(f, 'csv'),
+                                            child: const Text('CSV'))),
                                   ],
                                 ],
                               ),
                               const SizedBox(height: 8),
                               Row(
                                 children: [
-                                  Expanded(child: TextButton(onPressed: () => _openEdit(f), child: const Text('Edit'))),
+                                  Expanded(
+                                      child: TextButton(
+                                          onPressed: () => _openEdit(f),
+                                          child: const Text('Edit'))),
                                   Expanded(
                                     child: TextButton(
                                       onPressed: () => _remove(f),
-                                      style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+                                      style: TextButton.styleFrom(
+                                          foregroundColor: AppColors.danger),
                                       child: const Text('Delete'),
                                     ),
                                   ),
@@ -441,6 +605,7 @@ class _FeeFormState extends State<_FeeForm> {
   late final _yearCtrl = TextEditingController(text: _now.year.toString());
   final _amountCtrl = TextEditingController();
   final _productCtrl = TextEditingController(text: "0");
+  final _productNameCtrl = TextEditingController();
   String _studentSearch = "";
   final _dueDateCtrl = TextEditingController();
   bool _loadingStudents = true;
@@ -455,9 +620,12 @@ class _FeeFormState extends State<_FeeForm> {
   Future<void> _loadStudents() async {
     try {
       final data = await ApiClient.instance.get('/students') as List;
-      _students = data.map((e) => Student.fromJson(e as Map<String, dynamic>)).toList();
+      _students =
+          data.map((e) => Student.fromJson(e as Map<String, dynamic>)).toList();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _loadingStudents = false);
     }
@@ -471,12 +639,16 @@ class _FeeFormState extends State<_FeeForm> {
       lastDate: DateTime(2100),
     );
     if (picked == null) return;
-    setState(() => _dueDateCtrl.text = '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}');
+    setState(() => _dueDateCtrl.text =
+        '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}');
   }
 
   Future<void> _submit() async {
-    if (_studentId == null || _amountCtrl.text.trim().isEmpty || _dueDateCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Fill in all fields')));
+    if (_studentId == null ||
+        _amountCtrl.text.trim().isEmpty ||
+        _dueDateCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Fill in all fields')));
       return;
     }
     setState(() => _saving = true);
@@ -487,11 +659,16 @@ class _FeeFormState extends State<_FeeForm> {
         'year': int.tryParse(_yearCtrl.text.trim()) ?? _now.year,
         'amount': _amountCtrl.text.trim(),
         'product_amount': _productCtrl.text.trim(),
+        'product_name': _productNameCtrl.text.trim().isEmpty
+            ? null
+            : _productNameCtrl.text.trim(),
         'due_date': _dueDateCtrl.text.trim(),
       });
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -503,6 +680,7 @@ class _FeeFormState extends State<_FeeForm> {
     _yearCtrl.dispose();
     _amountCtrl.dispose();
     _productCtrl.dispose();
+    _productNameCtrl.dispose();
     _dueDateCtrl.dispose();
     super.dispose();
   }
@@ -510,7 +688,11 @@ class _FeeFormState extends State<_FeeForm> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+      padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 20),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -518,13 +700,23 @@ class _FeeFormState extends State<_FeeForm> {
           children: [
             Text('Add Fee', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
-            TextField(decoration: const InputDecoration(labelText: "Search student"), onChanged: (v) => setState(() => _studentSearch = v)),
+            TextField(
+                decoration: const InputDecoration(labelText: "Search student"),
+                onChanged: (v) => setState(() => _studentSearch = v)),
             _loadingStudents
                 ? const Center(child: CircularProgressIndicator())
                 : DropdownButtonFormField<int>(
                     initialValue: _studentId,
                     decoration: const InputDecoration(labelText: 'Student'),
-                    items: _students.where((s) => s.id == _studentId || s.name.toLowerCase().contains(_studentSearch.toLowerCase())).map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
+                    items: _students
+                        .where((s) =>
+                            s.id == _studentId ||
+                            s.name
+                                .toLowerCase()
+                                .contains(_studentSearch.toLowerCase()))
+                        .map((s) =>
+                            DropdownMenuItem(value: s.id, child: Text(s.name)))
+                        .toList(),
                     onChanged: (v) => setState(() => _studentId = v),
                   ),
             const SizedBox(height: 12),
@@ -548,19 +740,39 @@ class _FeeFormState extends State<_FeeForm> {
               ],
             ),
             const SizedBox(height: 12),
-            TextField(controller: _productCtrl, decoration: const InputDecoration(labelText: "Product Amount"), keyboardType: const TextInputType.numberWithOptions(decimal: true)),
-            TextField(controller: _amountCtrl, decoration: const InputDecoration(labelText: 'Amount (₹)'), keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+            TextField(
+                controller: _productCtrl,
+                decoration: const InputDecoration(labelText: "Product Amount"),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true)),
+            TextField(
+                controller: _productNameCtrl,
+                decoration: const InputDecoration(
+                    labelText: "Product Name (optional)")),
+            TextField(
+                controller: _amountCtrl,
+                decoration: const InputDecoration(labelText: 'Amount (₹)'),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true)),
             const SizedBox(height: 12),
             TextField(
               controller: _dueDateCtrl,
               readOnly: true,
-              decoration: const InputDecoration(labelText: 'Due Date', suffixIcon: Icon(Icons.calendar_today)),
+              decoration: const InputDecoration(
+                  labelText: 'Due Date',
+                  suffixIcon: Icon(Icons.calendar_today)),
               onTap: _pickDueDate,
             ),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _saving ? null : _submit,
-              child: _saving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Create'),
+              child: _saving
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Create'),
             ),
           ],
         ),
@@ -580,16 +792,23 @@ class _FeeEditForm extends StatefulWidget {
 
 class _FeeEditFormState extends State<_FeeEditForm> {
   late final _amountCtrl = TextEditingController(text: widget.fee.amount);
-  late final _productCtrl = TextEditingController(text: widget.fee.productAmount);
-  late final _balanceCtrl = TextEditingController(text: widget.fee.balanceAmount);
+  late final _productCtrl =
+      TextEditingController(text: widget.fee.productAmount);
+  late final _balanceCtrl =
+      TextEditingController(text: widget.fee.balanceAmount);
   late final _dueDateCtrl = TextEditingController(text: widget.fee.dueDate);
   late String _status = widget.fee.status;
   bool _saving = false;
 
   Future<void> _pickDueDate() async {
-    final picked = await showDatePicker(context: context, initialDate: DateTime.tryParse(_dueDateCtrl.text) ?? DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2100));
+    final picked = await showDatePicker(
+        context: context,
+        initialDate: DateTime.tryParse(_dueDateCtrl.text) ?? DateTime.now(),
+        firstDate: DateTime(2020),
+        lastDate: DateTime(2100));
     if (picked == null) return;
-    setState(() => _dueDateCtrl.text = '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}');
+    setState(() => _dueDateCtrl.text =
+        '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}');
   }
 
   Future<void> _submit() async {
@@ -604,7 +823,9 @@ class _FeeEditFormState extends State<_FeeEditForm> {
       });
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -622,36 +843,63 @@ class _FeeEditFormState extends State<_FeeEditForm> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+      padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 20),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Edit Fee — ${widget.studentName}', style: Theme.of(context).textTheme.titleLarge),
+            Text('Edit Fee — ${widget.studentName}',
+                style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
-            TextField(controller: _productCtrl, decoration: const InputDecoration(labelText: "Product Amount"), keyboardType: const TextInputType.numberWithOptions(decimal: true)),
-            TextField(controller: _amountCtrl, decoration: const InputDecoration(labelText: 'Amount (₹)'), keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+            TextField(
+                controller: _productCtrl,
+                decoration: const InputDecoration(labelText: "Product Amount"),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true)),
+            TextField(
+                controller: _amountCtrl,
+                decoration: const InputDecoration(labelText: 'Amount (₹)'),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true)),
             const SizedBox(height: 12),
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
-                  child: TextField(controller: _balanceCtrl, decoration: const InputDecoration(labelText: 'Balance Amount (₹)'), keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+                  child: TextField(
+                      controller: _balanceCtrl,
+                      decoration: const InputDecoration(
+                          labelText: 'Balance Amount (₹)'),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true)),
                 ),
                 const SizedBox(width: 8),
-                OutlinedButton(onPressed: () => setState(() => _balanceCtrl.text = ((double.tryParse(_amountCtrl.text) ?? 0) + (double.tryParse(_productCtrl.text) ?? 0)).toStringAsFixed(2)), child: const Text('Generate')),
+                OutlinedButton(
+                    onPressed: () => setState(() => _balanceCtrl.text =
+                        ((double.tryParse(_amountCtrl.text) ?? 0) +
+                                (double.tryParse(_productCtrl.text) ?? 0))
+                            .toStringAsFixed(2)),
+                    child: const Text('Generate')),
               ],
             ),
             const Padding(
               padding: EdgeInsets.only(top: 4),
-              child: Text('Outstanding amount still owed. "Generate" resets it to the full fee amount. Setting it to 0 marks the fee as paid.', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+              child: Text(
+                  'Outstanding amount still owed. "Generate" resets it to the full fee amount. Setting it to 0 marks the fee as paid.',
+                  style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _dueDateCtrl,
               readOnly: true,
-              decoration: const InputDecoration(labelText: 'Due Date', suffixIcon: Icon(Icons.calendar_today)),
+              decoration: const InputDecoration(
+                  labelText: 'Due Date',
+                  suffixIcon: Icon(Icons.calendar_today)),
               onTap: _pickDueDate,
             ),
             const SizedBox(height: 12),
@@ -668,7 +916,13 @@ class _FeeEditFormState extends State<_FeeEditForm> {
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _saving ? null : _submit,
-              child: _saving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Save'),
+              child: _saving
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Save'),
             ),
           ],
         ),

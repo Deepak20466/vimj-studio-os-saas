@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Column, Integer, ForeignKey, DateTime, Date, Enum, Numeric, UniqueConstraint
+from sqlalchemy import Column, Integer, ForeignKey, DateTime, Date, Enum, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -22,6 +22,7 @@ class StudentFee(Base):
     month = Column(Integer, nullable=False)
     year = Column(Integer, nullable=False)
     product_amount = Column(Numeric(10, 2), nullable=False, default=0)
+    product_name = Column(String(120), nullable=True)
     amount = Column(Numeric(10, 2), nullable=False)
     balance_amount = Column(Numeric(10, 2), nullable=False, default=0)
     status = Column(Enum(FeeStatus), nullable=False, default=FeeStatus.UNPAID, index=True)

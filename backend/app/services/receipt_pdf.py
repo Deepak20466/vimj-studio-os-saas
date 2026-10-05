@@ -43,6 +43,7 @@ def build_fee_receipt_pdf(
     academy_contact: str = "hello@vimjstudio.com  |  +91 98000 00000",
     student_contact: Optional[str] = None,
     product_amount: Decimal = Decimal("0"),
+    product_name: Optional[str] = None,
 ) -> bytes:
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
@@ -141,7 +142,7 @@ def build_fee_receipt_pdf(
 
     line_items = [(f"Fee Payment - {activity_line}", f"{month:02d}/{year}", amount_paid)]
     if product_amount:
-        line_items.append(("Yoga products", f"{month:02d}/{year}", product_amount))
+        line_items.append((product_name or "Product", f"{month:02d}/{year}", product_amount))
     c.setFont("Helvetica", 9.5)
     for desc, period, amt in line_items:
         c.setFillColor(TEXT_DARK)

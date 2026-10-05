@@ -10,6 +10,7 @@ from app.models.fee_receipt import ReceiptStatus
 class FeeReceiptCreate(BaseModel):
     student_id: int
     product_amount: Decimal = Field(default=Decimal("0"), ge=0)
+    product_name: Optional[str] = None
     amount: Decimal = Field(ge=0)
     month: int = Field(ge=1, le=12)
     year: int = Field(ge=2000, le=2100)
@@ -27,6 +28,7 @@ class FeeReceiptOut(BaseModel):
     student_id: int
     coach_id: int
     product_amount: Decimal = Field(default=Decimal("0"), ge=0)
+    product_name: Optional[str] = None
     amount: Decimal = Field(ge=0)
     month: int = Field(ge=1, le=12)
     year: int = Field(ge=2000, le=2100)

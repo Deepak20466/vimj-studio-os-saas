@@ -65,3 +65,8 @@ All requested changes have been fully implemented across the Mobile App (Flutter
   Android/iOS devices; local development can still override it with `API_BASE_URL`.
 - Login exceptions now surface a useful connection/error message instead of the generic
   “Something went wrong” text.
+
+## Product Name in Mobile Fees
+- Admin and Coach fee forms now accept an optional product name alongside product amount.
+- Product names are stored with fee records and coach receipts, shown in both dashboards,
+  and included in generated receipt PDFs.

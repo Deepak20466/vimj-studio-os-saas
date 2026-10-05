@@ -25,6 +25,7 @@ class FeeReceipt(Base):
     student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     coach_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     product_amount = Column(Numeric(10, 2), nullable=False, default=0)
+    product_name = Column(String(120), nullable=True)
     amount = Column(Numeric(10, 2), nullable=False)
     billing_date = Column(Date, nullable=True)
     month = Column(Integer, nullable=False)

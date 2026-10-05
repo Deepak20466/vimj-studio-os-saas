@@ -32,11 +32,18 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
       final session = await AuthStorage.load();
       final results = await Future.wait([
         ApiClient.instance.get('/receipts/my'),
-        session != null ? ApiClient.instance.get('/coaches/${session.userId}/activities') : Future.value([]),
+        session != null
+            ? ApiClient.instance.get('/coaches/${session.userId}/activities')
+            : Future.value([]),
       ]);
-      _receipts = (results[0] as List).map((e) => FeeReceiptRecord.fromJson(e as Map<String, dynamic>)).toList();
-      final activities = (results[1] as List).map((e) => CoachActivityLink.fromJson(e as Map<String, dynamic>)).toList();
-      final rosters = await Future.wait(activities.map((a) => ApiClient.instance.get('/activities/${a.activityId}/roster')));
+      _receipts = (results[0] as List)
+          .map((e) => FeeReceiptRecord.fromJson(e as Map<String, dynamic>))
+          .toList();
+      final activities = (results[1] as List)
+          .map((e) => CoachActivityLink.fromJson(e as Map<String, dynamic>))
+          .toList();
+      final rosters = await Future.wait(activities.map(
+          (a) => ApiClient.instance.get('/activities/${a.activityId}/roster')));
       final seen = <int>{};
       _students = [];
       for (final r in rosters) {
@@ -46,7 +53,9 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
         }
       }
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -58,8 +67,13 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
         context: context,
         builder: (_) => AlertDialog(
           title: const Text('No students yet'),
-          content: const Text("You don't have any students yet — add one under My Students before recording a payment."),
-          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
+          content: const Text(
+              "You don't have any students yet — add one under My Students before recording a payment."),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'))
+          ],
         ),
       );
       return;
@@ -83,7 +97,9 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
       final bytes = await ApiClient.instance.getBytes('/receipts/${r.id}/pdf');
       await shareExportedFile(bytes, 'receipt_${r.id}.pdf');
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _downloadingId = null);
     }
@@ -92,10 +108,13 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
   Future<void> _downloadCsv(FeeReceiptRecord r) async {
     setState(() => _downloadingCsvId = r.id);
     try {
-      final bytes = await ApiClient.instance.getBytes('/receipts/${r.id}/pdf', query: {'fmt': 'csv'});
+      final bytes = await ApiClient.instance
+          .getBytes('/receipts/${r.id}/pdf', query: {'fmt': 'csv'});
       await shareExportedFile(bytes, 'receipt_${r.id}.csv');
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _downloadingCsvId = null);
     }
@@ -115,7 +134,9 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Fee Receipts'), actions: const [NotificationBellAction(), SizedBox(width: 4)]),
+      appBar: AppBar(
+          title: const Text('Fee Receipts'),
+          actions: const [NotificationBellAction(), SizedBox(width: 4)]),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'coach-receipts-fab',
         onPressed: _handleRecordPaymentTap,
@@ -127,36 +148,72 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
           : RefreshIndicator(
               onRefresh: _load,
               child: _students.isEmpty
-                  ? ListView(children: const [Padding(padding: EdgeInsets.all(32), child: Center(child: Text("You don't have any students yet — add one under My Students before recording a payment.")))])
+                  ? ListView(children: const [
+                      Padding(
+                          padding: EdgeInsets.all(32),
+                          child: Center(
+                              child: Text(
+                                  "You don't have any students yet — add one under My Students before recording a payment.")))
+                    ])
                   : _receipts.isEmpty
-                  ? ListView(children: const [Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No fee receipts submitted yet.')))])
-                  : ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
-                      itemCount: _receipts.length,
-                      itemBuilder: (context, i) {
-                        final r = _receipts[i];
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          child: ListTile(
-                            title: Text('${r.studentName ?? "Student #${r.studentId}"} — ₹${r.amount} + products ${r.productAmount} = ${(double.parse(r.amount) + double.parse(r.productAmount)).toStringAsFixed(2)}'),
-                            subtitle: Text('${r.billingDate ?? "${r.month}/${r.year}"} · ${r.paymentMode}${r.decisionNote != null ? "\n${r.decisionNote}" : ""}'),
-                            isThreeLine: r.decisionNote != null,
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _downloadingId == r.id
-                                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                                    : IconButton(icon: const Icon(Icons.picture_as_pdf_outlined), tooltip: 'Receipt (PDF)', onPressed: () => _downloadPdf(r)),
-                                _downloadingCsvId == r.id
-                                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                                    : IconButton(icon: const Icon(Icons.table_chart_outlined), tooltip: 'Receipt (CSV)', onPressed: () => _downloadCsv(r)),
-                                Chip(label: Text(r.status, style: const TextStyle(fontSize: 11, color: Colors.white)), backgroundColor: _statusColor(r.status)),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                      ? ListView(children: const [
+                          Padding(
+                              padding: EdgeInsets.all(32),
+                              child: Center(
+                                  child:
+                                      Text('No fee receipts submitted yet.')))
+                        ])
+                      : ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
+                          itemCount: _receipts.length,
+                          itemBuilder: (context, i) {
+                            final r = _receipts[i];
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              child: ListTile(
+                                title: Text(
+                                    '${r.studentName ?? "Student #${r.studentId}"} — ${r.productName?.isNotEmpty == true ? "${r.productName}: " : ""}₹${r.amount} + product ${r.productAmount} = ${(double.parse(r.amount) + double.parse(r.productAmount)).toStringAsFixed(2)}'),
+                                subtitle: Text(
+                                    '${r.billingDate ?? "${r.month}/${r.year}"} · ${r.paymentMode}${r.decisionNote != null ? "\n${r.decisionNote}" : ""}'),
+                                isThreeLine: r.decisionNote != null,
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _downloadingId == r.id
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2))
+                                        : IconButton(
+                                            icon: const Icon(
+                                                Icons.picture_as_pdf_outlined),
+                                            tooltip: 'Receipt (PDF)',
+                                            onPressed: () => _downloadPdf(r)),
+                                    _downloadingCsvId == r.id
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2))
+                                        : IconButton(
+                                            icon: const Icon(
+                                                Icons.table_chart_outlined),
+                                            tooltip: 'Receipt (CSV)',
+                                            onPressed: () => _downloadCsv(r)),
+                                    Chip(
+                                        label: Text(r.status,
+                                            style: const TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.white)),
+                                        backgroundColor:
+                                            _statusColor(r.status)),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
             ),
     );
   }
@@ -171,9 +228,11 @@ class _ReceiptForm extends StatefulWidget {
 }
 
 class _ReceiptFormState extends State<_ReceiptForm> {
-  late int? _studentId = widget.students.isNotEmpty ? widget.students.first.id : null;
+  late int? _studentId =
+      widget.students.isNotEmpty ? widget.students.first.id : null;
   final _amountCtrl = TextEditingController();
   final _productCtrl = TextEditingController(text: "0");
+  final _productNameCtrl = TextEditingController();
   String _studentSearch = "";
   final _noteCtrl = TextEditingController();
   DateTime? _billingDate;
@@ -199,6 +258,9 @@ class _ReceiptFormState extends State<_ReceiptForm> {
         'student_id': _studentId,
         'amount': _amountCtrl.text.trim(),
         'product_amount': _productCtrl.text.trim(),
+        'product_name': _productNameCtrl.text.trim().isEmpty
+            ? null
+            : _productNameCtrl.text.trim(),
         'month': int.tryParse(_monthCtrl.text.trim()) ?? _now.month,
         'year': int.tryParse(_yearCtrl.text.trim()) ?? _now.year,
         'payment_mode': _paymentMode,
@@ -216,6 +278,7 @@ class _ReceiptFormState extends State<_ReceiptForm> {
   void dispose() {
     _amountCtrl.dispose();
     _productCtrl.dispose();
+    _productNameCtrl.dispose();
     _noteCtrl.dispose();
     _monthCtrl.dispose();
     _yearCtrl.dispose();
@@ -225,20 +288,51 @@ class _ReceiptFormState extends State<_ReceiptForm> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+      padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 20),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('New Fee Receipt', style: Theme.of(context).textTheme.titleLarge),
+            Text('New Fee Receipt',
+                style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
-            TextField(decoration: const InputDecoration(labelText: "Search student"), onChanged: (v) => setState(() => _studentSearch = v)),
-            TextButton(onPressed: () async { final d = await showDatePicker(context: context, initialDate: _billingDate ?? DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2100)); if (d != null) setState(() { _billingDate = d; _monthCtrl.text = d.month.toString(); _yearCtrl.text = d.year.toString(); }); }, child: Text(_billingDate == null ? "Select billing date (optional)" : _billingDate!.toIso8601String().split("T").first)),
+            TextField(
+                decoration: const InputDecoration(labelText: "Search student"),
+                onChanged: (v) => setState(() => _studentSearch = v)),
+            TextButton(
+                onPressed: () async {
+                  final d = await showDatePicker(
+                      context: context,
+                      initialDate: _billingDate ?? DateTime.now(),
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2100));
+                  if (d != null)
+                    setState(() {
+                      _billingDate = d;
+                      _monthCtrl.text = d.month.toString();
+                      _yearCtrl.text = d.year.toString();
+                    });
+                },
+                child: Text(_billingDate == null
+                    ? "Select billing date (optional)"
+                    : _billingDate!.toIso8601String().split("T").first)),
             DropdownButtonFormField<int>(
               initialValue: _studentId,
               decoration: const InputDecoration(labelText: 'Student'),
-              items: widget.students.where((s) => s.id == _studentId || s.name.toLowerCase().contains(_studentSearch.toLowerCase())).map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
+              items: widget.students
+                  .where((s) =>
+                      s.id == _studentId ||
+                      s.name
+                          .toLowerCase()
+                          .contains(_studentSearch.toLowerCase()))
+                  .map(
+                      (s) => DropdownMenuItem(value: s.id, child: Text(s.name)))
+                  .toList(),
               onChanged: (v) => setState(() => _studentId = v),
             ),
             const SizedBox(height: 12),
@@ -262,8 +356,20 @@ class _ReceiptFormState extends State<_ReceiptForm> {
               ],
             ),
             const SizedBox(height: 12),
-            TextField(controller: _productCtrl, decoration: const InputDecoration(labelText: "Product Amount"), keyboardType: const TextInputType.numberWithOptions(decimal: true)),
-            TextField(controller: _amountCtrl, decoration: const InputDecoration(labelText: 'Amount (₹)'), keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+            TextField(
+                controller: _productCtrl,
+                decoration: const InputDecoration(labelText: "Product Amount"),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true)),
+            TextField(
+                controller: _productNameCtrl,
+                decoration: const InputDecoration(
+                    labelText: "Product Name (optional)")),
+            TextField(
+                controller: _amountCtrl,
+                decoration: const InputDecoration(labelText: 'Amount (₹)'),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true)),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _paymentMode,
@@ -272,12 +378,16 @@ class _ReceiptFormState extends State<_ReceiptForm> {
                 DropdownMenuItem(value: 'CASH', child: Text('Cash')),
                 DropdownMenuItem(value: 'UPI', child: Text('UPI')),
                 DropdownMenuItem(value: 'CARD', child: Text('Card')),
-                DropdownMenuItem(value: 'BANK_TRANSFER', child: Text('Bank Transfer')),
+                DropdownMenuItem(
+                    value: 'BANK_TRANSFER', child: Text('Bank Transfer')),
               ],
               onChanged: (v) => setState(() => _paymentMode = v!),
             ),
             const SizedBox(height: 12),
-            TextField(controller: _noteCtrl, decoration: const InputDecoration(labelText: 'Note (optional)'), maxLines: 2),
+            TextField(
+                controller: _noteCtrl,
+                decoration: const InputDecoration(labelText: 'Note (optional)'),
+                maxLines: 2),
             if (_error != null) ...[
               const SizedBox(height: 12),
               Text(_error!, style: const TextStyle(color: AppColors.danger)),
@@ -285,7 +395,13 @@ class _ReceiptFormState extends State<_ReceiptForm> {
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _saving ? null : _submit,
-              child: _saving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Submit for Approval'),
+              child: _saving
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Submit for Approval'),
             ),
           ],
         ),

@@ -19,7 +19,8 @@ class AppNotification {
     this.delayMinutes,
   });
 
-  factory AppNotification.fromJson(Map<String, dynamic> json) => AppNotification(
+  factory AppNotification.fromJson(Map<String, dynamic> json) =>
+      AppNotification(
         id: json['id'] as int,
         type: json['type'] as String,
         title: json['title'] as String,
@@ -46,7 +47,8 @@ class ChatThreadSummary {
     this.lastMessageAt,
   });
 
-  factory ChatThreadSummary.fromJson(Map<String, dynamic> json) => ChatThreadSummary(
+  factory ChatThreadSummary.fromJson(Map<String, dynamic> json) =>
+      ChatThreadSummary(
         coachId: json['coach_id'] as int,
         coachName: json['coach_name'] as String,
         unreadCount: json['unread_count'] as int? ?? 0,
@@ -62,7 +64,12 @@ class ChatMessage {
   final String message;
   final String createdAt;
 
-  ChatMessage({required this.id, required this.senderId, required this.senderName, required this.message, required this.createdAt});
+  ChatMessage(
+      {required this.id,
+      required this.senderId,
+      required this.senderName,
+      required this.message,
+      required this.createdAt});
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
         id: json['id'] as int,
@@ -112,7 +119,14 @@ class RosterStudent {
   final int? enrollmentId;
   final String? feeStatus;
 
-  RosterStudent({required this.id, required this.name, required this.email, this.phone, this.phoneSecondary, this.enrollmentId, this.feeStatus});
+  RosterStudent(
+      {required this.id,
+      required this.name,
+      required this.email,
+      this.phone,
+      this.phoneSecondary,
+      this.enrollmentId,
+      this.feeStatus});
 
   factory RosterStudent.fromJson(Map<String, dynamic> json) => RosterStudent(
         phone: json['phone'] as String?,
@@ -255,7 +269,8 @@ class StudentAttendanceRecord {
     required this.timestamp,
   });
 
-  factory StudentAttendanceRecord.fromJson(Map<String, dynamic> json) => StudentAttendanceRecord(
+  factory StudentAttendanceRecord.fromJson(Map<String, dynamic> json) =>
+      StudentAttendanceRecord(
         id: json['id'] as int,
         classId: json['class_id'] as int,
         status: json['status'] as String,
@@ -283,7 +298,9 @@ class Student {
   });
 
   factory Student.fromJson(Map<String, dynamic> json) => Student(
-        activities: (json['activities'] as List? ?? []).map((a) => a['name'].toString()).toList(),
+        activities: (json['activities'] as List? ?? [])
+            .map((a) => a['name'].toString())
+            .toList(),
         id: json['id'] as int,
         name: json['name'] as String,
         email: json['email'] as String,
@@ -300,7 +317,12 @@ class Coach {
   final String? phone;
   final bool isActive;
 
-  Coach({required this.id, required this.name, required this.email, this.phone, required this.isActive});
+  Coach(
+      {required this.id,
+      required this.name,
+      required this.email,
+      this.phone,
+      required this.isActive});
 
   factory Coach.fromJson(Map<String, dynamic> json) => Coach(
         id: json['id'] as int,
@@ -317,7 +339,11 @@ class Activity {
   final int capacity;
   final String monthlyFee;
 
-  Activity({required this.id, required this.name, required this.capacity, required this.monthlyFee});
+  Activity(
+      {required this.id,
+      required this.name,
+      required this.capacity,
+      required this.monthlyFee});
 
   factory Activity.fromJson(Map<String, dynamic> json) => Activity(
         id: json['id'] as int,
@@ -344,7 +370,8 @@ class DailyMissingRow {
     required this.endTime,
   });
 
-  factory DailyMissingRow.fromJson(Map<String, dynamic> json) => DailyMissingRow(
+  factory DailyMissingRow.fromJson(Map<String, dynamic> json) =>
+      DailyMissingRow(
         coachId: json['coach_id'] as int,
         classId: json['class_id'] as int,
         coachName: json['coach_name'] as String? ?? '-',
@@ -387,7 +414,8 @@ class AdminAttendanceRecord {
     required this.approvalStatus,
   });
 
-  factory AdminAttendanceRecord.fromJson(Map<String, dynamic> json) => AdminAttendanceRecord(
+  factory AdminAttendanceRecord.fromJson(Map<String, dynamic> json) =>
+      AdminAttendanceRecord(
         id: json['id'] as int,
         studentId: json['student_id'] as int,
         studentName: json['student_name'] as String,
@@ -428,7 +456,8 @@ class AdminLeaveRequest {
     this.createdAt,
   });
 
-  factory AdminLeaveRequest.fromJson(Map<String, dynamic> json) => AdminLeaveRequest(
+  factory AdminLeaveRequest.fromJson(Map<String, dynamic> json) =>
+      AdminLeaveRequest(
         id: json['id'] as int,
         coachId: json['coach_id'] as int,
         coachName: json['coach_name'] as String?,
@@ -448,6 +477,7 @@ class AdminFeeRecord {
   final int month;
   final int year;
   final String productAmount;
+  final String? productName;
   final String? billingDate;
   final String amount;
   final String balanceAmount;
@@ -461,6 +491,7 @@ class AdminFeeRecord {
     required this.month,
     required this.year,
     this.productAmount = "0",
+    this.productName,
     this.billingDate,
     required this.amount,
     required this.balanceAmount,
@@ -475,6 +506,7 @@ class AdminFeeRecord {
         month: json['month'] as int,
         year: json['year'] as int,
         productAmount: (json['product_amount'] ?? 0).toString(),
+        productName: json['product_name'] as String?,
         billingDate: json['billing_date'] as String?,
         amount: json['amount'].toString(),
         balanceAmount: (json['balance_amount'] ?? json['amount']).toString(),
@@ -504,7 +536,8 @@ class AdminSalaryRecord {
     this.notifiedAt,
   });
 
-  factory AdminSalaryRecord.fromJson(Map<String, dynamic> json) => AdminSalaryRecord(
+  factory AdminSalaryRecord.fromJson(Map<String, dynamic> json) =>
+      AdminSalaryRecord(
         id: json['id'] as int,
         coachId: json['coach_id'] as int,
         coachName: json['coach_name'] as String?,
@@ -549,8 +582,10 @@ class Batch {
         sessionPeriod: json['session_period'] as String,
         startTime: json['start_time'] as String,
         endTime: json['end_time'] as String,
-        daysOfWeek: (json['days_of_week'] as List).map((e) => e as String).toList(),
-        activeMonths: (json['active_months'] as List).map((e) => e as int).toList(),
+        daysOfWeek:
+            (json['days_of_week'] as List).map((e) => e as String).toList(),
+        activeMonths:
+            (json['active_months'] as List).map((e) => e as int).toList(),
         isActive: json['is_active'] as bool? ?? true,
       );
 }
@@ -640,14 +675,17 @@ class ComplianceSummary {
     required this.rows,
   });
 
-  factory ComplianceSummary.fromJson(Map<String, dynamic> json) => ComplianceSummary(
+  factory ComplianceSummary.fromJson(Map<String, dynamic> json) =>
+      ComplianceSummary(
         submitted: json['submitted'] as int,
         pending: json['pending'] as int,
         delayed: json['delayed'] as int,
         notConducted: json['not_conducted'] as int,
         lateApproved: json['late_approved'] as int,
         lateRejected: json['late_rejected'] as int,
-        rows: (json['rows'] as List).map((e) => ComplianceRow.fromJson(e as Map<String, dynamic>)).toList(),
+        rows: (json['rows'] as List)
+            .map((e) => ComplianceRow.fromJson(e as Map<String, dynamic>))
+            .toList(),
       );
 }
 
@@ -668,7 +706,8 @@ class PendingLateSubmission {
     this.lateReason,
   });
 
-  factory PendingLateSubmission.fromJson(Map<String, dynamic> json) => PendingLateSubmission(
+  factory PendingLateSubmission.fromJson(Map<String, dynamic> json) =>
+      PendingLateSubmission(
         id: json['id'] as int,
         classId: json['class_id'] as int,
         coachName: json['coach_name'] as String,
@@ -698,9 +737,16 @@ class AcademySettings {
   final String? email;
   final String? description;
 
-  AcademySettings({required this.id, required this.name, this.address, this.phone, this.email, this.description});
+  AcademySettings(
+      {required this.id,
+      required this.name,
+      this.address,
+      this.phone,
+      this.email,
+      this.description});
 
-  factory AcademySettings.fromJson(Map<String, dynamic> json) => AcademySettings(
+  factory AcademySettings.fromJson(Map<String, dynamic> json) =>
+      AcademySettings(
         id: json['id'] as int,
         name: json['name'] as String,
         address: json['address'] as String?,
@@ -715,6 +761,7 @@ class FeeReceiptRecord {
   final int studentId;
   final String? studentName;
   final String productAmount;
+  final String? productName;
   final String? billingDate;
   final String amount;
   final int month;
@@ -728,6 +775,7 @@ class FeeReceiptRecord {
     required this.studentId,
     this.studentName,
     this.productAmount = "0",
+    this.productName,
     this.billingDate,
     required this.amount,
     required this.month,
@@ -737,11 +785,13 @@ class FeeReceiptRecord {
     this.decisionNote,
   });
 
-  factory FeeReceiptRecord.fromJson(Map<String, dynamic> json) => FeeReceiptRecord(
+  factory FeeReceiptRecord.fromJson(Map<String, dynamic> json) =>
+      FeeReceiptRecord(
         id: json['id'] as int,
         studentId: json['student_id'] as int,
         studentName: json['student_name'] as String?,
         productAmount: (json['product_amount'] ?? 0).toString(),
+        productName: json['product_name'] as String?,
         billingDate: json['billing_date'] as String?,
         amount: json['amount'].toString(),
         month: json['month'] as int,
@@ -773,7 +823,8 @@ class FeeReminderDraftRecord {
     this.decisionNote,
   });
 
-  factory FeeReminderDraftRecord.fromJson(Map<String, dynamic> json) => FeeReminderDraftRecord(
+  factory FeeReminderDraftRecord.fromJson(Map<String, dynamic> json) =>
+      FeeReminderDraftRecord(
         id: json['id'] as int,
         studentId: json['student_id'] as int,
         studentName: json['student_name'] as String?,
@@ -791,7 +842,8 @@ class CoachActivityLink {
 
   CoachActivityLink({required this.activityId, required this.activityName});
 
-  factory CoachActivityLink.fromJson(Map<String, dynamic> json) => CoachActivityLink(
+  factory CoachActivityLink.fromJson(Map<String, dynamic> json) =>
+      CoachActivityLink(
         activityId: json['activity_id'] as int,
         activityName: json['activity_name'] as String,
       );
@@ -850,7 +902,8 @@ class CoachReport {
         daysPresent: json['days_present'] as int,
         daysAbsent: json['days_absent'] as int,
         leavesTaken: json['leaves_taken'] as int,
-        studentAttendancePct: (json['student_attendance_pct'] as num).toDouble(),
+        studentAttendancePct:
+            (json['student_attendance_pct'] as num).toDouble(),
       );
 }
 
@@ -860,7 +913,8 @@ class AttendanceGraphPoint {
 
   AttendanceGraphPoint({required this.label, required this.value});
 
-  factory AttendanceGraphPoint.fromJson(Map<String, dynamic> json) => AttendanceGraphPoint(
+  factory AttendanceGraphPoint.fromJson(Map<String, dynamic> json) =>
+      AttendanceGraphPoint(
         label: json['label'] as String,
         value: (json['value'] as num).toDouble(),
       );

@@ -12,6 +12,7 @@ class FeeCreate(BaseModel):
     month: int = Field(ge=1, le=12)
     year: int = Field(ge=2000, le=2100)
     product_amount: Decimal = Field(default=Decimal("0"), ge=0)
+    product_name: Optional[str] = None
     amount: Decimal = Field(ge=0)
     due_date: date
 
@@ -23,6 +24,7 @@ class FeeMarkPaid(BaseModel):
 
 class FeeUpdate(BaseModel):
     product_amount: Optional[Decimal] = Field(default=None, ge=0)
+    product_name: Optional[str] = None
     amount: Optional[Decimal] = Field(default=None, ge=0)
     balance_amount: Optional[Decimal] = None
     due_date: Optional[date] = None
@@ -36,6 +38,7 @@ class FeeOut(BaseModel):
     month: int = Field(ge=1, le=12)
     year: int = Field(ge=2000, le=2100)
     product_amount: Decimal = Field(default=Decimal("0"), ge=0)
+    product_name: Optional[str] = None
     amount: Decimal = Field(ge=0)
     balance_amount: Decimal
     status: FeeStatus
