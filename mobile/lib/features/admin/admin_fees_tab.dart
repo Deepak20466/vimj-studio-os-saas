@@ -87,12 +87,6 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
         .toList();
   }
 
-  List<Student> get _visibleStudents {
-    final q = _search.trim().toLowerCase();
-    if (q.isEmpty) return _students;
-    return _students.where((s) => s.name.toLowerCase().contains(q)).toList();
-  }
-
   Future<String?> _promptReason(String title) {
     final ctrl = TextEditingController();
     return showDialog<String>(
@@ -245,15 +239,12 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
     }
   }
 
-  Future<void> _openCreate({int? studentId}) async {
+  Future<void> _openCreate() async {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => _FeeForm(
-        students: _students,
-        initialStudentId: studentId,
-      ),
+      builder: (_) => _FeeForm(students: _students),
     );
     if (saved == true) _load();
   }
@@ -487,41 +478,11 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                   const SizedBox(height: 8),
                   TextField(
                     decoration: const InputDecoration(
-                        hintText: 'Search students by name...',
+                        hintText: 'Search by student name or month/year...',
                         prefixIcon: Icon(Icons.search)),
                     onChanged: (v) => setState(() => _search = v),
                   ),
                   const SizedBox(height: 8),
-                  Text('Students',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 4),
-                  if (_students.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: Text('No students available.'),
-                    )
-                  else if (_visibleStudents.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Text('No students match "$_search".'),
-                    )
-                  else
-                    SizedBox(
-                      height: 180,
-                      child: ListView.builder(
-                        itemCount: _visibleStudents.length,
-                        itemBuilder: (context, index) {
-                          final student = _visibleStudents[index];
-                          return ListTile(
-                            dense: true,
-                            title: Text(student.name),
-                            trailing: const Icon(Icons.add_circle_outline),
-                            onTap: () => _openCreate(studentId: student.id),
-                          );
-                        },
-                      ),
-                    ),
-                  const Divider(height: 20),
                   Text('Fee records',
                       style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
@@ -638,8 +599,7 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
 
 class _FeeForm extends StatefulWidget {
   final List<Student> students;
-  final int? initialStudentId;
-  const _FeeForm({required this.students, this.initialStudentId});
+  const _FeeForm({required this.students});
 
   @override
   State<_FeeForm> createState() => _FeeFormState();
@@ -655,14 +615,83 @@ class _FeeFormState extends State<_FeeForm> {
   final _productCtrl = TextEditingController(text: "0");
   final _productNameCtrl = TextEditingController();
   final _dueDateCtrl = TextEditingController();
-  bool _loadingStudents = true;
   bool _saving = false;
+
+  String get _selectedStudentName {
+    for (final student in _students) {
+      if (student.id == _studentId) return student.name;
+    }
+    return 'Select a student';
+  }
 
   @override
   void initState() {
     super.initState();
-    _studentId = widget.initialStudentId;
-    _loadingStudents = false;
+  }
+
+  Future<void> _selectStudent() async {
+    final selected = await showModalBottomSheet<int>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) {
+        var query = '';
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final matches = widget.students
+                .where((s) => s.name.toLowerCase().contains(query.trim().toLowerCase()))
+                .toList();
+            return SizedBox(
+              height: MediaQuery.of(context).size.height * 0.78,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 16,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 12,
+                ),
+                child: Column(
+                  children: [
+                    Text('Select student', style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: 12),
+                    TextField(
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        hintText: 'Search students by name...',
+                        prefixIcon: Icon(Icons.search),
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) => setSheetState(() => query = value),
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: matches.isEmpty
+                          ? const Center(child: Text('No matching students.'))
+                          : ListView.builder(
+                              itemCount: matches.length,
+                              itemBuilder: (context, index) {
+                                final student = matches[index];
+                                return ListTile(
+                                  title: Text(student.name),
+                                  selected: student.id == _studentId,
+                                  trailing: student.id == _studentId
+                                      ? const Icon(Icons.check,
+                                          color: AppColors.brandOrange)
+                                      : null,
+                                  onTap: () => Navigator.pop(context, student.id),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    if (selected != null && mounted) setState(() => _studentId = selected);
   }
 
   Future<void> _pickDueDate() async {
@@ -734,17 +763,16 @@ class _FeeFormState extends State<_FeeForm> {
           children: [
             Text('Add Fee', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
-            _loadingStudents
-                ? const Center(child: CircularProgressIndicator())
-                : DropdownButtonFormField<int>(
-                    initialValue: _studentId,
-                    decoration: const InputDecoration(labelText: 'Student'),
-                    items: _students
-                        .map((s) =>
-                            DropdownMenuItem(value: s.id, child: Text(s.name)))
-                        .toList(),
-                    onChanged: (v) => setState(() => _studentId = v),
-                  ),
+            InkWell(
+              onTap: _selectStudent,
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Student',
+                  suffixIcon: Icon(Icons.arrow_drop_down),
+                ),
+                child: Text(_selectedStudentName),
+              ),
+            ),
             const SizedBox(height: 12),
             Row(
               children: [
