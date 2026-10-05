@@ -21,6 +21,7 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
   List<FeeReceiptRecord> _approvedReceipts = [];
   List<FeeReminderDraftRecord> _pendingReminders = [];
   Map<int, String> _studentNames = {};
+  List<Student> _students = [];
   int? _busyReceiptId;
   int? _busyReminderId;
   int? _downloadingReceiptId;
@@ -59,6 +60,9 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
         for (final s in (results[4] as List))
           (s['id'] as int): s['name'] as String
       };
+      _students = (results[4] as List)
+          .map((s) => Student.fromJson(s as Map<String, dynamic>))
+          .toList();
     } on ApiException catch (e) {
       if (mounted)
         ScaffoldMessenger.of(context)
@@ -81,6 +85,12 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
             _feeStudentName(f).toLowerCase().contains(q) ||
             '${f.month}/${f.year}'.contains(q))
         .toList();
+  }
+
+  List<Student> get _visibleStudents {
+    final q = _search.trim().toLowerCase();
+    if (q.isEmpty) return _students;
+    return _students.where((s) => s.name.toLowerCase().contains(q)).toList();
   }
 
   Future<String?> _promptReason(String title) {
@@ -235,12 +245,15 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
     }
   }
 
-  Future<void> _openCreate() async {
+  Future<void> _openCreate({int? studentId}) async {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => const _FeeForm(),
+      builder: (_) => _FeeForm(
+        students: _students,
+        initialStudentId: studentId,
+      ),
     );
     if (saved == true) _load();
   }
@@ -474,10 +487,43 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                   const SizedBox(height: 8),
                   TextField(
                     decoration: const InputDecoration(
-                        hintText: 'Search by student name or month/year...',
+                        hintText: 'Search students by name...',
                         prefixIcon: Icon(Icons.search)),
                     onChanged: (v) => setState(() => _search = v),
                   ),
+                  const SizedBox(height: 8),
+                  Text('Students',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 4),
+                  if (_students.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Text('No students available.'),
+                    )
+                  else if (_visibleStudents.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text('No students match "$_search".'),
+                    )
+                  else
+                    SizedBox(
+                      height: 180,
+                      child: ListView.builder(
+                        itemCount: _visibleStudents.length,
+                        itemBuilder: (context, index) {
+                          final student = _visibleStudents[index];
+                          return ListTile(
+                            dense: true,
+                            title: Text(student.name),
+                            trailing: const Icon(Icons.add_circle_outline),
+                            onTap: () => _openCreate(studentId: student.id),
+                          );
+                        },
+                      ),
+                    ),
+                  const Divider(height: 20),
+                  Text('Fee records',
+                      style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
                   if (_fees.isEmpty)
                     Padding(
@@ -591,14 +637,16 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
 }
 
 class _FeeForm extends StatefulWidget {
-  const _FeeForm();
+  final List<Student> students;
+  final int? initialStudentId;
+  const _FeeForm({required this.students, this.initialStudentId});
 
   @override
   State<_FeeForm> createState() => _FeeFormState();
 }
 
 class _FeeFormState extends State<_FeeForm> {
-  List<Student> _students = [];
+  late final List<Student> _students = widget.students;
   int? _studentId;
   final _now = DateTime.now();
   late final _monthCtrl = TextEditingController(text: _now.month.toString());
@@ -606,7 +654,6 @@ class _FeeFormState extends State<_FeeForm> {
   final _amountCtrl = TextEditingController();
   final _productCtrl = TextEditingController(text: "0");
   final _productNameCtrl = TextEditingController();
-  String _studentSearch = "";
   final _dueDateCtrl = TextEditingController();
   bool _loadingStudents = true;
   bool _saving = false;
@@ -614,21 +661,8 @@ class _FeeFormState extends State<_FeeForm> {
   @override
   void initState() {
     super.initState();
-    _loadStudents();
-  }
-
-  Future<void> _loadStudents() async {
-    try {
-      final data = await ApiClient.instance.get('/students') as List;
-      _students =
-          data.map((e) => Student.fromJson(e as Map<String, dynamic>)).toList();
-    } on ApiException catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
-    } finally {
-      if (mounted) setState(() => _loadingStudents = false);
-    }
+    _studentId = widget.initialStudentId;
+    _loadingStudents = false;
   }
 
   Future<void> _pickDueDate() async {
@@ -700,20 +734,12 @@ class _FeeFormState extends State<_FeeForm> {
           children: [
             Text('Add Fee', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
-            TextField(
-                decoration: const InputDecoration(labelText: "Search student"),
-                onChanged: (v) => setState(() => _studentSearch = v)),
             _loadingStudents
                 ? const Center(child: CircularProgressIndicator())
                 : DropdownButtonFormField<int>(
                     initialValue: _studentId,
                     decoration: const InputDecoration(labelText: 'Student'),
                     items: _students
-                        .where((s) =>
-                            s.id == _studentId ||
-                            s.name
-                                .toLowerCase()
-                                .contains(_studentSearch.toLowerCase()))
                         .map((s) =>
                             DropdownMenuItem(value: s.id, child: Text(s.name)))
                         .toList(),
@@ -741,14 +767,14 @@ class _FeeFormState extends State<_FeeForm> {
             ),
             const SizedBox(height: 12),
             TextField(
+                controller: _productNameCtrl,
+                decoration: const InputDecoration(
+                    labelText: "Product Name (optional)")),
+            TextField(
                 controller: _productCtrl,
                 decoration: const InputDecoration(labelText: "Product Amount"),
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true)),
-            TextField(
-                controller: _productNameCtrl,
-                decoration: const InputDecoration(
-                    labelText: "Product Name (optional)")),
             TextField(
                 controller: _amountCtrl,
                 decoration: const InputDecoration(labelText: 'Amount (₹)'),
