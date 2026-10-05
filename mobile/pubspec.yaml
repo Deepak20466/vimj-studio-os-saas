@@ -1,7 +1,7 @@
 name: vimj_attendance
 description: VIMJ Studio Attendance System - Coach mobile app
 publish_to: "none"
-version: 1.23.0+23
+version: 1.23.1+24
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
