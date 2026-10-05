@@ -70,3 +70,7 @@ All requested changes have been fully implemented across the Mobile App (Flutter
 - Admin and Coach fee forms now accept an optional product name alongside product amount.
 - Product names are stored with fee records and coach receipts, shown in both dashboards,
   and included in generated receipt PDFs.
+
+## Admin Dashboard Revenue Periods
+- The Admin Dashboard revenue card now supports current month, a custom month, yearly,
+  and overall collected revenue totals, including fee and product revenue breakdowns.

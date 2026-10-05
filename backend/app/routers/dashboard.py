@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import extract, func
 from sqlalchemy.orm import Session
 
@@ -20,6 +20,18 @@ from app.schemas.dashboard import (
 from app.security import require_admin
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+
+@router.get("/revenue")
+def dashboard_revenue(period: str = Query("month", pattern="^(month|year|overall)$"), month: int | None = Query(None, ge=1, le=12), year: int | None = Query(None, ge=2000, le=2100), db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    today = date.today()
+    selected_month, selected_year = month or today.month, year or today.year
+    query = db.query(StudentFee).filter(StudentFee.status == FeeStatus.PAID)
+    if period == "month": query = query.filter(StudentFee.month == selected_month, StudentFee.year == selected_year)
+    elif period == "year": query = query.filter(StudentFee.year == selected_year)
+    fees = query.all()
+    fee_total = sum((f.amount for f in fees), 0)
+    product_total = sum((f.product_amount for f in fees), 0)
+    return {"period": period, "month": selected_month if period == "month" else None, "year": selected_year if period != "overall" else None, "fee_revenue": float(fee_total), "product_revenue": float(product_total), "total_revenue": float(fee_total + product_total)}
 
 
 @router.get("/summary", response_model=DashboardSummary)
