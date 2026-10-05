@@ -23,6 +23,9 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
   DateTime _revenueMonth = DateTime.now();
   Map<String, dynamic>? _revenue;
 
+  String _money(dynamic value) =>
+      '₹${(value is num ? value : double.tryParse('$value') ?? 0).toStringAsFixed(2)}';
+
   @override
   void initState() {
     super.initState();
@@ -92,7 +95,7 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
 
   Widget _statCard(String label, String value) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
@@ -106,18 +109,25 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label.toUpperCase(),
-              style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textMuted,
-                  letterSpacing: 0.4)),
+          SizedBox(
+              height: 30,
+              child: Text(label.toUpperCase(),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textMuted,
+                      letterSpacing: 0.4))),
           const SizedBox(height: 6),
-          Text(value,
-              style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.brandOrange)),
+          FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(value,
+                  style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.brandOrange))),
         ],
       ),
     );
@@ -150,7 +160,7 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
             physics: const NeverScrollableScrollPhysics(),
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
-            childAspectRatio: 1.6,
+            childAspectRatio: 1.45,
             children: [
               _statCard('Students', '${s['total_students'] ?? 0}'),
               _statCard('Coaches', '${s['total_coaches'] ?? 0}'),
@@ -174,7 +184,18 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text('Revenue period',
-                            style: TextStyle(fontWeight: FontWeight.bold)),
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 16)),
+                        const SizedBox(height: 4),
+                        Text(
+                            _revenuePeriod == 'month'
+                                ? '${_revenueMonth.month}/${_revenueMonth.year}'
+                                : _revenuePeriod == 'year'
+                                    ? '${_revenueMonth.year}'
+                                    : 'All collected revenue',
+                            style: const TextStyle(
+                                color: AppColors.textMuted, fontSize: 12)),
+                        const SizedBox(height: 10),
                         Wrap(spacing: 8, children: [
                           ChoiceChip(
                               label: const Text('Current month'),
@@ -208,8 +229,14 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
                               onSelected: (_) => _loadRevenue('overall')),
                         ]),
                         if (_revenue != null)
-                          Text(
-                              'Fees: ₹${_revenue!['fee_revenue']} · Products: ₹${_revenue!['product_revenue']} · Total: ₹${_revenue!['total_revenue']}'),
+                          Wrap(spacing: 12, runSpacing: 4, children: [
+                            Text('Fees ${_money(_revenue!['fee_revenue'])}'),
+                            Text(
+                                'Products ${_money(_revenue!['product_revenue'])}'),
+                            Text('Total ${_money(_revenue!['total_revenue'])}',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold))
+                          ]),
                       ]))),
           const SizedBox(height: 20),
           Container(

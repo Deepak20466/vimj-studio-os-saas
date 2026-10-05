@@ -74,3 +74,7 @@ All requested changes have been fully implemented across the Mobile App (Flutter
 ## Admin Dashboard Revenue Periods
 - The Admin Dashboard revenue card now supports current month, a custom month, yearly,
   and overall collected revenue totals, including fee and product revenue breakdowns.
+
+## Admin Dashboard Visual Polish
+- Dashboard cards use consistent spacing, fixed label areas, responsive value sizing, and
+  wrapped revenue breakdowns for professional alignment on mobile screens.
