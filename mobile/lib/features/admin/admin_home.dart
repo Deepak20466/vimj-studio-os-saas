@@ -30,6 +30,7 @@ class _NavItem {
 
 class _AdminHomeState extends State<AdminHome> {
   int _index = 0;
+  final List<Widget?> _pageCache = List<Widget?>.filled(10, null);
 
   // Same bottom-nav-plus-"More"-sheet pattern as the web dashboard's Layout.jsx and the
   // coach app's CoachHome — the admin app used to be the only screen in VIMJ using a left
@@ -69,7 +70,11 @@ class _AdminHomeState extends State<AdminHome> {
       builder: (sheetContext) => SafeArea(
         child: Wrap(
           children: [
-            const Padding(padding: EdgeInsets.fromLTRB(20, 16, 20, 8), child: Text('More', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+            const Padding(
+                padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+                child: Text('More',
+                    style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
             for (int i = 0; i < _moreItems.length; i++)
               ListTile(
                 leading: Icon(_moreItems[i].icon),
@@ -82,7 +87,8 @@ class _AdminHomeState extends State<AdminHome> {
             const Divider(height: 1),
             ListTile(
               leading: const Icon(Icons.logout, color: AppColors.danger),
-              title: const Text('Logout', style: TextStyle(color: AppColors.danger)),
+              title: const Text('Logout',
+                  style: TextStyle(color: AppColors.danger)),
               onTap: () {
                 Navigator.pop(sheetContext);
                 _logout();
@@ -99,10 +105,15 @@ class _AdminHomeState extends State<AdminHome> {
   Widget build(BuildContext context) {
     final inMore = _index >= _maxTabs;
     return Scaffold(
-      appBar: AppBar(title: Text(_items[_index].label), actions: const [NotificationBellAction(), SizedBox(width: 4)]),
+      appBar: AppBar(
+          title: Text(_items[_index].label),
+          actions: const [NotificationBellAction(), SizedBox(width: 4)]),
       body: IndexedStack(
         index: _index,
-        children: _items.map((e) => e.page).toList(),
+        children: List.generate(_items.length, (i) {
+          if (i == _index) return _pageCache[i] ??= _items[i].page;
+          return _pageCache[i] ?? const SizedBox.shrink();
+        }),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: inMore ? _maxTabs : _index,
@@ -114,7 +125,8 @@ class _AdminHomeState extends State<AdminHome> {
           setState(() => _index = i);
         },
         destinations: [
-          for (final item in _tabs) NavigationDestination(icon: Icon(item.icon), label: item.label),
+          for (final item in _tabs)
+            NavigationDestination(icon: Icon(item.icon), label: item.label),
           NavigationDestination(
             icon: Icon(inMore ? _items[_index].icon : Icons.more_horiz),
             label: inMore ? _items[_index].label : 'More',

@@ -82,3 +82,7 @@ All requested changes have been fully implemented across the Mobile App (Flutter
 ## Admin Session Photo Visibility
 - The Admin session roster always displays the session-photo status when a class exists,
   instead of hiding the control when the coach has not uploaded a photo yet.
+- Admin Activities also includes a Coach Session Photos gallery sourced directly from all
+  uploaded class photos, including older/manual classes not attached to a scheduled batch.
+- Admin and Coach navigation initializes tabs only when first opened, reducing unnecessary
+  startup API requests while retaining loaded tab state.

@@ -99,6 +99,10 @@ class RequestedChanges(unittest.TestCase):
         r = self.client.post(f'/activities/classes/{self.cls.id}/group-photo', json={'photo_base64':base64.b64encode(image.getvalue()).decode()})
         self.assertEqual(r.status_code,200,r.text)
         self.assertTrue(r.json()['has_group_photo'])
+        gallery = self.client.get('/activities/session-photos')
+        self.assertEqual(gallery.status_code, 200, gallery.text)
+        self.assertEqual(gallery.json()[0]['class_id'], self.cls.id)
+        self.assertEqual(gallery.json()[0]['activity_name'], 'Yoga')
         r = self.client.get(f'/activities/classes/{self.cls.id}/group-photo')
         self.assertEqual(r.status_code,200); self.assertEqual(r.headers['content-type'],'image/jpeg')
         self.app.dependency_overrides[get_current_user] = lambda: self.s2

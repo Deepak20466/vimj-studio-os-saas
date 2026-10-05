@@ -169,6 +169,40 @@ def my_classes(
     return query.order_by(ClassSession.date.desc(), ClassSession.start_time).all()
 
 
+@router.get("/session-photos")
+def session_photos(db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    """List every uploaded coach class photo, including classes not linked to a batch."""
+    rows = (
+        db.query(
+            ClassSession.id,
+            ClassSession.date,
+            ClassSession.start_time,
+            ClassSession.end_time,
+            ClassSession.group_photo_uploaded_at,
+            Activity.name,
+            User.name,
+        )
+        .join(Activity, Activity.id == ClassSession.activity_id)
+        .join(User, User.id == ClassSession.coach_id)
+        .filter(ClassSession.group_photo.is_not(None))
+        .order_by(ClassSession.date.desc(), ClassSession.start_time.desc())
+        .limit(500)
+        .all()
+    )
+    return [
+        {
+            "class_id": class_id,
+            "activity_name": activity_name,
+            "coach_name": coach_name,
+            "date": class_date.isoformat(),
+            "start_time": start_time.strftime("%H:%M"),
+            "end_time": end_time.strftime("%H:%M"),
+            "uploaded_at": uploaded_at.isoformat() if uploaded_at else None,
+        }
+        for class_id, class_date, start_time, end_time, uploaded_at, activity_name, coach_name in rows
+    ]
+
+
 @router.get("/classes/{class_id}/summary")
 def class_summary(
     class_id: int,
