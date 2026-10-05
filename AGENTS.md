@@ -59,3 +59,9 @@ All requested changes have been fully implemented across the Mobile App (Flutter
   does not remain blocked behind dashboard requests.
 - Verified with the live health endpoint, which responded in 43.66 seconds during a cold start.
 - Android release APKs built successfully for armeabi-v7a, arm64-v8a, and x86_64.
+
+## Physical Android Login Hotfix
+- The mobile default API URL is production (`https://vimj-backend.onrender.com`) on
+  Android/iOS devices; local development can still override it with `API_BASE_URL`.
+- Login exceptions now surface a useful connection/error message instead of the generic
+  “Something went wrong” text.

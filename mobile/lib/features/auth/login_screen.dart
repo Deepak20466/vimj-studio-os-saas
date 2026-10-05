@@ -36,8 +36,11 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } on ApiException catch (e) {
       setState(() => _error = e.message);
-    } catch (_) {
-      setState(() => _error = 'Something went wrong. Please try again.');
+    } on Exception catch (e) {
+      final message = e.toString().replaceFirst('Exception: ', '').trim();
+      setState(() => _error = message.isEmpty
+          ? 'Could not sign in. Check your internet connection and try again.'
+          : 'Could not sign in: $message');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
