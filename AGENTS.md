@@ -78,3 +78,7 @@ All requested changes have been fully implemented across the Mobile App (Flutter
 ## Admin Dashboard Visual Polish
 - Dashboard cards use consistent spacing, fixed label areas, responsive value sizing, and
   wrapped revenue breakdowns for professional alignment on mobile screens.
+
+## Admin Session Photo Visibility
+- The Admin session roster always displays the session-photo status when a class exists,
+  instead of hiding the control when the coach has not uploaded a photo yet.
