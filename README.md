@@ -1,5 +1,7 @@
 # VIMJ Studio Attendance Management System
 
+**Built and maintained by K Deepak.** Licensed under the [MIT License](LICENSE).
+
 Production-ready attendance system for a coaching studio: manually-entered attendance
 (Present/Absent/Leave/Not Confirm) with an admin-approval lock, fee receipts/reminders,
 leave requests, role-based data isolation, and business analytics — across a FastAPI
