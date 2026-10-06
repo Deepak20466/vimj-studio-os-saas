@@ -165,6 +165,14 @@ class _LoginScreenState extends State<LoginScreen> {
                             ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                             : const Text('Sign in'),
                       ),
+                      if (_loading) ...[
+                        const SizedBox(height: 10),
+                        const Text(
+                          'If the server has been idle, its first response can take up to about a minute while it wakes. Keep this screen open.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                        ),
+                      ],
                     ],
                   ),
                 ),

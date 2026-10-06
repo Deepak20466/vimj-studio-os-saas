@@ -21,7 +21,10 @@ export default function Login() {
       const userData = await login(email, password);
       navigate(userData.role === "COACH" ? "/coach" : "/");
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Login failed");
+      const timedOut = err.code === "ECONNABORTED" || err.code === "ETIMEDOUT";
+      toast.error(timedOut
+        ? "The server took too long to wake. Please wait a moment and try signing in again."
+        : err.response?.data?.detail || "Login failed");
     } finally {
       setLoading(false);
     }
@@ -86,6 +89,9 @@ export default function Login() {
             <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }} disabled={loading}>
               {loading ? "Signing in..." : "Sign in"}
             </button>
+            {loading && <p role="status" style={{ textAlign: "center", margin: "10px 0 0", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+              If the server has been idle, its first response can take up to about a minute while it wakes. Keep this page open.
+            </p>}
             <div style={{ textAlign: "center", marginTop: 14 }}>
               <button type="button" className="link-btn" onClick={() => setMode("forgot")}>
                 Forgot password?

@@ -1,7 +1,9 @@
 import client from "./client";
 
 export const AuthAPI = {
-  login: (email, password) => client.post("/auth/login", { email, password }),
+  // Render's free backend may need up to ~45 seconds to wake after an idle period.
+  // Bound login so the UI can show a retry instead of waiting indefinitely.
+  login: (email, password) => client.post("/auth/login", { email, password }, { timeout: 75000 }),
   logout: () => client.post("/auth/logout"),
   forgotPassword: (email) => client.post("/auth/forgot-password", { email }),
   resetPassword: (token, new_password) => client.post("/auth/reset-password", { token, new_password }),

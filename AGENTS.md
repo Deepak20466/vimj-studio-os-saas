@@ -121,3 +121,13 @@ following additional updates:
   `master` contains commit `a4f1d45`; tag `mobile-v1.25.0` was built successfully by GitHub
   Actions run 37444335848, and all three ABI APKs are published at
   https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.25.0.
+
+## Login Cold-Start Messaging (2026-10-06)
+
+- The production API remains on Render's free tier, which sleeps after inactivity. The app
+  cannot remove that host startup delay without moving the service to an always-on plan.
+- Web login has a 75-second timeout and displays a wake-up explanation while waiting, then
+  an actionable retry message on timeout. Mobile retains its 75-second login timeout and
+  now displays the same explanation during the wait; timeout already offers a retry message.
+- Follow-up Android package version: 1.25.1+35. Verify the tagged GitHub release before
+  treating the updated APK as available to users.
