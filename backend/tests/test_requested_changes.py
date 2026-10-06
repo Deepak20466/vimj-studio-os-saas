@@ -14,6 +14,7 @@ from app.database import Base, get_db
 from app.models import User, UserRole, Activity, CoachActivity, StudentEnrollment, ClassSession, StudentAttendance, AttendanceStatus, StudentFee, FeeStatus, CoachAttendance, CoachAttendanceStatus
 from app.routers import fees, students, receipts, reports, activities, coaches
 from app.security import require_admin, require_coach, require_admin_or_coach, get_current_user
+from app.models.user import UserDetails
 
 class RequestedChanges(unittest.TestCase):
     def setUp(self):
@@ -153,5 +154,18 @@ class RequestedChanges(unittest.TestCase):
         self.app.dependency_overrides[get_current_user] = lambda: self.s2
         self.assertEqual(self.client.get('/activities/session-photos').status_code, 403)
         self.assertEqual(self.client.get(f'/activities/classes/{self.cls.id}/group-photo').status_code,404)
+
+    def test_student_photo_delete_and_coach_scope(self):
+        self.db.add_all([
+            UserDetails(user_id=self.s1.id, profile_photo=b"student-photo"),
+            UserDetails(user_id=self.s2.id, profile_photo=b"other-activity-photo"),
+        ])
+        self.db.commit()
+        self.app.dependency_overrides[require_admin_or_coach] = lambda: self.coach
+        self.assertEqual(self.client.delete(f"/students/{self.s2.id}/photo").status_code, 403)
+        self.assertEqual(self.client.delete(f"/students/{self.s1.id}/photo").status_code, 204)
+        self.assertEqual(self.client.get(f"/students/{self.s1.id}/photo").status_code, 404)
+        self.assertEqual(self.client.delete(f"/students/{self.s1.id}/photo").status_code, 404)
+        self.assertIsNotNone(self.db.query(User).filter_by(id=self.s1.id).first())
 
 if __name__ == '__main__': unittest.main()

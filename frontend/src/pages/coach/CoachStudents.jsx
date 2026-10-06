@@ -123,6 +123,21 @@ export default function CoachStudents() {
     }
   };
 
+  const deletePhoto = async (student) => {
+    if (!photos[student.id]) return;
+    if (!confirm(`Remove the saved photo for ${student.name}?`)) return;
+    try {
+      await StudentsAPI.deletePhoto(student.id);
+      setPhotos((prev) => {
+        if (prev[student.id]) URL.revokeObjectURL(prev[student.id]);
+        return { ...prev, [student.id]: null };
+      });
+      toast.success("Student photo removed");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to remove student photo");
+    }
+  };
+
   if (loading) return <div className="empty-state">Loading...</div>;
 
   return (
@@ -201,6 +216,11 @@ export default function CoachStudents() {
                         <button className="btn btn-secondary btn-sm" onClick={() => setPhotoFor(s)}>
                           Capture Photo
                         </button>
+                        {photos[s.id] && (
+                          <button className="btn btn-danger btn-sm" onClick={() => deletePhoto(s)}>
+                            Remove Photo
+                          </button>
+                        )}
                         <button className="btn btn-secondary btn-sm" onClick={() => openEdit(s)}>
                           Edit
                         </button>

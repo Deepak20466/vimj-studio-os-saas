@@ -156,6 +156,41 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
     }
   }
 
+  Future<void> _deletePhoto(RosterStudent s) async {
+    if (!_photos.containsKey(s.id)) await _loadPhoto(s.id);
+    if (!mounted) return;
+    if (_photos[s.id] == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No saved photo for ${s.name}')),
+      );
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete student photo?'),
+        content: Text('Remove the saved photo for ${s.name}?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ApiClient.instance.delete('/students/${s.id}/photo');
+      if (!mounted) return;
+      setState(() => _photos[s.id] = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Student photo deleted')),
+      );
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+  }
+
   Future<void> _openEdit(RosterStudent s) async {
     final nameCtrl = TextEditingController(text: s.name);
     final phoneCtrl = TextEditingController(text: s.phone);
@@ -406,6 +441,8 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
                                                 _copyFeeReminder();
                                               if (v == 'photo')
                                                 _capturePhoto(s);
+                                              if (v == 'delete_photo')
+                                                _deletePhoto(s);
                                               if (v == 'edit') _openEdit(s);
                                               if (v == 'delete')
                                                 _removeStudent(s);
@@ -415,10 +452,13 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
                                                   value: 'copy',
                                                   child: Text(
                                                       'Copy Fee Reminder')),
-                                              const PopupMenuItem(
-                                                  value: 'photo',
-                                                  child: Text('Capture Photo')),
-                                              const PopupMenuItem(
+                                            const PopupMenuItem(
+                                                value: 'photo',
+                                                child: Text('Capture Photo')),
+                                            const PopupMenuItem(
+                                                value: 'delete_photo',
+                                                child: Text('Delete Photo')),
+                                            const PopupMenuItem(
                                                   value: 'edit',
                                                   child: Text('Edit')),
                                               const PopupMenuItem(

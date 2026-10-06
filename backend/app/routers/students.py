@@ -229,3 +229,24 @@ def get_student_photo(
     if not details or not details.profile_photo:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No photo on file")
     return Response(content=details.profile_photo, media_type="image/jpeg")
+
+
+@router.delete("/{student_id}/photo", status_code=status.HTTP_204_NO_CONTENT)
+def delete_student_photo(
+    student_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_coach),
+):
+    """Remove a student's profile photo without deleting the student or their records."""
+    student = db.query(User).filter(User.id == student_id, User.role == UserRole.STUDENT).first()
+    if not student:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found")
+    _assert_may_manage_student(db, current_user, student_id)
+
+    details = db.query(UserDetails).filter(UserDetails.user_id == student_id).first()
+    if not details or not details.profile_photo:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No photo on file")
+
+    details.profile_photo = None
+    log_action(db, current_user.id, "DELETE_STUDENT_PHOTO", "Student", student_id)
+    db.commit()

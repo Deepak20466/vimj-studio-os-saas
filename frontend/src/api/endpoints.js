@@ -20,6 +20,7 @@ export const StudentsAPI = {
   fees: (id) => client.get(`/students/${id}/fees`),
   uploadPhoto: (id, photoBase64) => client.post(`/students/${id}/photo`, { photo_base64: photoBase64 }),
   photoBlob: (id) => client.get(`/students/${id}/photo`, { responseType: "blob" }),
+  deletePhoto: (id) => client.delete(`/students/${id}/photo`),
 };
 
 export const CoachesAPI = {

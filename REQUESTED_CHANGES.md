@@ -43,3 +43,9 @@ Final release checks (2026-10-02):
 - Rechecked the configured PostgreSQL database: 0017 (head).
 - Verified all three APK signatures and the SHA-256 values above; the ARM64 signing certificate matches mobile-v1.21.0.
 - Recommended download for most Android phones: app-arm64-v8a-release.apk from the release linked above.
+
+Coach student-photo removal (2026-10-06):
+- Added a confirmed Delete Photo action to each coach student menu on mobile and a Remove Photo action beside Capture Photo on coach web.
+- Added the authenticated student-photo DELETE API. Admins can remove any student's photo; coaches can remove photos only for students on their assigned activity rosters. Removing a photo preserves the student, attendance, and fee records.
+- Regression coverage checks successful removal, missing-photo handling, and that a coach cannot remove a photo outside their roster.
+- Android update: version 1.26.3+39; release verification and download link will be recorded after publishing.
