@@ -80,15 +80,28 @@ class RequestedChanges(unittest.TestCase):
         self.db.add(StudentAttendance(student_id=self.s1.id, class_id=self.cls.id, status=AttendanceStatus.PRESENT, coach_id=self.coach.id))
         self.db.commit()
         self.app.dependency_overrides[require_admin_or_coach] = lambda: self.coach
+        rendered = {}
+        def capture_pdf(title, headers, rows):
+            rendered.update(title=title, headers=headers, rows=rows)
+            return io.BytesIO(b"%PDF-test")
+        with patch("app.routers.reports.rows_to_pdf", side_effect=capture_pdf):
+            detail_response = self.client.get('/reports', params={'month':9,'year':2026,'day':10,'kind':'classes_detail','fmt':'pdf'})
+        self.assertEqual(detail_response.content, b"%PDF-test")
+        self.assertEqual(rendered['headers'], ["Class Time", "Activity", "Student", "Status", "Approval"])
+        self.assertIn(["09:00 - 10:00", "Yoga", "Yoga Student", "PRESENT", "PENDING"], rendered['rows'])
+        self.assertEqual(rendered['rows'][-1], ["Total classes", 1, "Student attendance records", 1, ""])
         report = self.client.get('/reports', params={'month':9,'year':2026}).json()
         self.assertEqual(Decimal(report['fee_paid_total']), Decimal('120'))
         self.assertEqual(Decimal(report['fee_pending_total']), Decimal('50'))
         self.assertEqual(report['fee_paid_count'], 1)
         self.assertEqual(report['fee_pending_count'], 1)
         self.assertEqual(report['classes_done'], 1)
-        for kind in ['students_summary','classes','fees_paid','fees_pending']:
+        for kind in ['students_summary','classes','classes_detail','fees_paid','fees_pending']:
             response = self.client.get('/reports', params={'month':9,'year':2026,'kind':kind,'fmt':'pdf'})
             self.assertTrue(response.content.startswith(b'%PDF'), response.text)
+        detail = self.client.get('/reports', params={'month':9,'year':2026,'day':10,'kind':'classes_detail','fmt':'pdf'})
+        self.assertTrue(detail.content.startswith(b'%PDF'), detail.text)
+        self.assertIn('2026-09-10', detail.headers['content-disposition'])
     def test_coach_attendance_date_filter(self):
         self.db.add_all([
             CoachAttendance(coach_id=self.coach.id, date=date(2026, 9, 10), status=CoachAttendanceStatus.PRESENT),

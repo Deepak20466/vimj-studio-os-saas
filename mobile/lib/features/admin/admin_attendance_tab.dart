@@ -30,6 +30,7 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
   DateTime? _filterDateTo;
   int? _removingId;
   int? _approvalBusyId;
+  bool _approvingAll = false;
 
   // --- Coach attendance (separate CRUD) ---
   bool _coachRecordsLoading = true;
@@ -358,6 +359,41 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
     }
   }
 
+  Future<void> _approveAllPending() async {
+    if (_approvingAll) return;
+    final pending = _records.where((r) => r.approvalStatus == 'PENDING').toList();
+    if (pending.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Approve all pending attendance?'),
+        content: Text('Approve ${pending.length} pending record(s) matching the current filters?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Approve all')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _approvingAll = true);
+    var approved = 0;
+    var failed = 0;
+    for (final record in pending) {
+      try {
+        await ApiClient.instance.put('/attendance/students/${record.id}/approve', body: {'note': null});
+        approved++;
+      } on ApiException {
+        failed++;
+      }
+    }
+    if (!mounted) return;
+    setState(() => _approvingAll = false);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(failed == 0 ? 'Approved $approved attendance record(s)' : 'Approved $approved; $failed could not be approved. Refresh and review them.'),
+    ));
+    await _loadRecords();
+  }
+
   Color _approvalColor(String status) {
     switch (status) {
       case 'APPROVED':
@@ -468,6 +504,14 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
+                      if (_records.any((r) => r.approvalStatus == 'PENDING'))
+                        ElevatedButton.icon(
+                          onPressed: _approvingAll || _recordsLoading ? null : _approveAllPending,
+                          icon: _approvingAll
+                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.done_all),
+                          label: Text(_approvingAll ? 'Approving…' : 'Approve filtered pending (${_records.where((r) => r.approvalStatus == 'PENDING').length})'),
+                        ),
                       DropdownButton<int?>(
                         value: _filterActivityId,
                         hint: const Text('All activities'),

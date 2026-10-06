@@ -352,7 +352,7 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
           padding: const EdgeInsets.all(16),
           children: [
             Wrap(spacing: 8, children: [
-              OutlinedButton(onPressed: _selectedDate == null ? null : () => _export('classes', day: _selectedDate), child: const Text('Day Classes PDF')),
+              OutlinedButton(onPressed: _selectedDate == null ? null : () => _export('classes_detail', day: _selectedDate), child: const Text('Day Classes & Attendance PDF')),
               OutlinedButton(onPressed: () => _export('students_summary'), child: const Text('Monthly Attendance & Classes PDF')),
               OutlinedButton(onPressed: () => _export('fees_paid'), child: const Text('Fees Paid PDF')),
               OutlinedButton(onPressed: () => _export('fees_pending'), child: const Text('Fees Pending PDF')),

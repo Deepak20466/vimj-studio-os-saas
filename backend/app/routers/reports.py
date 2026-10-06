@@ -93,6 +93,21 @@ def report(month: int = Query(ge=1, le=12), year: int = Query(ge=2000, le=2100),
     elif kind == "classes":
         headers, rows = ["Date", "Classes Done"], [[d, count] for d, count in sorted(class_count_by_day.items())]
         rows.append(["Total", len(class_sessions)])
+    elif kind == "classes_detail":
+        headers = ["Class Time", "Activity", "Student", "Status", "Approval"]
+        rows = []
+        session_records = {}
+        for record in records:
+            session_records.setdefault(record.class_id, []).append(record)
+        for cls in class_sessions:
+            time_label = f"{cls.start_time.strftime('%H:%M')} - {cls.end_time.strftime('%H:%M')}"
+            class_records = session_records.get(cls.id, [])
+            if not class_records:
+                rows.append([time_label, cls.activity.name if cls.activity else "Unknown", "No attendance marked", "-", "-"])
+            else:
+                for record in class_records:
+                    rows.append([time_label, cls.activity.name if cls.activity else "Unknown", record.student.name if record.student else "Unknown", record.status.value, record.approval_status.value])
+        rows.append(["Total classes", len(class_sessions), "Student attendance records", len(records), ""])
     elif kind == "attendance_summary":
         headers = ["Date", "Classes Done", "Student Attendance Records"]
         rows = [[d, count, sum(1 for r in records if r.class_session.date.isoformat() == d)] for d, count in sorted(class_count_by_day.items())]
@@ -105,8 +120,8 @@ def report(month: int = Query(ge=1, le=12), year: int = Query(ge=2000, le=2100),
         rows.append(["TOTAL", "", fee_pending_total, ""])
     else:
         raise HTTPException(status_code=400, detail="Unknown report kind")
-    title_period = date(year, month, day).isoformat() if kind == "classes" and day else f"{month:02d}/{year}"
+    title_period = date(year, month, day).isoformat() if kind in {"classes", "classes_detail"} and day else f"{month:02d}/{year}"
     summary_note = f"<br/><font size=9>Completed classes: {len(class_sessions)}; student attendance records: {len(records)}.</font>" if kind == "students_summary" else ""
     pdf = rows_to_pdf(f"{kind.replace('_', ' ').title()} report - {title_period}" + summary_note + ("<br/><font size=9>Paid fees by billing month; multi-activity payments split equally.</font>" if kind == "revenue" else ""), headers, rows)
-    suffix = f"_{date(year, month, day).isoformat()}" if kind == "classes" and day else f"_{year}_{month:02d}"
+    suffix = f"_{date(year, month, day).isoformat()}" if kind in {"classes", "classes_detail"} and day else f"_{year}_{month:02d}"
     return StreamingResponse(pdf, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename={kind}{suffix}.pdf"})

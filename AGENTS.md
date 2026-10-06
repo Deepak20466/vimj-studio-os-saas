@@ -145,3 +145,16 @@ following additional updates:
   finish. Student list refreshes keep existing rows visible.
 - Mobile package version is 1.26.0+36. Run backend tests, web build, Flutter analysis, and
   release APK build before publishing the corresponding tag.
+
+## Mobile Attendance and Coach Day PDF (2026-10-06)
+
+- Admin mobile Attendance provides a confirmed “Approve filtered pending” action. It applies
+  to the pending records loaded under current filters and uses the existing per-record
+  admin approval endpoint; success/failure counts are reported before the list refreshes.
+- Coach mobile Attendance's selected-day PDF uses the `classes_detail` report kind. The
+  report includes scheduled time, activity, student, attendance status, approval status,
+  and a total row. Coach scoping remains enforced by the report API.
+- Admin mobile dashboard requests apply results as they complete so a slow secondary
+  endpoint does not block faster data. Render cold-start time remains controlled by hosting.
+- No schema or migration changes are required. Verify the Flutter build, backend regression
+  tests, and all three Android ABI APKs before tagging a release.

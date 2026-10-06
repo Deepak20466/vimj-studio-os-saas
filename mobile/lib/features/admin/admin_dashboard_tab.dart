@@ -15,6 +15,7 @@ class AdminDashboardTab extends StatefulWidget {
 
 class _AdminDashboardTabState extends State<AdminDashboardTab> {
   bool _loading = false;
+  bool _loaded = false;
   Map<String, dynamic>? _summary;
   Map<String, dynamic>? _feeGraph;
   List<dynamic> _missing = [];
@@ -34,33 +35,30 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
+    Future<void> loadPart(Future<dynamic> request, Future<void> Function(dynamic) apply) async {
+      try {
+        await apply(await request);
+        if (mounted) setState(() {});
+      } on ApiException catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
     try {
-      final results = await Future.wait([
-        ApiClient.instance.get('/dashboard/summary'),
-        ApiClient.instance.get('/dashboard/fee-status'),
-        ApiClient.instance.get('/attendance/daily-missing'),
-        ApiClient.instance.get('/dashboard/activity-attendance'),
-        ApiClient.instance.get('/dashboard/revenue', query: {
+      await Future.wait([
+        loadPart(ApiClient.instance.get('/dashboard/summary'), (v) async => _summary = v as Map<String, dynamic>),
+        loadPart(ApiClient.instance.get('/dashboard/fee-status'), (v) async => _feeGraph = v as Map<String, dynamic>),
+        loadPart(ApiClient.instance.get('/attendance/daily-missing'), (v) async {
+          _missing = await DismissedItems.filter(_missingAttendanceDismissKey, v as List<dynamic>, (m) => (m as Map<String, dynamic>)['class_id'] as int);
+        }),
+        loadPart(ApiClient.instance.get('/dashboard/activity-attendance'), (v) async => _activityBreakdown = (v as Map<String, dynamic>)['points'] as List<dynamic>? ?? []),
+        loadPart(ApiClient.instance.get('/dashboard/revenue', query: {
           'period': 'month',
           'month': DateTime.now().month,
           'year': DateTime.now().year
-        }),
+        }), (v) async => _revenue = v as Map<String, dynamic>),
       ]);
-      _summary = results[0] as Map<String, dynamic>;
-      _feeGraph = results[1] as Map<String, dynamic>;
-      final rawMissing = results[2] as List<dynamic>;
-      _missing = await DismissedItems.filter(_missingAttendanceDismissKey,
-          rawMissing, (m) => (m as Map<String, dynamic>)['class_id'] as int);
-      _activityBreakdown =
-          (results[3] as Map<String, dynamic>)['points'] as List<dynamic>? ??
-              [];
-      _revenue = results[4] as Map<String, dynamic>;
-    } on ApiException catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() { _loading = false; _loaded = true; });
     }
   }
 
@@ -135,6 +133,7 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_loaded && _loading) return const Center(child: CircularProgressIndicator());
     final s = _summary ?? {};
     final fees = _feeGraph ?? {'paid': 0, 'unpaid': 0, 'overdue': 0};
     final paid = (fees['paid'] as num?)?.toDouble() ?? 0;
