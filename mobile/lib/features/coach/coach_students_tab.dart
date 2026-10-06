@@ -8,7 +8,8 @@ import '../../core/auth_storage.dart';
 import '../../core/models.dart';
 import '../shared/notification_bell_action.dart';
 
-const _feeReminderMessage = "Hi this is VIMJ Studio and it is an reminder for fee payment is pending for the sos "
+const _feeReminderMessage =
+    "Hi this is VIMJ Studio and it is an reminder for fee payment is pending for the sos "
     "month and kindly pay as before the deadline of 5th of every month as cash or upi number - 6361174605  to "
     "Mahesh Sir.  Thank you";
 
@@ -24,6 +25,9 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
   final Map<int, List<RosterStudent>> _rosterByActivity = {};
   final Map<int, Uint8List?> _photos = {};
   bool _loading = true;
+  bool _hasLoaded = false;
+  String _search = '';
+  int? _activityFilter;
 
   @override
   void initState() {
@@ -32,35 +36,49 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    if (!_hasLoaded) setState(() => _loading = true);
     try {
       final session = await AuthStorage.load();
       if (session == null) return;
-      final data = await ApiClient.instance.get('/coaches/${session.userId}/activities') as List;
-      _activities = data.map((e) => CoachActivityLink.fromJson(e as Map<String, dynamic>)).toList();
-      final rosters = await Future.wait(_activities.map((a) => ApiClient.instance.get('/activities/${a.activityId}/roster')));
+      final data = await ApiClient.instance
+          .get('/coaches/${session.userId}/activities') as List;
+      _activities = data
+          .map((e) => CoachActivityLink.fromJson(e as Map<String, dynamic>))
+          .toList();
+      final rosters = await Future.wait(_activities.map(
+          (a) => ApiClient.instance.get('/activities/${a.activityId}/roster')));
       _rosterByActivity.clear();
       for (var i = 0; i < _activities.length; i++) {
-        final list = (rosters[i] as List).map((e) => RosterStudent.fromJson(e as Map<String, dynamic>)).toList();
+        final list = (rosters[i] as List)
+            .map((e) => RosterStudent.fromJson(e as Map<String, dynamic>))
+            .toList();
         _rosterByActivity[_activities[i].activityId] = list;
       }
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
+      _hasLoaded = true;
       if (mounted) setState(() => _loading = false);
     }
     _loadPhotos();
   }
 
   Future<void> _loadPhotos() async {
-    final studentIds = _rosterByActivity.values.expand((list) => list.map((s) => s.id)).toSet();
+    final studentIds = _rosterByActivity.values
+        .expand((list) => list.map((s) => s.id))
+        .toSet();
     await Future.wait(studentIds.map((id) => _loadPhoto(id)));
   }
 
   Future<void> _loadPhoto(int studentId) async {
+    if (_photos.containsKey(studentId)) return;
     try {
-      final bytes = await ApiClient.instance.getBytes('/students/$studentId/photo');
-      if (mounted) setState(() => _photos[studentId] = Uint8List.fromList(bytes));
+      final bytes =
+          await ApiClient.instance.getBytes('/students/$studentId/photo');
+      if (mounted)
+        setState(() => _photos[studentId] = Uint8List.fromList(bytes));
     } on ApiException {
       if (mounted) setState(() => _photos[studentId] = null);
     }
@@ -76,7 +94,11 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
             "You're not assigned to any activity yet, so there's nowhere to add a student under. "
             'Ask your admin to assign you to an activity first.',
           ),
-          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'))
+          ],
         ),
       );
       return;
@@ -96,28 +118,41 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
 
   Future<void> _copyFeeReminder() async {
     await Clipboard.setData(const ClipboardData(text: _feeReminderMessage));
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Message copied — paste it into WhatsApp/SMS')));
+    if (mounted)
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Message copied — paste it into WhatsApp/SMS')));
   }
 
   Future<void> _capturePhoto(RosterStudent s) async {
     XFile? photo;
     try {
       final picker = ImagePicker();
-      photo = await picker.pickImage(source: ImageSource.camera, imageQuality: 70, preferredCameraDevice: CameraDevice.front);
+      photo = await picker.pickImage(
+          source: ImageSource.camera,
+          imageQuality: 70,
+          preferredCameraDevice: CameraDevice.front);
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open camera — check camera permission')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Could not open camera — check camera permission')));
       return;
     }
     if (photo == null) return;
     try {
       final bytes = await photo.readAsBytes();
-      await ApiClient.instance.post('/students/${s.id}/photo', body: {'photo_base64': base64Encode(bytes)});
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Photo saved')));
+      await ApiClient.instance.post('/students/${s.id}/photo',
+          body: {'photo_base64': base64Encode(bytes)});
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Photo saved')));
       // Refresh just this student's thumbnail so it shows next to their name
       // immediately, without re-fetching the whole roster.
+      _photos.remove(s.id);
       await _loadPhoto(s.id);
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -133,19 +168,34 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
       useSafeArea: true,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocalState) => Padding(
-          padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
+          padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Edit Student — ${s.name}', style: Theme.of(ctx).textTheme.titleLarge),
+                Text('Edit Student — ${s.name}',
+                    style: Theme.of(ctx).textTheme.titleLarge),
                 const SizedBox(height: 16),
-                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
+                TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(labelText: 'Name')),
                 const SizedBox(height: 12),
-                TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Primary Phone'), keyboardType: TextInputType.phone),
+                TextField(
+                    controller: phoneCtrl,
+                    decoration:
+                        const InputDecoration(labelText: 'Primary Phone'),
+                    keyboardType: TextInputType.phone),
                 const SizedBox(height: 12),
-                TextField(controller: phoneSecondaryCtrl, decoration: const InputDecoration(labelText: 'Emergency Contact'), keyboardType: TextInputType.phone),
+                TextField(
+                    controller: phoneSecondaryCtrl,
+                    decoration:
+                        const InputDecoration(labelText: 'Emergency Contact'),
+                    keyboardType: TextInputType.phone),
                 if (error != null) ...[
                   const SizedBox(height: 12),
                   Text(error!, style: const TextStyle(color: AppColors.danger)),
@@ -160,7 +210,8 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
                             error = null;
                           });
                           try {
-                            await ApiClient.instance.put('/students/${s.id}', body: {
+                            await ApiClient.instance
+                                .put('/students/${s.id}', body: {
                               'name': nameCtrl.text.trim(),
                               'phone': phoneCtrl.text.trim(),
                               'phone_secondary': phoneSecondaryCtrl.text.trim(),
@@ -174,7 +225,11 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
                           }
                         },
                   child: saving
-                      ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
                       : const Text('Save'),
                 ),
               ],
@@ -187,7 +242,9 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
     phoneCtrl.dispose();
     phoneSecondaryCtrl.dispose();
     if (saved == true) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Student updated')));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Student updated')));
       _load();
     }
   }
@@ -197,27 +254,47 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Remove student?'),
-        content: Text('Remove ${s.name}? This deletes their attendance and fee history too.'),
+        content: Text(
+            'Remove ${s.name}? This deletes their attendance and fee history too.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove', style: TextStyle(color: AppColors.danger))),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Remove',
+                  style: TextStyle(color: AppColors.danger))),
         ],
       ),
     );
     if (confirmed != true) return;
     try {
       await ApiClient.instance.delete('/students/${s.id}');
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Student removed')));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Student removed')));
       _load();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final query = _search.trim().toLowerCase();
+    final visibleActivities = _activities
+        .where(
+            (a) => _activityFilter == null || a.activityId == _activityFilter)
+        .where((a) {
+      final roster = _rosterByActivity[a.activityId] ?? [];
+      return query.isEmpty || roster.any(_matchesStudent);
+    }).toList();
     return Scaffold(
-      appBar: AppBar(title: const Text('My Students'), actions: const [NotificationBellAction(), SizedBox(width: 4)]),
+      appBar: AppBar(
+          title: const Text('My Students'),
+          actions: const [NotificationBellAction(), SizedBox(width: 4)]),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'coach-students-fab',
         onPressed: _handleAddStudentTap,
@@ -243,52 +320,130 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
                     ])
                   : ListView(
                       padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
-                      children: _activities.map((a) {
-                        final roster = _rosterByActivity[a.activityId] ?? [];
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(a.activityName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                const SizedBox(height: 6),
-                                if (roster.isEmpty)
-                                  const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('No students enrolled yet.', style: TextStyle(color: AppColors.textMuted)))
-                                else
-                                  ...roster.map((s) => ListTile(
-                                        contentPadding: EdgeInsets.zero,
-                                        leading: CircleAvatar(
-                                          radius: 20,
-                                          backgroundImage: _photos[s.id] != null ? MemoryImage(_photos[s.id]!) : null,
-                                          child: _photos[s.id] == null ? const Icon(Icons.person_outline) : null,
-                                        ),
-                                        title: Text(s.name),
-                                        subtitle: Text("${s.phone ?? '-'} / ${s.phoneSecondary ?? '-'}"),
-                                        trailing: PopupMenuButton<String>(
-                                          onSelected: (v) {
-                                            if (v == 'copy') _copyFeeReminder();
-                                            if (v == 'photo') _capturePhoto(s);
-                                            if (v == 'edit') _openEdit(s);
-                                            if (v == 'delete') _removeStudent(s);
-                                          },
-                                          itemBuilder: (_) => [
-                                            const PopupMenuItem(value: 'copy', child: Text('Copy Fee Reminder')),
-                                            const PopupMenuItem(value: 'photo', child: Text('Capture Photo')),
-                                            const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                                            const PopupMenuItem(value: 'delete', child: Text('Delete')),
-                                          ],
-                                        ),
-                                      )),
-                              ],
-                            ),
+                      children: [
+                        TextField(
+                          decoration: InputDecoration(
+                            labelText: 'Search students',
+                            hintText: 'Name, phone, or email',
+                            prefixIcon: const Icon(Icons.search),
+                            suffixIcon: _search.isEmpty
+                                ? null
+                                : IconButton(
+                                    icon: const Icon(Icons.clear),
+                                    onPressed: () =>
+                                        setState(() => _search = '')),
                           ),
-                        );
-                      }).toList(),
+                          onChanged: (value) => setState(() => _search = value),
+                        ),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<int?>(
+                          initialValue: _activityFilter,
+                          decoration: const InputDecoration(
+                              labelText: 'Filter by activity'),
+                          items: [
+                            const DropdownMenuItem<int?>(
+                                value: null, child: Text('All activities')),
+                            ..._activities.map((a) => DropdownMenuItem<int?>(
+                                value: a.activityId,
+                                child: Text(a.activityName))),
+                          ],
+                          onChanged: (value) =>
+                              setState(() => _activityFilter = value),
+                        ),
+                        const SizedBox(height: 12),
+                        if (visibleActivities.isEmpty)
+                          const Padding(
+                              padding: EdgeInsets.all(24),
+                              child: Center(
+                                  child: Text(
+                                      'No students match these filters.'))),
+                        ...visibleActivities.map((a) {
+                          final roster = (_rosterByActivity[a.activityId] ?? [])
+                              .where(_matchesStudent)
+                              .toList();
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(a.activityName,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16)),
+                                  const SizedBox(height: 6),
+                                  if (roster.isEmpty)
+                                    Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 8),
+                                        child: Text(
+                                            query.isEmpty
+                                                ? 'No students enrolled yet.'
+                                                : 'No students match this search.',
+                                            style: const TextStyle(
+                                                color: AppColors.textMuted)))
+                                  else
+                                    ...roster.map((s) => ListTile(
+                                          contentPadding: EdgeInsets.zero,
+                                          leading: CircleAvatar(
+                                            radius: 20,
+                                            backgroundImage: _photos[s.id] !=
+                                                    null
+                                                ? MemoryImage(_photos[s.id]!)
+                                                : null,
+                                            child: _photos[s.id] == null
+                                                ? const Icon(
+                                                    Icons.person_outline)
+                                                : null,
+                                          ),
+                                          title: Text(s.name),
+                                          subtitle: Text(
+                                              "${s.phone ?? '-'} / ${s.phoneSecondary ?? '-'}"),
+                                          trailing: PopupMenuButton<String>(
+                                            onSelected: (v) {
+                                              if (v == 'copy')
+                                                _copyFeeReminder();
+                                              if (v == 'photo')
+                                                _capturePhoto(s);
+                                              if (v == 'edit') _openEdit(s);
+                                              if (v == 'delete')
+                                                _removeStudent(s);
+                                            },
+                                            itemBuilder: (_) => [
+                                              const PopupMenuItem(
+                                                  value: 'copy',
+                                                  child: Text(
+                                                      'Copy Fee Reminder')),
+                                              const PopupMenuItem(
+                                                  value: 'photo',
+                                                  child: Text('Capture Photo')),
+                                              const PopupMenuItem(
+                                                  value: 'edit',
+                                                  child: Text('Edit')),
+                                              const PopupMenuItem(
+                                                  value: 'delete',
+                                                  child: Text('Delete')),
+                                            ],
+                                          ),
+                                        )),
+                                ],
+                              ),
+                            ),
+                          );
+                        }),
+                      ],
                     ),
             ),
     );
+  }
+
+  bool _matchesStudent(RosterStudent student) {
+    final query = _search.trim().toLowerCase();
+    if (query.isEmpty) return true;
+    return '${student.name} ${student.phone ?? ''} ${student.phoneSecondary ?? ''} ${student.email}'
+        .toLowerCase()
+        .contains(query);
   }
 }
 
@@ -301,7 +456,8 @@ class _AddStudentForm extends StatefulWidget {
 }
 
 class _AddStudentFormState extends State<_AddStudentForm> {
-  late int? _activityId = widget.activities.isNotEmpty ? widget.activities.first.activityId : null;
+  late int? _activityId =
+      widget.activities.isNotEmpty ? widget.activities.first.activityId : null;
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
@@ -311,8 +467,12 @@ class _AddStudentFormState extends State<_AddStudentForm> {
   String? _error;
 
   Future<void> _submit() async {
-    if (_nameCtrl.text.trim().isEmpty || _phoneCtrl.text.trim().isEmpty || _phoneSecondaryCtrl.text.trim().isEmpty || _activityId == null) {
-      setState(() => _error = 'Name, both phone numbers, and activity are required');
+    if (_nameCtrl.text.trim().isEmpty ||
+        _phoneCtrl.text.trim().isEmpty ||
+        _phoneSecondaryCtrl.text.trim().isEmpty ||
+        _activityId == null) {
+      setState(
+          () => _error = 'Name, both phone numbers, and activity are required');
       return;
     }
     setState(() {
@@ -349,7 +509,11 @@ class _AddStudentFormState extends State<_AddStudentForm> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+      padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 20),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -360,26 +524,40 @@ class _AddStudentFormState extends State<_AddStudentForm> {
             DropdownButtonFormField<int>(
               initialValue: _activityId,
               decoration: const InputDecoration(labelText: 'Activity'),
-              items: widget.activities.map((a) => DropdownMenuItem(value: a.activityId, child: Text(a.activityName))).toList(),
+              items: widget.activities
+                  .map((a) => DropdownMenuItem(
+                      value: a.activityId, child: Text(a.activityName)))
+                  .toList(),
               onChanged: (v) => setState(() => _activityId = v),
             ),
             const SizedBox(height: 12),
-            TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
+            TextField(
+                controller: _nameCtrl,
+                decoration: const InputDecoration(labelText: 'Name')),
             const SizedBox(height: 12),
             TextField(
               controller: _emailCtrl,
-              decoration: const InputDecoration(labelText: "Email (optional — students don't log in)"),
+              decoration: const InputDecoration(
+                  labelText: "Email (optional — students don't log in)"),
               keyboardType: TextInputType.emailAddress,
             ),
             const SizedBox(height: 12),
-            TextField(controller: _phoneCtrl, decoration: const InputDecoration(labelText: 'Primary Phone'), keyboardType: TextInputType.phone),
+            TextField(
+                controller: _phoneCtrl,
+                decoration: const InputDecoration(labelText: 'Primary Phone'),
+                keyboardType: TextInputType.phone),
             const SizedBox(height: 12),
-            TextField(controller: _phoneSecondaryCtrl, decoration: const InputDecoration(labelText: 'Emergency Contact'), keyboardType: TextInputType.phone),
+            TextField(
+                controller: _phoneSecondaryCtrl,
+                decoration:
+                    const InputDecoration(labelText: 'Emergency Contact'),
+                keyboardType: TextInputType.phone),
             const SizedBox(height: 12),
             TextField(
               controller: _passwordCtrl,
               obscureText: true,
-              decoration: const InputDecoration(labelText: "Password (optional — students don't log in)"),
+              decoration: const InputDecoration(
+                  labelText: "Password (optional — students don't log in)"),
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),
@@ -388,7 +566,13 @@ class _AddStudentFormState extends State<_AddStudentForm> {
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _saving ? null : _submit,
-              child: _saving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Create'),
+              child: _saving
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Create'),
             ),
           ],
         ),

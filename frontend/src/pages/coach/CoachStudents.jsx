@@ -10,6 +10,8 @@ export default function CoachStudents() {
   const [activities, setActivities] = useState([]);
   const [rosterByActivity, setRosterByActivity] = useState({});
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [activityFilter, setActivityFilter] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", phone: "", phone_secondary: "", password: "", activity_id: "" });
   const [photoFor, setPhotoFor] = useState(null); // student object
@@ -17,17 +19,20 @@ export default function CoachStudents() {
   const [editing, setEditing] = useState(null); // student object
   const [editForm, setEditForm] = useState({ name: "", phone: "", phone_secondary: "" });
 
-  const loadPhoto = async (studentId) => {
+  const loadPhoto = async (studentId, force = false) => {
+    if (!force && Object.prototype.hasOwnProperty.call(photos, studentId)) return;
     try {
       const { data } = await StudentsAPI.photoBlob(studentId);
-      setPhotos((prev) => ({ ...prev, [studentId]: URL.createObjectURL(data) }));
+      setPhotos((prev) => {
+        if (prev[studentId]) URL.revokeObjectURL(prev[studentId]);
+        return { ...prev, [studentId]: URL.createObjectURL(data) };
+      });
     } catch {
       setPhotos((prev) => ({ ...prev, [studentId]: null }));
     }
   };
 
   const load = () => {
-    setLoading(true);
     CoachSelfAPI.myActivities(user.id)
       .then(async (r) => {
         setActivities(r.data);
@@ -110,7 +115,7 @@ export default function CoachStudents() {
     try {
       await StudentsAPI.uploadPhoto(studentId, base64);
       toast.success("Photo saved");
-      loadPhoto(studentId);
+      loadPhoto(studentId, true);
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to save photo");
     } finally {
@@ -134,11 +139,25 @@ export default function CoachStudents() {
       {activities.length === 0 ? (
         <div className="empty-state">You aren't assigned to any activity yet — ask an admin to assign one.</div>
       ) : (
-        activities.map((a) => (
+        <>
+        <div className="toolbar" style={{ marginBottom: 16 }}>
+          <input aria-label="Search students" type="search" placeholder="Search name, phone, or email" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <select aria-label="Filter students by activity" value={activityFilter} onChange={(e) => setActivityFilter(e.target.value)}>
+            <option value="">All activities</option>
+            {activities.map((a) => <option key={a.activity_id} value={a.activity_id}>{a.activity_name}</option>)}
+          </select>
+          {(search || activityFilter) && <button className="btn btn-secondary" onClick={() => { setSearch(""); setActivityFilter(""); }}>Clear filters</button>}
+        </div>
+        {activities.filter((a) => !activityFilter || String(a.activity_id) === activityFilter).map((a) => {
+          const query = search.trim().toLowerCase();
+          const roster = (rosterByActivity[a.activity_id] || []).filter((s) =>
+            !query || `${s.name} ${s.phone || ""} ${s.phone_secondary || ""} ${displayEmail(s.email)}`.toLowerCase().includes(query)
+          );
+          return (
           <div className="card" key={a.activity_id} style={{ marginBottom: 16 }}>
             <h3 style={{ marginTop: 0 }}>{a.activity_name}</h3>
-            {(rosterByActivity[a.activity_id] || []).length === 0 ? (
-              <div className="empty-state">No students enrolled yet.</div>
+            {roster.length === 0 ? (
+              <div className="empty-state">{query ? "No students match this search." : "No students enrolled yet."}</div>
             ) : (
               <table>
                 <thead>
@@ -150,7 +169,7 @@ export default function CoachStudents() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rosterByActivity[a.activity_id].map((s) => (
+                  {roster.map((s) => (
                     <tr key={s.id}>
                       <td>
                         {photos[s.id] ? (
@@ -195,7 +214,9 @@ export default function CoachStudents() {
               </table>
             )}
           </div>
-        ))
+          );
+        })}
+        </>
       )}
 
       {showForm && (

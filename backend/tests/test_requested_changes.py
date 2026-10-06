@@ -11,8 +11,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from PIL import Image
 from app.database import Base, get_db
-from app.models import User, UserRole, Activity, CoachActivity, StudentEnrollment, ClassSession, StudentAttendance, AttendanceStatus, StudentFee, FeeStatus
-from app.routers import fees, students, receipts, reports, activities
+from app.models import User, UserRole, Activity, CoachActivity, StudentEnrollment, ClassSession, StudentAttendance, AttendanceStatus, StudentFee, FeeStatus, CoachAttendance, CoachAttendanceStatus
+from app.routers import fees, students, receipts, reports, activities, coaches
 from app.security import require_admin, require_coach, require_admin_or_coach, get_current_user
 
 class RequestedChanges(unittest.TestCase):
@@ -31,7 +31,7 @@ class RequestedChanges(unittest.TestCase):
         self.cls = ClassSession(activity_id=self.yoga.id, coach_id=self.coach.id, date=date(2026,9,10), start_time=time(9), end_time=time(10))
         self.db.add(self.cls); self.db.commit()
         self.app = FastAPI()
-        for router in [fees.router, students.router, receipts.router, reports.router, activities.router]: self.app.include_router(router)
+        for router in [fees.router, students.router, receipts.router, reports.router, activities.router, coaches.router]: self.app.include_router(router)
         self.app.dependency_overrides[get_db] = lambda: self.db
         self.app.dependency_overrides[require_admin] = lambda: self.admin
         self.app.dependency_overrides[require_coach] = lambda: self.coach
@@ -88,6 +88,15 @@ class RequestedChanges(unittest.TestCase):
         for kind in ['students_summary','classes','fees_paid','fees_pending']:
             response = self.client.get('/reports', params={'month':9,'year':2026,'kind':kind,'fmt':'pdf'})
             self.assertTrue(response.content.startswith(b'%PDF'), response.text)
+    def test_coach_attendance_date_filter(self):
+        self.db.add_all([
+            CoachAttendance(coach_id=self.coach.id, date=date(2026, 9, 10), status=CoachAttendanceStatus.PRESENT),
+            CoachAttendance(coach_id=self.coach.id, date=date(2026, 10, 6), status=CoachAttendanceStatus.ABSENT),
+        ])
+        self.db.commit()
+        response = self.client.get(f'/coaches/{self.coach.id}/attendance', params={'date_from':'2026-10-01','date_to':'2026-10-31'})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual([row['date'][:10] for row in response.json()], ['2026-10-06'])
     def test_dated_receipts_and_multiple_collections(self):
         payload = {'student_id':self.s1.id,'month':9,'year':2026,'amount':'100','product_amount':'25','billing_date':'2026-09-10'}
         for day in [10,11]:

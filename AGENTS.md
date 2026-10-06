@@ -132,3 +132,16 @@ following additional updates:
 - Follow-up Android package version: 1.25.1+35. GitHub Actions run 37448001267 completed
   successfully and published all three APKs at
   https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.25.1.
+
+## Coach Student Search and Mobile Responsiveness (2026-10-06)
+
+- Coach Students on web and mobile supports search by student name, phone, or email and
+  filtering by assigned activity.
+- Roster photo thumbnails are retained between roster refreshes and only fetched for new
+  students or refreshed after a new photo upload.
+- Coach home requests only today's facility-attendance row; the coach attendance endpoint
+  supports optional date bounds while preserving full-history requests for calendar views.
+- Mobile dashboard renders today's classes and attendance before background class summaries
+  finish. Student list refreshes keep existing rows visible.
+- Mobile package version is 1.26.0+36. Run backend tests, web build, Flutter analysis, and
+  release APK build before publishing the corresponding tag.

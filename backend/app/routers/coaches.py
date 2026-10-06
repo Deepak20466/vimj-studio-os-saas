@@ -1,3 +1,4 @@
+from datetime import date
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -126,16 +127,18 @@ def delete_coach(
 @router.get("/{coach_id}/attendance", response_model=List[CoachAttendanceOut])
 def coach_attendance(
     coach_id: int,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     _assert_self_or_admin(current_user, coach_id)
-    return (
-        db.query(CoachAttendance)
-        .filter(CoachAttendance.coach_id == coach_id)
-        .order_by(CoachAttendance.date.desc())
-        .all()
-    )
+    query = db.query(CoachAttendance).filter(CoachAttendance.coach_id == coach_id)
+    if date_from:
+        query = query.filter(CoachAttendance.date >= date_from)
+    if date_to:
+        query = query.filter(CoachAttendance.date <= date_to)
+    return query.order_by(CoachAttendance.date.desc()).all()
 
 
 @router.get("/{coach_id}/activities", response_model=List[CoachActivityOut])

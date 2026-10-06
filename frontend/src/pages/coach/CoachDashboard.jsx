@@ -25,10 +25,11 @@ export default function CoachDashboard() {
 
   const load = (silent) => {
     if (!silent) setLoading(true);
-    Promise.all([CoachSelfAPI.myClasses(todayStr()), CoachSelfAPI.myAttendance(user.id), ActivitiesAPI.list()])
+    const today = todayStr();
+    Promise.all([CoachSelfAPI.myClasses(today), CoachSelfAPI.myAttendance(user.id, { date_from: today, date_to: today }), ActivitiesAPI.list()])
       .then(([classesRes, attendanceRes, activitiesRes]) => {
         setClasses(classesRes.data);
-        const today = attendanceRes.data.find((a) => String(a.date).slice(0, 10) === todayStr());
+        const today = attendanceRes.data[0];
         setTodayAttendance(today || null);
         setActivityNames(Object.fromEntries(activitiesRes.data.map((a) => [a.id, a.name])));
         Promise.all(classesRes.data.map((c) => CoachSelfAPI.classSummary(c.id).then((r) => [c.id, r.data])))
