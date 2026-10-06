@@ -116,7 +116,8 @@ following additional updates:
 - Coach attendance and completed-class reports remain scoped to that coach. Coaches cannot
   export other coaches' attendance or fees for students outside their assigned activities.
 - Backend regression tests (6 passed), the frontend production build, and Flutter analysis
-  (no errors; informational lints remain) passed for this update.
-- Android release APKs built for version 1.25.0+34 against the production API. GitHub
-  publication is complete only after branch `master` and tag `mobile-v1.25.0` are pushed and
-  all three APK assets are visible on the release.
+  (no errors; 66 informational lints remain) passed for this update.
+- Android release APKs built for version 1.25.0+34 against the production API. Branch
+  `master` contains commit `a4f1d45`; tag `mobile-v1.25.0` was built successfully by GitHub
+  Actions run 37444335848, and all three ABI APKs are published at
+  https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.25.0.
