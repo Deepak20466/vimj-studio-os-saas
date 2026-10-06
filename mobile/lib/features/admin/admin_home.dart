@@ -67,35 +67,43 @@ class _AdminHomeState extends State<AdminHome> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (sheetContext) => SafeArea(
-        child: Wrap(
-          children: [
-            const Padding(
-                padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
-                child: Text('More',
-                    style:
-                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
-            for (int i = 0; i < _moreItems.length; i++)
+      builder: (sheetContext) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.65,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        builder: (context, scrollController) => SafeArea(
+          child: ListView(
+            controller: scrollController,
+            padding: EdgeInsets.zero,
+            children: [
+              const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+                  child: Text('More',
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold))),
+              for (int i = 0; i < _moreItems.length; i++)
+                ListTile(
+                  leading: Icon(_moreItems[i].icon),
+                  title: Text(_moreItems[i].label),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    setState(() => _index = _maxTabs + i);
+                  },
+                ),
+              const Divider(height: 1),
               ListTile(
-                leading: Icon(_moreItems[i].icon),
-                title: Text(_moreItems[i].label),
+                leading: const Icon(Icons.logout, color: AppColors.danger),
+                title: const Text('Logout',
+                    style: TextStyle(color: AppColors.danger)),
                 onTap: () {
                   Navigator.pop(sheetContext);
-                  setState(() => _index = _maxTabs + i);
+                  _logout();
                 },
               ),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.logout, color: AppColors.danger),
-              title: const Text('Logout',
-                  style: TextStyle(color: AppColors.danger)),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _logout();
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       ),
     );

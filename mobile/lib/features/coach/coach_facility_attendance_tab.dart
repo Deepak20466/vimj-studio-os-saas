@@ -227,15 +227,32 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
     return Column(
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => _goMonth(-1)),
-            Row(
-              children: [
-                Text(DateFormat('MMMM yyyy').format(_viewMonth), style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(width: 6),
-                TextButton(onPressed: _goToday, child: const Text('Today')),
-              ],
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(
+                      DateFormat('MMMM yyyy').format(_viewMonth),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  TextButton(
+                    onPressed: _goToday,
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      minimumSize: const Size(0, 40),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('Today'),
+                  ),
+                ],
+              ),
             ),
             IconButton(icon: const Icon(Icons.chevron_right), onPressed: () => _goMonth(1)),
           ],

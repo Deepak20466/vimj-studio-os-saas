@@ -583,13 +583,17 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                     ),
                     const SizedBox(height: 16),
                   ],
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    runSpacing: 4,
                     children: [
                       Text(
                           _unpaidOnly
                               ? 'Unpaid / Overdue Fees'
                               : 'All Fee Records',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.titleMedium),
                       Row(
                         mainAxisSize: MainAxisSize.min,

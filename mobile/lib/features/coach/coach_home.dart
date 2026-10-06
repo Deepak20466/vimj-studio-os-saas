@@ -53,26 +53,34 @@ class _CoachHomeState extends State<CoachHome> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (sheetContext) => SafeArea(
-        child: Wrap(
-          children: [
-            const Padding(
-                padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
-                child: Text('More',
-                    style:
-                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
-            for (final item in _moreItems)
-              ListTile(
-                leading: Icon(item.icon),
-                title: Text(item.label),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  Navigator.of(context)
-                      .push(MaterialPageRoute(builder: item.builder));
-                },
-              ),
-            const SizedBox(height: 8),
-          ],
+      builder: (sheetContext) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.65,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        builder: (context, scrollController) => SafeArea(
+          child: ListView(
+            controller: scrollController,
+            padding: EdgeInsets.zero,
+            children: [
+              const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+                  child: Text('More',
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold))),
+              for (final item in _moreItems)
+                ListTile(
+                  leading: Icon(item.icon),
+                  title: Text(item.label),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.of(context)
+                        .push(MaterialPageRoute(builder: item.builder));
+                  },
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       ),
     );

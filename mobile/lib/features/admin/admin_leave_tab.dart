@@ -186,8 +186,10 @@ class _AdminLeaveTabState extends State<AdminLeaveTab> {
                     ),
                   )),
             const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              runSpacing: 4,
               children: [
                 Text('Leave History', style: Theme.of(context).textTheme.titleLarge),
                 DropdownButton<String?>(
