@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from PIL import Image
 from app.database import Base, get_db
-from app.models import User, UserRole, Activity, CoachActivity, StudentEnrollment, ClassSession, StudentAttendance, AttendanceStatus, StudentFee
+from app.models import User, UserRole, Activity, CoachActivity, StudentEnrollment, ClassSession, StudentAttendance, AttendanceStatus, StudentFee, FeeStatus
 from app.routers import fees, students, receipts, reports, activities
 from app.security import require_admin, require_coach, require_admin_or_coach, get_current_user
 
@@ -68,6 +68,26 @@ class RequestedChanges(unittest.TestCase):
         for kind in ['students','attendance','revenue']:
             r = self.client.get('/reports',params={'month':9,'year':2026,'kind':kind,'fmt':'pdf'})
             self.assertTrue(r.content.startswith(b'%PDF'),r.text)
+    def test_coach_reports_include_fee_ledger_for_assigned_students_only(self):
+        assigned_paid = StudentFee(student_id=self.s1.id, month=9, year=2026, amount=Decimal('100'), product_amount=Decimal('20'), balance_amount=Decimal('0'), status=FeeStatus.PAID, due_date=date(2026,9,10))
+        assigned_pending_student = User(name="Second Yoga Student", email="yoga2@example.com", role=UserRole.STUDENT, password_hash="unused")
+        self.db.add(assigned_pending_student); self.db.flush()
+        self.db.add(StudentEnrollment(student_id=assigned_pending_student.id, activity_id=self.yoga.id))
+        assigned_pending = StudentFee(student_id=assigned_pending_student.id, month=9, year=2026, amount=Decimal('150'), product_amount=Decimal('0'), balance_amount=Decimal('50'), status=FeeStatus.UNPAID, due_date=date(2026,9,10))
+        other_student_fee = StudentFee(student_id=self.s2.id, month=9, year=2026, amount=Decimal('900'), product_amount=Decimal('0'), balance_amount=Decimal('900'), status=FeeStatus.UNPAID, due_date=date(2026,9,10))
+        self.db.add_all([assigned_paid, assigned_pending, other_student_fee])
+        self.db.add(StudentAttendance(student_id=self.s1.id, class_id=self.cls.id, status=AttendanceStatus.PRESENT, coach_id=self.coach.id))
+        self.db.commit()
+        self.app.dependency_overrides[require_admin_or_coach] = lambda: self.coach
+        report = self.client.get('/reports', params={'month':9,'year':2026}).json()
+        self.assertEqual(Decimal(report['fee_paid_total']), Decimal('120'))
+        self.assertEqual(Decimal(report['fee_pending_total']), Decimal('50'))
+        self.assertEqual(report['fee_paid_count'], 1)
+        self.assertEqual(report['fee_pending_count'], 1)
+        self.assertEqual(report['classes_done'], 1)
+        for kind in ['students_summary','classes','fees_paid','fees_pending']:
+            response = self.client.get('/reports', params={'month':9,'year':2026,'kind':kind,'fmt':'pdf'})
+            self.assertTrue(response.content.startswith(b'%PDF'), response.text)
     def test_dated_receipts_and_multiple_collections(self):
         payload = {'student_id':self.s1.id,'month':9,'year':2026,'amount':'100','product_amount':'25','billing_date':'2026-09-10'}
         for day in [10,11]:

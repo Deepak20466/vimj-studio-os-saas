@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { AttendanceAPI, ActivitiesAPI, StudentsAPI, CoachesAPI } from "../api/endpoints";
 import MonthlyReports from "../components/MonthlyReports";
+import { ReportsAPI } from "../api/endpoints";
+import { downloadBlob, blobErrorDetail } from "../utils/download";
 import StatusBadge from "../components/StatusBadge";
 import Modal from "../components/Modal";
 import { dismissItem, filterDismissed } from "../utils/dismissedItems";
@@ -16,6 +18,7 @@ const todayStr = () => {
 export default function Attendance() {
   const [missing, setMissing] = useState([]);
   const [missingLoading, setMissingLoading] = useState(true);
+  const [reportDate, setReportDate] = useState(todayStr());
   const [activities, setActivities] = useState([]);
   const [coaches, setCoaches] = useState([]);
 
@@ -205,6 +208,16 @@ export default function Attendance() {
 
   const coachName = (id) => coaches.find((c) => c.id === id)?.name || (id ? `#${id}` : "-");
 
+  const downloadAdminReport = async (kind, day = null) => {
+    const selected = day ? new Date(`${day}T00:00:00`) : new Date();
+    const params = { month: selected.getMonth() + 1, year: selected.getFullYear(), kind };
+    if (day) params.day = selected.getDate();
+    try {
+      const response = await ReportsAPI.pdf(params);
+      downloadBlob(response.data, `${kind}_${params.year}_${String(params.month).padStart(2, "0")}${day ? `_${day}` : ""}.pdf`, "application/pdf");
+    } catch (err) { toast.error((await blobErrorDetail(err)) || "Report download failed"); }
+  };
+
   const submitCoachManual = async (e) => {
     e.preventDefault();
     try {
@@ -272,6 +285,12 @@ export default function Attendance() {
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
+        <div className="toolbar" style={{ marginBottom: 12 }}>
+          <input aria-label="Classes report date" type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} />
+          <button className="btn btn-primary" onClick={() => downloadAdminReport("classes", reportDate)}>Selected Day Classes Done PDF</button>
+          <button className="btn btn-secondary" onClick={() => downloadAdminReport("fees_paid")}>Fees Paid PDF</button>
+          <button className="btn btn-secondary" onClick={() => downloadAdminReport("fees_pending")}>Fees Pending PDF</button>
+        </div>
         <h3 style={{ marginTop: 0 }}>Coaches Missing Attendance (Today)</h3>
         {missingLoading ? (
           <div className="empty-state">Loading...</div>

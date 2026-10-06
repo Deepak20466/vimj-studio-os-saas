@@ -5,6 +5,7 @@ import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/auth_storage.dart';
 import '../../core/models.dart';
+import '../../core/export_helper.dart';
 import '../shared/notification_bell_action.dart';
 
 String _isoDate(DateTime d) => DateFormat('yyyy-MM-dd').format(d);
@@ -104,6 +105,17 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
       _selectedDate = _isoDate(now);
     });
     _loadMonthRecords();
+  }
+
+  Future<void> _export(String kind, {String? day}) async {
+    try {
+      final query = <String, dynamic>{'month': _viewMonth.month, 'year': _viewMonth.year, 'kind': kind, 'fmt': 'pdf'};
+      if (day != null) query['day'] = int.parse(day.substring(8, 10));
+      final bytes = await ApiClient.instance.getBytes('/reports', query: query);
+      await shareExportedFile(bytes, '${kind}_${_viewMonth.year}_${_viewMonth.month}${day == null ? '' : '_$day'}.pdf');
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
   }
 
   Color _statusColor(String status) {
@@ -339,6 +351,12 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            Wrap(spacing: 8, children: [
+              OutlinedButton(onPressed: _selectedDate == null ? null : () => _export('classes', day: _selectedDate), child: const Text('Day Classes PDF')),
+              OutlinedButton(onPressed: () => _export('students_summary'), child: const Text('Monthly Attendance & Classes PDF')),
+              OutlinedButton(onPressed: () => _export('fees_paid'), child: const Text('Fees Paid PDF')),
+              OutlinedButton(onPressed: () => _export('fees_pending'), child: const Text('Fees Pending PDF')),
+            ]),
             Card(
               child: Padding(padding: const EdgeInsets.all(14), child: _buildCalendar()),
             ),

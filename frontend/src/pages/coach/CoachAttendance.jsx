@@ -5,6 +5,8 @@ import { useAuth } from "../../context/AuthContext";
 import { CoachSelfAPI, AttendanceAPI } from "../../api/endpoints";
 import StatusBadge from "../../components/StatusBadge";
 import Modal from "../../components/Modal";
+import { ReportsAPI } from "../../api/endpoints";
+import { downloadBlob, blobErrorDetail } from "../../utils/download";
 
 const FACILITY_DOT_COLOR = { PRESENT: "var(--success)", ABSENT: "var(--danger)", NOT_CONFIRM: "var(--info)" };
 const STUDENT_DOT_COLOR = { PRESENT: "var(--success)", ABSENT: "var(--danger)", LEAVE: "var(--warning)", NOT_CONFIRM: "var(--info)" };
@@ -88,6 +90,15 @@ export default function CoachAttendance() {
     return <span className={`badge ${cls}`}>{status === "PENDING" ? "Awaiting Admin" : status}</span>;
   };
 
+  const downloadCoachReport = async (kind, day = null) => {
+    try {
+      const params = { month: viewDate.getMonth() + 1, year: viewDate.getFullYear(), kind };
+      if (day) params.day = Number(day.slice(8, 10));
+      const response = await ReportsAPI.pdf(params);
+      downloadBlob(response.data, `${kind}_${params.year}_${String(params.month).padStart(2, "0")}${day ? `_${day}` : ""}.pdf`, "application/pdf");
+    } catch (err) { toast.error((await blobErrorDetail(err)) || "Report download failed"); }
+  };
+
   const selectedFacility = selectedDate ? facilityByDate[selectedDate] : null;
   const selectedStudentRecords = selectedDate ? studentByDate[selectedDate] || [] : [];
 
@@ -98,6 +109,12 @@ export default function CoachAttendance() {
       </div>
 
       <div className="card">
+        <div className="toolbar" style={{ marginBottom: 12 }}>
+          <button className="btn btn-primary" onClick={() => downloadCoachReport("classes", selectedDate)}>Selected Day Class Summary PDF</button>
+          <button className="btn btn-secondary" onClick={() => downloadCoachReport("students_summary")}>Monthly Attendance &amp; Classes PDF</button>
+          <button className="btn btn-secondary" onClick={() => downloadCoachReport("fees_paid")}>Fees Paid PDF</button>
+          <button className="btn btn-secondary" onClick={() => downloadCoachReport("fees_pending")}>Fees Pending PDF</button>
+        </div>
         <div className="cal-header">
           <button className="btn btn-secondary btn-sm" onClick={() => goMonth(-1)}>
             ← Prev

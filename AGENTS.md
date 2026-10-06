@@ -107,7 +107,16 @@ following additional updates:
 
 ### Documentation and Release Scope
 
-- This documentation update records the implementation status only.
-- No APK was built, uploaded, tagged, or released as part of this update.
-- Existing APK/release references above describe prior verification history and are not a
-  new release instruction.
+- Attendance and fee PDF reports are available from Admin and Coach dashboards on web and
+  mobile: selected-day completed classes, monthly student attendance with class/record
+  totals, fees paid, and fees pending.
+- Admin fee exports use the full monthly student-fee ledger. Coach fee exports use the same
+  ledger but are restricted server-side to students enrolled in activities assigned to that
+  coach; they are not limited to receipts submitted by that coach.
+- Coach attendance and completed-class reports remain scoped to that coach. Coaches cannot
+  export other coaches' attendance or fees for students outside their assigned activities.
+- Backend regression tests (6 passed), the frontend production build, and Flutter analysis
+  (no errors; informational lints remain) passed for this update.
+- Android release APKs built for version 1.25.0+34 against the production API. GitHub
+  publication is complete only after branch `master` and tag `mobile-v1.25.0` are pushed and
+  all three APK assets are visible on the release.

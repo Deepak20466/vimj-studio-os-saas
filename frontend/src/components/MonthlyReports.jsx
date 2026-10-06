@@ -22,9 +22,9 @@ export default function MonthlyReports() {
   return <div className="card"><h2>Monthly Reports &amp; Overall Revenue</h2>
     <div className="toolbar"><input aria-label="Report month" type="month" value={period} onChange={e => setPeriod(e.target.value)} />
     <button className="btn btn-secondary" onClick={() => { const d = new Date(year, month - 2, 1); setPeriod(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); }} disabled={!period}>Previous Month</button>
-    {[['students', 'Student Attendance PDF'], ['attendance', 'Activity Attendance PDF'], ['revenue', 'Activity & Overall Revenue PDF']].map(([kind, label]) => <button key={kind} className="btn btn-primary" disabled={!data || loading} onClick={() => pdf(kind)}>{label}</button>)}</div>
+    {[['students_summary', 'Student Attendance & Classes PDF'], ['attendance', 'Activity Attendance PDF'], ['classes', 'Classes Done PDF'], ['fees_paid', 'Fees Paid PDF'], ['fees_pending', 'Fees Pending PDF'], ['revenue', 'Activity & Overall Revenue PDF']].map(([kind, label]) => <button key={kind} className="btn btn-primary" disabled={!data || loading} onClick={() => pdf(kind)}>{label}</button>)}</div>
     {loading && <p>Loading reports...</p>}
-    {data && <><p><strong>Overall revenue: Rs {Number(data.total_revenue).toFixed(2)}</strong> (includes products: Rs {Number(data.product_revenue).toFixed(2)})</p><p>{data.revenue_basis}</p>
+    {data && <><p><strong>Classes done: {data.classes_done}</strong> · Fees paid: Rs {Number(data.fee_paid_total || 0).toFixed(2)} · Fees pending: Rs {Number(data.fee_pending_total || 0).toFixed(2)}</p><p><strong>Overall revenue: Rs {Number(data.total_revenue).toFixed(2)}</strong> (includes products: Rs {Number(data.product_revenue).toFixed(2)})</p><p>{data.revenue_basis}</p>
     <table><thead><tr><th>Activity</th><th>Present</th><th>Absent</th><th>Leave</th><th>Not Confirm</th><th>Revenue</th></tr></thead><tbody>{data.activities.map(a => <tr key={a.activity}><td>{a.activity}</td><td>{a.present}</td><td>{a.absent}</td><td>{a.leave}</td><td>{a.not_confirm}</td><td>Rs {Number(a.revenue).toFixed(2)}</td></tr>)}<tr><td>Unassigned revenue</td><td colSpan={5}>Rs {Number(data.unassigned_revenue).toFixed(2)}</td></tr></tbody></table></>}
   </div>;
 }

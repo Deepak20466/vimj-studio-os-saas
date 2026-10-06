@@ -1,4 +1,5 @@
 import 'admin_reports_tab.dart';
+import '../../core/export_helper.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
@@ -37,6 +38,18 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
   DateTime? _coachFilterDateFrom;
   DateTime? _coachFilterDateTo;
   int? _removingCoachId;
+
+  Future<void> _exportReport(String kind, {DateTime? date}) async {
+    final selected = date ?? DateTime.now();
+    try {
+      final query = <String, dynamic>{'month': selected.month, 'year': selected.year, 'kind': kind, 'fmt': 'pdf'};
+      if (date != null) query['day'] = selected.day;
+      final bytes = await ApiClient.instance.getBytes('/reports', query: query);
+      await shareExportedFile(bytes, '${kind}_${selected.year}_${selected.month}${date == null ? '' : '_${selected.day}'}.pdf');
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
 
   @override
   void initState() {
@@ -412,6 +425,14 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                 children: [
                   FutureBuilder<dynamic>(future: ApiClient.instance.get('/reports', query: {'month': DateTime.now().month, 'year': DateTime.now().year}), builder: (context, snapshot) { if (snapshot.hasError) return const Text('Revenue could not be loaded'); if (!snapshot.hasData) return const Text('Loading overall revenue...'); return Text('Overall revenue this month: Rs ${snapshot.data['total_revenue']} (products included)', style: const TextStyle(fontWeight: FontWeight.bold)); }),
                   ElevatedButton.icon(icon: const Icon(Icons.picture_as_pdf), label: const Text("Overall Revenue & Attendance Reports"), onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => Scaffold(appBar: AppBar(title: const Text("Reports")), body: const AdminReportsTab())))),
+                  Wrap(spacing: 8, children: [
+                    OutlinedButton(onPressed: () async {
+                      final picked = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2100));
+                      if (picked != null) _exportReport('classes', date: picked);
+                    }, child: const Text('Choose Day Classes PDF')),
+                    OutlinedButton(onPressed: () => _exportReport('fees_paid'), child: const Text('Fees Paid PDF')),
+                    OutlinedButton(onPressed: () => _exportReport('fees_pending'), child: const Text('Fees Pending PDF')),
+                  ]),
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 4, horizontal: 4),
                     child: Text('Coaches Missing Attendance Today', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
