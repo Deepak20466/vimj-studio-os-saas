@@ -23,6 +23,19 @@ class _ClassesTabState extends State<ClassesTab> {
   final Map<int, bool> _groupPhotoOverride =
       {}; // classId -> has photo, for instant UI feedback after upload
   int? _photoBusyClassId;
+  String _search = '';
+  String? _photoFilter;
+  List<ClassSession> get _visibleClasses => _classes
+      .where((c) =>
+          (_search.isEmpty ||
+              'class ${c.id} activity ${c.activityId} ${c.startTime} ${c.endTime}'
+                  .toLowerCase()
+                  .contains(_search.trim().toLowerCase())) &&
+          (_photoFilter == null ||
+              (_photoFilter == 'PHOTO'
+                  ? _hasGroupPhoto(c)
+                  : !_hasGroupPhoto(c))))
+      .toList();
 
   @override
   void initState() {
@@ -132,6 +145,41 @@ class _ClassesTabState extends State<ClassesTab> {
     );
   }
 
+  Future<void> _deleteGroupPhoto(ClassSession c) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete group photo?'),
+        content: const Text('The class and attendance will remain.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _photoBusyClassId = c.id);
+    try {
+      await ApiClient.instance
+          .delete('/activities/classes/${c.id}/group-photo');
+      if (mounted) {
+        setState(() => _groupPhotoOverride[c.id] = false);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Group photo deleted')));
+      }
+    } on ApiException catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _photoBusyClassId = null);
+    }
+  }
+
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -180,8 +228,41 @@ class _ClassesTabState extends State<ClassesTab> {
               ),
             ),
           ),
+          Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: TextField(
+                  decoration: InputDecoration(
+                      labelText: 'Search classes',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _search.isEmpty
+                          ? null
+                          : IconButton(
+                              onPressed: () => setState(() => _search = ''),
+                              icon: const Icon(Icons.clear))),
+                  onChanged: (v) => setState(() => _search = v))),
+          Wrap(spacing: 8, children: [
+            DropdownButton<String?>(
+                value: _photoFilter,
+                hint: const Text('All classes'),
+                items: const [
+                  DropdownMenuItem<String?>(
+                      value: null, child: Text('All classes')),
+                  DropdownMenuItem<String?>(
+                      value: 'PHOTO', child: Text('Photo uploaded')),
+                  DropdownMenuItem<String?>(
+                      value: 'NO_PHOTO', child: Text('No photo'))
+                ],
+                onChanged: (v) => setState(() => _photoFilter = v)),
+            if (_search.isNotEmpty || _photoFilter != null)
+              TextButton(
+                  onPressed: () => setState(() {
+                        _search = '';
+                        _photoFilter = null;
+                      }),
+                  child: const Text('Clear filters'))
+          ]),
           Expanded(
-            child: _loading
+            child: _loading && _classes.isEmpty
                 ? const Center(child: CircularProgressIndicator())
                 : _classes.isEmpty
                     ? const Padding(
@@ -195,83 +276,98 @@ class _ClassesTabState extends State<ClassesTab> {
                           ),
                         ),
                       )
-                    : ListView.builder(
-                        itemCount: _classes.length,
-                        itemBuilder: (context, i) {
-                          final c = _classes[i];
-                          final ended = _hasEnded(c);
-                          return Card(
-                            margin: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 6),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 4),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  ListTile(
-                                    leading: const Icon(Icons.fitness_center),
-                                    title:
-                                        Text('${c.startTime} - ${c.endTime}'),
-                                    subtitle: Text(
-                                        'Class #${c.id} · Activity #${c.activityId}'),
-                                    trailing: ElevatedButton(
-                                      onPressed: () =>
-                                          Navigator.of(context).push(
-                                        MaterialPageRoute(
-                                            builder: (_) =>
-                                                MarkAttendanceScreen(
-                                                    classSession: c)),
+                    : _visibleClasses.isEmpty
+                        ? const Center(child: Text('No results found.'))
+                        : ListView.builder(
+                            itemCount: _visibleClasses.length,
+                            itemBuilder: (context, i) {
+                              final c = _visibleClasses[i];
+                              final ended = _hasEnded(c);
+                              return Card(
+                                margin: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 6),
+                                child: Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 4),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      ListTile(
+                                        leading:
+                                            const Icon(Icons.fitness_center),
+                                        title: Text(
+                                            '${c.startTime} - ${c.endTime}'),
+                                        subtitle: Text(
+                                            'Class #${c.id} · Activity #${c.activityId}'),
+                                        trailing: ElevatedButton(
+                                          onPressed: () =>
+                                              Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                                builder: (_) =>
+                                                    MarkAttendanceScreen(
+                                                        classSession: c)),
+                                          ),
+                                          child: const Text('Mark'),
+                                        ),
                                       ),
-                                      child: const Text('Mark'),
-                                    ),
+                                      if (ended)
+                                        Padding(
+                                          padding: const EdgeInsets.fromLTRB(
+                                              16, 0, 16, 8),
+                                          child: Wrap(
+                                            spacing: 8,
+                                            runSpacing: 4,
+                                            crossAxisAlignment:
+                                                WrapCrossAlignment.center,
+                                            children: [
+                                              const Text('Class ended',
+                                                  style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.grey)),
+                                              if (_photoBusyClassId == c.id)
+                                                const SizedBox(
+                                                    width: 16,
+                                                    height: 16,
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                            strokeWidth: 2))
+                                              else if (_hasGroupPhoto(c)) ...[
+                                                OutlinedButton.icon(
+                                                  onPressed: () =>
+                                                      _viewGroupPhoto(c),
+                                                  icon: const Icon(Icons.photo,
+                                                      size: 16),
+                                                  label: const Text(
+                                                      'View Group Photo'),
+                                                ),
+                                                IconButton(
+                                                  tooltip: 'Delete group photo',
+                                                  onPressed: () =>
+                                                      _deleteGroupPhoto(c),
+                                                  icon: const Icon(
+                                                      Icons.delete_outline,
+                                                      color: Colors.red),
+                                                ),
+                                              ] else
+                                                OutlinedButton.icon(
+                                                  onPressed: () =>
+                                                      _captureGroupPhoto(c),
+                                                  icon: const Icon(
+                                                      Icons.camera_alt,
+                                                      size: 16),
+                                                  label:
+                                                      const Text('Group Photo'),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
                                   ),
-                                  if (ended)
-                                    Padding(
-                                      padding: const EdgeInsets.fromLTRB(
-                                          16, 0, 16, 8),
-                                      child: Wrap(
-                                        spacing: 8,
-                                        runSpacing: 4,
-                                        crossAxisAlignment:
-                                            WrapCrossAlignment.center,
-                                        children: [
-                                          const Text('Class ended',
-                                              style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: Colors.grey)),
-                                          if (_photoBusyClassId == c.id)
-                                            const SizedBox(
-                                                width: 16,
-                                                height: 16,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                        strokeWidth: 2))
-                                          else if (_hasGroupPhoto(c))
-                                            OutlinedButton.icon(
-                                              onPressed: () =>
-                                                  _viewGroupPhoto(c),
-                                              icon: const Icon(Icons.photo,
-                                                  size: 16),
-                                              label: const Text(
-                                                  'View Group Photo'),
-                                            )
-                                          else
-                                            OutlinedButton.icon(
-                                              onPressed: () =>
-                                                  _captureGroupPhoto(c),
-                                              icon: const Icon(Icons.camera_alt,
-                                                  size: 16),
-                                              label: const Text('Group Photo'),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                                ),
+                              );
+                            },
+                          ),
           ),
         ],
       ),

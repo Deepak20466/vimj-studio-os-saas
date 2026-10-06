@@ -15,7 +15,16 @@ class AdminDashboardTab extends StatefulWidget {
 
 class _AdminDashboardTabState extends State<AdminDashboardTab> {
   bool _loading = false;
-  bool _loaded = false;
+  bool _summaryLoaded = false;
+  bool _summaryFailed = false;
+  bool _feeGraphLoaded = false;
+  bool _feeGraphFailed = false;
+  bool _missingLoaded = false;
+  bool _missingFailed = false;
+  bool _activityLoaded = false;
+  bool _activityFailed = false;
+  bool _revenueFailed = false;
+  bool _revenueLoading = false;
   Map<String, dynamic>? _summary;
   Map<String, dynamic>? _feeGraph;
   List<dynamic> _missing = [];
@@ -23,6 +32,13 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
   String _revenuePeriod = 'month';
   DateTime _revenueMonth = DateTime.now();
   Map<String, dynamic>? _revenue;
+  String _missingSearch = '';
+  List<dynamic> get _visibleMissing => _missing.where((item) {
+        final m = item as Map<String, dynamic>;
+        return '${m['coach_name'] ?? ''} ${m['activity_name'] ?? ''} ${m['date'] ?? ''} ${m['end_time'] ?? ''}'
+            .toLowerCase()
+            .contains(_missingSearch.trim().toLowerCase());
+      }).toList();
 
   String _money(dynamic value) =>
       '₹${(value is num ? value : double.tryParse('$value') ?? 0).toStringAsFixed(2)}';
@@ -34,37 +50,90 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
-    Future<void> loadPart(Future<dynamic> request, Future<void> Function(dynamic) apply) async {
+    setState(() {
+      _loading = true;
+      _summaryFailed = false;
+      _feeGraphFailed = false;
+      _missingFailed = false;
+      _activityFailed = false;
+      _revenueFailed = false;
+      _revenueLoading = true;
+    });
+    Future<void> loadPart(
+      Future<dynamic> request,
+      Future<void> Function(dynamic) apply,
+      void Function() markLoaded,
+      void Function() markFailed,
+    ) async {
       try {
         await apply(await request);
-        if (mounted) setState(() {});
       } on ApiException catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        markFailed();
+        if (mounted)
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(e.message)));
+      } catch (_) {
+        markFailed();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('Unable to load a dashboard section.')),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            markLoaded();
+          });
+        }
       }
     }
+
     try {
       await Future.wait([
-        loadPart(ApiClient.instance.get('/dashboard/summary'), (v) async => _summary = v as Map<String, dynamic>),
-        loadPart(ApiClient.instance.get('/dashboard/fee-status'), (v) async => _feeGraph = v as Map<String, dynamic>),
-        loadPart(ApiClient.instance.get('/attendance/daily-missing'), (v) async {
-          _missing = await DismissedItems.filter(_missingAttendanceDismissKey, v as List<dynamic>, (m) => (m as Map<String, dynamic>)['class_id'] as int);
-        }),
-        loadPart(ApiClient.instance.get('/dashboard/activity-attendance'), (v) async => _activityBreakdown = (v as Map<String, dynamic>)['points'] as List<dynamic>? ?? []),
-        loadPart(ApiClient.instance.get('/dashboard/revenue', query: {
-          'period': 'month',
-          'month': DateTime.now().month,
-          'year': DateTime.now().year
-        }), (v) async => _revenue = v as Map<String, dynamic>),
+        loadPart(
+            ApiClient.instance.get('/dashboard/summary'),
+            (v) async => _summary = v as Map<String, dynamic>,
+            () => _summaryLoaded = true,
+            () => _summaryFailed = true),
+        loadPart(
+            ApiClient.instance.get('/dashboard/fee-status'),
+            (v) async => _feeGraph = v as Map<String, dynamic>,
+            () => _feeGraphLoaded = true,
+            () => _feeGraphFailed = true),
+        loadPart(ApiClient.instance.get('/attendance/daily-missing'),
+            (v) async {
+          _missing = await DismissedItems.filter(
+              _missingAttendanceDismissKey,
+              v as List<dynamic>,
+              (m) => (m as Map<String, dynamic>)['class_id'] as int);
+        }, () => _missingLoaded = true, () => _missingFailed = true),
+        loadPart(
+            ApiClient.instance.get('/dashboard/activity-attendance'),
+            (v) async => _activityBreakdown =
+                (v as Map<String, dynamic>)['points'] as List<dynamic>? ?? [],
+            () => _activityLoaded = true,
+            () => _activityFailed = true),
+        loadPart(
+            ApiClient.instance.get('/dashboard/revenue', query: {
+              'period': 'month',
+              'month': DateTime.now().month,
+              'year': DateTime.now().year
+            }),
+            (v) async => _revenue = v as Map<String, dynamic>, () {
+          _revenueLoading = false;
+        }, () => _revenueFailed = true),
       ]);
     } finally {
-      if (mounted) setState(() { _loading = false; _loaded = true; });
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _loadRevenue(String period, {DateTime? month}) async {
     setState(() {
       _revenuePeriod = period;
+      _revenueLoading = true;
+      _revenueFailed = false;
       if (month != null) _revenueMonth = month;
     });
     try {
@@ -75,9 +144,19 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
       }) as Map<String, dynamic>;
       if (mounted) setState(() {});
     } on ApiException catch (e) {
+      _revenueFailed = true;
       if (mounted)
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      _revenueFailed = true;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Revenue details are unavailable.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _revenueLoading = false);
     }
   }
 
@@ -133,7 +212,6 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_loaded && _loading) return const Center(child: CircularProgressIndicator());
     final s = _summary ?? {};
     final fees = _feeGraph ?? {'paid': 0, 'unpaid': 0, 'overdue': 0};
     final paid = (fees['paid'] as num?)?.toDouble() ?? 0;
@@ -147,7 +225,7 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
         padding: const EdgeInsets.all(16),
         children: [
           if (_loading) const LinearProgressIndicator(),
-          if (_summary == null && !_loading)
+          if (_summaryFailed && _summary == null)
             Card(
                 child: ListTile(
                     title: const Text('Dashboard data is unavailable'),
@@ -161,10 +239,15 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
             mainAxisSpacing: 12,
             childAspectRatio: 1.45,
             children: [
-              _statCard('Students', '${s['total_students'] ?? 0}'),
-              _statCard('Coaches', '${s['total_coaches'] ?? 0}'),
-              _statCard('Classes this month',
-                  '${s['total_classes_this_month'] ?? 0}'),
+              _statCard('Students',
+                  _summaryLoaded ? '${s['total_students'] ?? '—'}' : '…'),
+              _statCard('Coaches',
+                  _summaryLoaded ? '${s['total_coaches'] ?? '—'}' : '…'),
+              _statCard(
+                  'Classes this month',
+                  _summaryLoaded
+                      ? '${s['total_classes_this_month'] ?? '—'}'
+                      : '…'),
               _statCard(
                   _revenuePeriod == 'month'
                       ? 'Monthly revenue'
@@ -172,8 +255,8 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
                           ? 'Yearly revenue'
                           : 'Overall revenue',
                   '₹${_revenue?['total_revenue'] ?? s['monthly_revenue'] ?? 0}'),
-              _statCard(
-                  'Unpaid/overdue fees', '${s['unpaid_fees_count'] ?? 0}'),
+              _statCard('Unpaid/overdue fees',
+                  _summaryLoaded ? '${s['unpaid_fees_count'] ?? '—'}' : '…'),
             ],
           ),
           Card(
@@ -227,6 +310,17 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
                               selected: _revenuePeriod == 'overall',
                               onSelected: (_) => _loadRevenue('overall')),
                         ]),
+                        if (_revenueLoading)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 12),
+                            child: LinearProgressIndicator(),
+                          ),
+                        if (_revenueFailed && _revenue == null)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 10),
+                            child: Text(
+                                'Revenue details are unavailable. Pull to retry.'),
+                          ),
                         if (_revenue != null)
                           Wrap(spacing: 12, runSpacing: 4, children: [
                             Text('Fees ${_money(_revenue!['fee_revenue'])}'),
@@ -249,7 +343,17 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
                     style:
                         TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 12),
-                if (total == 0)
+                if (!_feeGraphLoaded)
+                  const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(child: CircularProgressIndicator()))
+                else if (_feeGraphFailed && _feeGraph == null)
+                  const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(
+                          child: Text(
+                              'Fee status is unavailable. Pull to retry.')))
+                else if (total == 0)
                   const Padding(
                       padding: EdgeInsets.symmetric(vertical: 24),
                       child: Center(child: Text('No fee data yet.')))
@@ -309,7 +413,17 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
                     style:
                         TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 12),
-                if (_activityBreakdown.isEmpty)
+                if (!_activityLoaded)
+                  const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(child: CircularProgressIndicator()))
+                else if (_activityFailed && _activityBreakdown.isEmpty)
+                  const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(
+                          child: Text(
+                              'Activity data is unavailable. Pull to retry.')))
+                else if (_activityBreakdown.isEmpty)
                   const Padding(
                       padding: EdgeInsets.symmetric(vertical: 24),
                       child: Center(
@@ -383,13 +497,37 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
                     style:
                         TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 8),
-                if (_missing.isEmpty)
+                TextField(
+                    decoration: InputDecoration(
+                        labelText: 'Search coach, activity, or date',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: _missingSearch.isEmpty
+                            ? null
+                            : IconButton(
+                                onPressed: () =>
+                                    setState(() => _missingSearch = ''),
+                                icon: const Icon(Icons.clear))),
+                    onChanged: (v) => setState(() => _missingSearch = v)),
+                if (!_missingLoaded)
+                  const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Center(child: CircularProgressIndicator()))
+                else if (_missingFailed && _missing.isEmpty)
+                  const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Text(
+                          'Attendance alerts are unavailable. Pull to retry.'))
+                else if (_missing.isEmpty)
                   const Padding(
                       padding: EdgeInsets.symmetric(vertical: 12),
                       child: Text(
                           'All coaches have marked attendance for ended classes today.'))
+                else if (_visibleMissing.isEmpty)
+                  const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Text('No results found.'))
                 else
-                  ..._missing.map((m) => ListTile(
+                  ..._visibleMissing.map((m) => ListTile(
                         contentPadding: EdgeInsets.zero,
                         title: Text(m['coach_name'] ?? '-'),
                         subtitle: Text(

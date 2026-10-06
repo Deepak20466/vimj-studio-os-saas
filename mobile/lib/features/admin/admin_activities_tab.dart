@@ -16,6 +16,18 @@ class AdminActivitiesTab extends StatefulWidget {
 class _AdminActivitiesTabState extends State<AdminActivitiesTab> {
   List<Activity> _activities = [];
   bool _loading = true;
+  String _search = '';
+  String? _capacityFilter;
+  List<Activity> get _visibleActivities => _activities
+      .where((a) =>
+          '${a.name} ${a.capacity} ${a.monthlyFee}'
+              .toLowerCase()
+              .contains(_search.trim().toLowerCase()) &&
+          (_capacityFilter == null ||
+              (_capacityFilter == 'SMALL'
+                  ? a.capacity < 20
+                  : a.capacity >= 20)))
+      .toList();
 
   @override
   void initState() {
@@ -102,8 +114,41 @@ class _AdminActivitiesTabState extends State<AdminActivitiesTab> {
                 label: const Text('Coach Session Photos'),
               )),
         ),
+        Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: Column(children: [
+              TextField(
+                  decoration: InputDecoration(
+                      labelText: 'Search activities',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _search.isEmpty
+                          ? null
+                          : IconButton(
+                              onPressed: () => setState(() => _search = ''),
+                              icon: const Icon(Icons.clear))),
+                  onChanged: (v) => setState(() => _search = v)),
+              DropdownButtonFormField<String?>(
+                  value: _capacityFilter,
+                  decoration: const InputDecoration(labelText: 'Capacity'),
+                  items: const [
+                    DropdownMenuItem<String?>(
+                        value: null, child: Text('All capacities')),
+                    DropdownMenuItem(value: 'SMALL', child: Text('Under 20')),
+                    DropdownMenuItem(value: 'LARGE', child: Text('20 or more'))
+                  ],
+                  onChanged: (v) => setState(() => _capacityFilter = v)),
+              if (_search.isNotEmpty || _capacityFilter != null)
+                Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                        onPressed: () => setState(() {
+                              _search = '';
+                              _capacityFilter = null;
+                            }),
+                        child: const Text('Clear filters')))
+            ])),
         Expanded(
-            child: _loading
+            child: _loading && _activities.isEmpty
                 ? const Center(child: CircularProgressIndicator())
                 : RefreshIndicator(
                     onRefresh: _load,
@@ -114,61 +159,66 @@ class _AdminActivitiesTabState extends State<AdminActivitiesTab> {
                                 child:
                                     Center(child: Text('No activities yet.')))
                           ])
-                        : ListView.builder(
-                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
-                            itemCount: _activities.length,
-                            itemBuilder: (context, i) {
-                              final a = _activities[i];
-                              return Card(
-                                margin: const EdgeInsets.only(bottom: 10),
-                                child: ListTile(
-                                  leading: const CircleAvatar(
-                                      backgroundColor: AppColors.brandLight,
-                                      child: Icon(Icons.event,
-                                          color: AppColors.brandOrange)),
-                                  title: Text(a.name,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold)),
-                                  subtitle: Text(
-                                      'Capacity: ${a.capacity} · Monthly fee: ₹${a.monthlyFee}'),
-                                  trailing: PopupMenuButton<String>(
-                                    onSelected: (v) {
-                                      if (v == 'manage') {
-                                        Navigator.of(context).push(
-                                            MaterialPageRoute(
-                                                builder: (_) =>
-                                                    _ManageActivityScreen(
-                                                        activity: a)));
-                                      }
-                                      if (v == 'sessions') {
-                                        Navigator.of(context).push(
-                                            MaterialPageRoute(
-                                                builder: (_) =>
-                                                    ActivitySessionsScreen(
-                                                        activity: a)));
-                                      }
-                                      if (v == 'edit') _openForm(activity: a);
-                                      if (v == 'delete') _remove(a);
-                                    },
-                                    itemBuilder: (_) => [
-                                      const PopupMenuItem(
-                                          value: 'manage',
-                                          child:
-                                              Text('Manage (Classes/Roster)')),
-                                      const PopupMenuItem(
-                                          value: 'sessions',
-                                          child: Text('Sessions')),
-                                      const PopupMenuItem(
-                                          value: 'edit', child: Text('Edit')),
-                                      const PopupMenuItem(
-                                          value: 'delete',
-                                          child: Text('Delete')),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
+                        : _visibleActivities.isEmpty
+                            ? const Center(child: Text('No results found.'))
+                            : ListView.builder(
+                                padding:
+                                    const EdgeInsets.fromLTRB(12, 12, 12, 90),
+                                itemCount: _visibleActivities.length,
+                                itemBuilder: (context, i) {
+                                  final a = _visibleActivities[i];
+                                  return Card(
+                                    margin: const EdgeInsets.only(bottom: 10),
+                                    child: ListTile(
+                                      leading: const CircleAvatar(
+                                          backgroundColor: AppColors.brandLight,
+                                          child: Icon(Icons.event,
+                                              color: AppColors.brandOrange)),
+                                      title: Text(a.name,
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.bold)),
+                                      subtitle: Text(
+                                          'Capacity: ${a.capacity} · Monthly fee: ₹${a.monthlyFee}'),
+                                      trailing: PopupMenuButton<String>(
+                                        onSelected: (v) {
+                                          if (v == 'manage') {
+                                            Navigator.of(context).push(
+                                                MaterialPageRoute(
+                                                    builder: (_) =>
+                                                        _ManageActivityScreen(
+                                                            activity: a)));
+                                          }
+                                          if (v == 'sessions') {
+                                            Navigator.of(context).push(
+                                                MaterialPageRoute(
+                                                    builder: (_) =>
+                                                        ActivitySessionsScreen(
+                                                            activity: a)));
+                                          }
+                                          if (v == 'edit')
+                                            _openForm(activity: a);
+                                          if (v == 'delete') _remove(a);
+                                        },
+                                        itemBuilder: (_) => [
+                                          const PopupMenuItem(
+                                              value: 'manage',
+                                              child: Text(
+                                                  'Manage (Classes/Roster)')),
+                                          const PopupMenuItem(
+                                              value: 'sessions',
+                                              child: Text('Sessions')),
+                                          const PopupMenuItem(
+                                              value: 'edit',
+                                              child: Text('Edit')),
+                                          const PopupMenuItem(
+                                              value: 'delete',
+                                              child: Text('Delete')),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
                   )),
       ]),
     );
@@ -240,7 +290,7 @@ class _SessionPhotoGalleryState extends State<_SessionPhotoGallery> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Coach Session Photos')),
-        body: _loading
+        body: _loading && _photos.isEmpty
             ? const Center(child: CircularProgressIndicator())
             : _error != null
                 ? Center(
@@ -670,7 +720,7 @@ class _ManageActivityScreenState extends State<_ManageActivityScreen>
               _tabController.index == 0 ? 'Schedule Class' : 'Enroll Student'),
         ),
       ),
-      body: _loading
+      body: _loading && _classes.isEmpty && _roster.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : TabBarView(
               controller: _tabController,
@@ -723,9 +773,16 @@ class _ManageActivityScreenState extends State<_ManageActivityScreen>
                     Padding(
                       padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
                       child: TextField(
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                             hintText: 'Search roster by name or email...',
-                            prefixIcon: Icon(Icons.search)),
+                            prefixIcon: Icon(Icons.search),
+                            suffixIcon: _rosterSearch.isEmpty
+                                ? null
+                                : IconButton(
+                                    onPressed: () =>
+                                        setState(() => _rosterSearch = ''),
+                                    icon: const Icon(Icons.clear),
+                                    tooltip: 'Clear search')),
                         onChanged: (v) => setState(() => _rosterSearch = v),
                       ),
                     ),

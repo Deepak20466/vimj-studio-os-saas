@@ -28,6 +28,9 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
   List<AdminAttendanceRecord> _records = [];
   bool _recordsLoading = true;
   String _attendanceSearch = '';
+  String? _attendanceStatusFilter;
+  String? _approvalFilter;
+  int? _activityFilter;
 
   DateTime get _monthStart => DateTime(_viewMonth.year, _viewMonth.month, 1);
   DateTime get _monthEnd => DateTime(_viewMonth.year, _viewMonth.month + 1, 0);
@@ -270,12 +273,12 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
     final facility = _facilityByDate[key];
     final students = _studentByDate[key] ?? const <AdminAttendanceRecord>[];
     final query = _attendanceSearch.trim().toLowerCase();
-    final visibleStudents = students.where((r) => query.isEmpty || [
+    final visibleStudents = students.where((r) => (query.isEmpty || [
       r.studentName,
       r.activityName,
       r.status,
       r.approvalStatus,
-    ].any((value) => value.toLowerCase().contains(query))).toList();
+    ].any((value) => value.toLowerCase().contains(query))) && (_attendanceStatusFilter == null || r.status == _attendanceStatusFilter) && (_approvalFilter == null || r.approvalStatus == _approvalFilter) && (_activityFilter == null || r.activityId == _activityFilter)).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -319,6 +322,7 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
           onChanged: (value) => setState(() => _attendanceSearch = value),
         ),
         const SizedBox(height: 8),
+        Wrap(spacing: 8, children: [DropdownButton<String?>(value: _attendanceStatusFilter, hint: const Text('All statuses'), items: const [DropdownMenuItem<String?>(value: null, child: Text('All statuses')), DropdownMenuItem<String?>(value: 'PRESENT', child: Text('Present')), DropdownMenuItem<String?>(value: 'ABSENT', child: Text('Absent')), DropdownMenuItem<String?>(value: 'LEAVE', child: Text('Leave')), DropdownMenuItem<String?>(value: 'NOT_CONFIRM', child: Text('Not Confirm'))], onChanged: (v) => setState(() => _attendanceStatusFilter = v)), DropdownButton<String?>(value: _approvalFilter, hint: const Text('All reviews'), items: const [DropdownMenuItem<String?>(value: null, child: Text('All reviews')), DropdownMenuItem<String?>(value: 'PENDING', child: Text('Pending')), DropdownMenuItem<String?>(value: 'APPROVED', child: Text('Approved')), DropdownMenuItem<String?>(value: 'REJECTED', child: Text('Rejected'))], onChanged: (v) => setState(() => _approvalFilter = v)), DropdownButton<int?>(value: _activityFilter, hint: const Text('All activities'), items: [const DropdownMenuItem<int?>(value: null, child: Text('All activities')), ...{for (final r in students) r.activityId: r.activityName}.entries.map((e) => DropdownMenuItem<int?>(value: e.key, child: Text(e.value)))], onChanged: (v) => setState(() => _activityFilter = v)), if (_attendanceSearch.isNotEmpty || _attendanceStatusFilter != null || _approvalFilter != null || _activityFilter != null) TextButton(onPressed: () => setState(() { _attendanceSearch = ''; _attendanceStatusFilter = null; _approvalFilter = null; _activityFilter = null; }), child: const Text('Clear filters'))]),
         if (students.isEmpty)
           const Text('No student attendance marked on this date.', style: TextStyle(fontSize: 12, color: AppColors.textMuted))
         else if (visibleStudents.isEmpty)

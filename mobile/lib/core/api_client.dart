@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 import 'api_config.dart';
 import 'auth_storage.dart';
@@ -20,7 +21,7 @@ class ApiClient {
   ApiClient._();
   static final ApiClient instance = ApiClient._();
 
-  final http.Client _http = http.Client();
+  http.Client _http = http.Client();
   // Shared by every concurrent caller that hits a 401 at the same time (e.g. a screen
   // that fires several parallel GETs via Future.wait right as the access token expires).
   // Without sharing this future, only the first caller would actually refresh — every
@@ -29,6 +30,13 @@ class ApiClient {
   // though the real refresh was about to succeed a moment later. That race was the actual
   // cause of "gets logged out on its own" during normal use, not the token lifetime itself.
   Future<bool>? _refreshFuture;
+
+  @visibleForTesting
+  void setClientForTesting(http.Client client) {
+    _http.close();
+    _http = client;
+    _refreshFuture = null;
+  }
 
   Uri _uri(String path, [Map<String, dynamic>? query]) {
     Map<String, String>? cleanQuery;
@@ -41,7 +49,8 @@ class ApiClient {
       }
     }
     return Uri.parse('${ApiConfig.baseUrl}$path').replace(
-      queryParameters: cleanQuery != null && cleanQuery.isNotEmpty ? cleanQuery : null,
+      queryParameters:
+          cleanQuery != null && cleanQuery.isNotEmpty ? cleanQuery : null,
     );
   }
 
@@ -64,18 +73,21 @@ class ApiClient {
   Future<bool> _tryRefresh() {
     // If a refresh is already in flight, piggyback on it instead of racing a second
     // one — see the comment on _refreshFuture above.
-    return _refreshFuture ??= _performRefresh().whenComplete(() => _refreshFuture = null);
+    return _refreshFuture ??=
+        _performRefresh().whenComplete(() => _refreshFuture = null);
   }
 
   Future<bool> _performRefresh() async {
     try {
       final session = await AuthStorage.load();
       if (session == null) return false;
-      final response = await _http.post(
-        _uri('/auth/refresh'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'refresh_token': session.refreshToken}),
-      ).timeout(_requestTimeout);
+      final response = await _http
+          .post(
+            _uri('/auth/refresh'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'refresh_token': session.refreshToken}),
+          )
+          .timeout(_requestTimeout);
       if (response.statusCode != 200) return false;
       final data = await _decode(response) as Map<String, dynamic>;
       await AuthStorage.updateAccessToken(
@@ -104,31 +116,41 @@ class ApiClient {
     try {
       switch (method) {
         case 'GET':
-          response = await _http.get(uri, headers: headers).timeout(_requestTimeout);
+          response =
+              await _http.get(uri, headers: headers).timeout(_requestTimeout);
           break;
         case 'POST':
-          response = await _http.post(uri, headers: headers, body: encodedBody).timeout(path == '/auth/login' ? _loginTimeout : _requestTimeout);
+          response = await _http
+              .post(uri, headers: headers, body: encodedBody)
+              .timeout(path == '/auth/login' ? _loginTimeout : _requestTimeout);
           break;
         case 'PUT':
-          response = await _http.put(uri, headers: headers, body: encodedBody).timeout(_requestTimeout);
+          response = await _http
+              .put(uri, headers: headers, body: encodedBody)
+              .timeout(_requestTimeout);
           break;
         case 'DELETE':
-          response = await _http.delete(uri, headers: headers).timeout(_requestTimeout);
+          response = await _http
+              .delete(uri, headers: headers)
+              .timeout(_requestTimeout);
           break;
         default:
           throw ApiException(0, 'Unsupported method $method');
       }
     } on TimeoutException {
       if (path == '/auth/login') {
-        throw ApiException(0, 'The server is taking too long to wake up. Please try signing in again in a moment.');
+        throw ApiException(0,
+            'The server is taking too long to wake up. Please try signing in again in a moment.');
       }
-      throw ApiException(0, 'The server did not respond in time. Check your connection and try again.');
+      throw ApiException(0,
+          'The server did not respond in time. Check your connection and try again.');
     }
 
     if (response.statusCode == 401 && auth && !isRetry) {
       final refreshed = await _tryRefresh();
       if (refreshed) {
-        return _request(method, path, query: query, body: body, auth: auth, isRetry: true);
+        return _request(method, path,
+            query: query, body: body, auth: auth, isRetry: true);
       }
       await AuthStorage.clear();
       throw ApiException(401, 'Session expired. Please log in again.');
@@ -151,22 +173,26 @@ class ApiClient {
     throw ApiException(response.statusCode, message);
   }
 
-  Future<dynamic> get(String path, {Map<String, dynamic>? query, bool auth = true}) =>
+  Future<dynamic> get(String path,
+          {Map<String, dynamic>? query, bool auth = true}) =>
       _request('GET', path, query: query, auth: auth);
 
   Future<dynamic> post(String path, {Object? body, bool auth = true}) =>
       _request('POST', path, body: body, auth: auth);
 
-  Future<dynamic> put(String path, {Object? body, Map<String, dynamic>? query, bool auth = true}) =>
+  Future<dynamic> put(String path,
+          {Object? body, Map<String, dynamic>? query, bool auth = true}) =>
       _request('PUT', path, query: query, body: body, auth: auth);
 
-  Future<dynamic> delete(String path, {bool auth = true}) => _request('DELETE', path, auth: auth);
+  Future<dynamic> delete(String path, {bool auth = true}) =>
+      _request('DELETE', path, auth: auth);
 
   /// For endpoints that return a raw file (CSV/PDF export, receipt PDF) rather than JSON.
   Future<List<int>> getBytes(String path, {Map<String, dynamic>? query}) async {
     final uri = _uri(path, query);
     final headers = await _headers();
-    final response = await _http.get(uri, headers: headers).timeout(_requestTimeout);
+    final response =
+        await _http.get(uri, headers: headers).timeout(_requestTimeout);
     if (response.statusCode == 401) {
       final refreshed = await _tryRefresh();
       if (refreshed) return getBytes(path, query: query);

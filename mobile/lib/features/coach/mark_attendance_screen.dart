@@ -5,7 +5,12 @@ import '../../core/app_theme.dart';
 import '../../core/models.dart';
 import '../../core/offline_queue.dart';
 
-const _statusLabels = {'PRESENT': 'Present', 'ABSENT': 'Absent', 'LEAVE': 'Leave', 'NOT_CONFIRM': 'Not Confirm'};
+const _statusLabels = {
+  'PRESENT': 'Present',
+  'ABSENT': 'Absent',
+  'LEAVE': 'Leave',
+  'NOT_CONFIRM': 'Not Confirm'
+};
 
 class _MarkedRecord {
   final int attendanceId;
@@ -31,9 +36,23 @@ class MarkAttendanceScreen extends StatefulWidget {
 class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
   List<RosterStudent> _roster = [];
   final Map<int, _MarkedRecord> _marked = {};
-  final Map<int, String> _pending = {}; // studentId -> status staged, not yet submitted
+  final Map<int, String> _pending =
+      {}; // studentId -> status staged, not yet submitted
   bool _loading = true;
   int? _busyStudentId;
+  String _rosterSearch = '';
+  String? _markFilter;
+  String? _feeFilter;
+
+  List<RosterStudent> get _visibleRoster => _roster
+      .where((s) =>
+          s.name.toLowerCase().contains(_rosterSearch.trim().toLowerCase()) &&
+          (_feeFilter == null || s.feeStatus == _feeFilter) &&
+          (_markFilter == null ||
+              (_markFilter == 'UNMARKED'
+                  ? !_marked.containsKey(s.id)
+                  : _marked.containsKey(s.id))))
+      .toList();
 
   @override
   void initState() {
@@ -45,10 +64,14 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
     setState(() => _loading = true);
     try {
       final results = await Future.wait([
-        ApiClient.instance.get('/activities/${widget.classSession.activityId}/roster'),
-        ApiClient.instance.get('/attendance/students', query: {'class_id': widget.classSession.id}),
+        ApiClient.instance
+            .get('/activities/${widget.classSession.activityId}/roster'),
+        ApiClient.instance.get('/attendance/students',
+            query: {'class_id': widget.classSession.id}),
       ]);
-      _roster = (results[0] as List).map((e) => RosterStudent.fromJson(e as Map<String, dynamic>)).toList();
+      _roster = (results[0] as List)
+          .map((e) => RosterStudent.fromJson(e as Map<String, dynamic>))
+          .toList();
       _marked.clear();
       for (final e in (results[1] as List)) {
         final m = e as Map<String, dynamic>;
@@ -69,19 +92,22 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
   void _showSnack(String message, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: isError ? Colors.red : null),
+      SnackBar(
+          content: Text(message), backgroundColor: isError ? Colors.red : null),
     );
   }
 
   Future<void> _markStudent(RosterStudent student, String status) async {
     setState(() => _busyStudentId = student.id);
     try {
-      final result = await ApiClient.instance.post('/attendance/mark-student', body: {
+      final result =
+          await ApiClient.instance.post('/attendance/mark-student', body: {
         'student_id': student.id,
         'class_id': widget.classSession.id,
         'status': status,
       }) as Map<String, dynamic>;
-      _showSnack('${student.name}: ${_statusLabels[status]} submitted, awaiting admin');
+      _showSnack(
+          '${student.name}: ${_statusLabels[status]} submitted, awaiting admin');
       setState(() {
         _marked[student.id] = _MarkedRecord(
           attendanceId: result['id'] as int,
@@ -128,7 +154,9 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
           width: 280,
           height: 280,
           child: FutureBuilder<Uint8List>(
-            future: ApiClient.instance.getBytes('/attendance/selfie/${record.attendanceId}').then((b) => Uint8List.fromList(b)),
+            future: ApiClient.instance
+                .getBytes('/attendance/selfie/${record.attendanceId}')
+                .then((b) => Uint8List.fromList(b)),
             builder: (ctx, snapshot) {
               if (snapshot.connectionState != ConnectionState.done) {
                 return const Center(child: CircularProgressIndicator());
@@ -136,11 +164,16 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
               if (snapshot.hasError || !snapshot.hasData) {
                 return const Center(child: Text('Photo not available.'));
               }
-              return ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.memory(snapshot.data!, fit: BoxFit.contain));
+              return ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.memory(snapshot.data!, fit: BoxFit.contain));
             },
           ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Close'))
+        ],
       ),
     );
   }
@@ -180,13 +213,15 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
     }
   }
 
-  String _approvalLabel(String status) => status == 'PENDING' ? 'Awaiting Admin' : status;
+  String _approvalLabel(String status) =>
+      status == 'PENDING' ? 'Awaiting Admin' : status;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Mark Attendance — Class #${widget.classSession.id}')),
-      body: _loading
+      appBar: AppBar(
+          title: Text('Mark Attendance — Class #${widget.classSession.id}')),
+      body: _loading && _roster.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
@@ -198,91 +233,216 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
                     style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                   ),
                 ),
+                Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                    child: TextField(
+                        decoration: InputDecoration(
+                            labelText: 'Search students',
+                            prefixIcon: const Icon(Icons.search),
+                            suffixIcon: _rosterSearch.isEmpty
+                                ? null
+                                : IconButton(
+                                    onPressed: () =>
+                                        setState(() => _rosterSearch = ''),
+                                    icon: const Icon(Icons.clear))),
+                        onChanged: (v) => setState(() => _rosterSearch = v))),
+                Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Wrap(spacing: 8, children: [
+                      DropdownButton<String?>(
+                          value: _markFilter,
+                          hint: const Text('All attendance'),
+                          items: const [
+                            DropdownMenuItem<String?>(
+                                value: null, child: Text('All attendance')),
+                            DropdownMenuItem<String?>(
+                                value: 'UNMARKED', child: Text('Not marked')),
+                            DropdownMenuItem<String?>(
+                                value: 'MARKED', child: Text('Submitted'))
+                          ],
+                          onChanged: (v) => setState(() => _markFilter = v)),
+                      DropdownButton<String?>(
+                          value: _feeFilter,
+                          hint: const Text('All fee statuses'),
+                          items: const [
+                            DropdownMenuItem<String?>(
+                                value: null, child: Text('All fee statuses')),
+                            DropdownMenuItem<String?>(
+                                value: 'PAID', child: Text('Paid')),
+                            DropdownMenuItem<String?>(
+                                value: 'UNPAID', child: Text('Unpaid')),
+                            DropdownMenuItem<String?>(
+                                value: 'OVERDUE', child: Text('Overdue'))
+                          ],
+                          onChanged: (v) => setState(() => _feeFilter = v)),
+                      if (_rosterSearch.isNotEmpty ||
+                          _markFilter != null ||
+                          _feeFilter != null)
+                        TextButton(
+                            onPressed: () => setState(() {
+                                  _rosterSearch = '';
+                                  _markFilter = null;
+                                  _feeFilter = null;
+                                }),
+                            child: const Text('Clear filters'))
+                    ])),
                 Expanded(
                   child: _roster.isEmpty
-                      ? const Center(child: Text('No students enrolled in this activity.'))
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(12),
-                          itemCount: _roster.length,
-                          itemBuilder: (context, i) {
-                            final student = _roster[i];
-                            final busy = _busyStudentId == student.id;
-                            final record = _marked[student.id];
-                            return Card(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    ListTile(
-                                      title: Text(student.name),
-                                      subtitle: Row(
-                                        children: [
-                                          Chip(
-                                            label: Text(student.feeStatus ?? 'UNPAID', style: const TextStyle(fontSize: 10, color: Colors.white)),
-                                            backgroundColor: _feeColor(student.feeStatus),
-                                            visualDensity: VisualDensity.compact,
-                                          ),
-                                        ],
-                                      ),
-                                      trailing: busy ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : null,
-                                    ),
-                                    if (!busy)
-                                      Padding(
-                                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                                        child: record != null
-                                            ? Wrap(
-                                                spacing: 6,
-                                                runSpacing: 6,
-                                                crossAxisAlignment: WrapCrossAlignment.center,
-                                                children: [
-                                                  Chip(
-                                                    label: Text(_statusLabels[record.status] ?? record.status, style: const TextStyle(fontSize: 11, color: Colors.white)),
-                                                    backgroundColor: _statusColor(record.status),
-                                                    visualDensity: VisualDensity.compact,
-                                                  ),
-                                                  if (record.attendanceId >= 0)
-                                                    Chip(
-                                                      label: Text(_approvalLabel(record.approvalStatus), style: const TextStyle(fontSize: 11, color: Colors.white)),
-                                                      backgroundColor: _approvalColor(record.approvalStatus),
-                                                      visualDensity: VisualDensity.compact,
-                                                    ),
-                                                  if (record.hasSelfie)
-                                                    OutlinedButton(
-                                                      onPressed: () => _viewPhoto(record),
-                                                      child: const Text('View Photo'),
-                                                    ),
-                                                ],
-                                              )
-                                            : Wrap(
-                                                spacing: 6,
-                                                runSpacing: 6,
-                                                crossAxisAlignment: WrapCrossAlignment.center,
-                                                children: [
-                                                  ..._statusLabels.entries.map((e) => _pending[student.id] == e.key
-                                                      ? ElevatedButton(
-                                                          onPressed: () => _selectPending(student.id, e.key),
-                                                          child: Text(e.value),
-                                                        )
-                                                      : OutlinedButton(
-                                                          onPressed: () => _selectPending(student.id, e.key),
-                                                          child: Text(e.value),
-                                                        )),
-                                                  ElevatedButton(
-                                                    onPressed: _pending[student.id] == null
-                                                        ? null
-                                                        : () => _markStudent(student, _pending[student.id]!),
-                                                    child: const Text('Submit'),
-                                                  ),
-                                                ],
+                      ? const Center(
+                          child: Text('No students enrolled in this activity.'))
+                      : _visibleRoster.isEmpty
+                          ? const Center(child: Text('No results found.'))
+                          : ListView.builder(
+                              padding: const EdgeInsets.all(12),
+                              itemCount: _visibleRoster.length,
+                              itemBuilder: (context, i) {
+                                final student = _visibleRoster[i];
+                                final busy = _busyStudentId == student.id;
+                                final record = _marked[student.id];
+                                return Card(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 6, horizontal: 4),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        ListTile(
+                                          title: Text(student.name),
+                                          subtitle: Row(
+                                            children: [
+                                              Chip(
+                                                label: Text(
+                                                    student.feeStatus ??
+                                                        'UNPAID',
+                                                    style: const TextStyle(
+                                                        fontSize: 10,
+                                                        color: Colors.white)),
+                                                backgroundColor: _feeColor(
+                                                    student.feeStatus),
+                                                visualDensity:
+                                                    VisualDensity.compact,
                                               ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                                            ],
+                                          ),
+                                          trailing: busy
+                                              ? const SizedBox(
+                                                  width: 20,
+                                                  height: 20,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                          strokeWidth: 2))
+                                              : null,
+                                        ),
+                                        if (!busy)
+                                          Padding(
+                                            padding: const EdgeInsets.fromLTRB(
+                                                16, 0, 16, 8),
+                                            child: record != null
+                                                ? Wrap(
+                                                    spacing: 6,
+                                                    runSpacing: 6,
+                                                    crossAxisAlignment:
+                                                        WrapCrossAlignment
+                                                            .center,
+                                                    children: [
+                                                      Chip(
+                                                        label: Text(
+                                                            _statusLabels[record
+                                                                    .status] ??
+                                                                record.status,
+                                                            style:
+                                                                const TextStyle(
+                                                                    fontSize:
+                                                                        11,
+                                                                    color: Colors
+                                                                        .white)),
+                                                        backgroundColor:
+                                                            _statusColor(
+                                                                record.status),
+                                                        visualDensity:
+                                                            VisualDensity
+                                                                .compact,
+                                                      ),
+                                                      if (record.attendanceId >=
+                                                          0)
+                                                        Chip(
+                                                          label: Text(
+                                                              _approvalLabel(record
+                                                                  .approvalStatus),
+                                                              style: const TextStyle(
+                                                                  fontSize: 11,
+                                                                  color: Colors
+                                                                      .white)),
+                                                          backgroundColor:
+                                                              _approvalColor(record
+                                                                  .approvalStatus),
+                                                          visualDensity:
+                                                              VisualDensity
+                                                                  .compact,
+                                                        ),
+                                                      if (record.hasSelfie)
+                                                        OutlinedButton(
+                                                          onPressed: () =>
+                                                              _viewPhoto(
+                                                                  record),
+                                                          child: const Text(
+                                                              'View Photo'),
+                                                        ),
+                                                    ],
+                                                  )
+                                                : Wrap(
+                                                    spacing: 6,
+                                                    runSpacing: 6,
+                                                    crossAxisAlignment:
+                                                        WrapCrossAlignment
+                                                            .center,
+                                                    children: [
+                                                      ..._statusLabels.entries
+                                                          .map((e) => _pending[
+                                                                      student
+                                                                          .id] ==
+                                                                  e.key
+                                                              ? ElevatedButton(
+                                                                  onPressed: () =>
+                                                                      _selectPending(
+                                                                          student
+                                                                              .id,
+                                                                          e.key),
+                                                                  child: Text(
+                                                                      e.value),
+                                                                )
+                                                              : OutlinedButton(
+                                                                  onPressed: () =>
+                                                                      _selectPending(
+                                                                          student
+                                                                              .id,
+                                                                          e.key),
+                                                                  child: Text(
+                                                                      e.value),
+                                                                )),
+                                                      ElevatedButton(
+                                                        onPressed: _pending[
+                                                                    student
+                                                                        .id] ==
+                                                                null
+                                                            ? null
+                                                            : () => _markStudent(
+                                                                student,
+                                                                _pending[student
+                                                                    .id]!),
+                                                        child: const Text(
+                                                            'Submit'),
+                                                      ),
+                                                    ],
+                                                  ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
                 ),
               ],
             ),

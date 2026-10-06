@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
@@ -20,19 +21,32 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _loading = false;
   bool _obscure = true;
   String? _error;
+  String? _loadingMessage;
+  Timer? _loadingMessageTimer;
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() {
       _loading = true;
       _error = null;
+      _loadingMessage = null;
+    });
+    _loadingMessageTimer?.cancel();
+    _loadingMessageTimer = Timer(const Duration(seconds: 4), () {
+      if (!mounted || !_loading) return;
+      setState(() =>
+          _loadingMessage = 'Waking up the service can take a little while.');
     });
     try {
-      final session = await AuthApi.login(_emailCtrl.text.trim(), _passwordCtrl.text);
+      final session =
+          await AuthApi.login(_emailCtrl.text.trim(), _passwordCtrl.text);
       if (!mounted) return;
 
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => session.role == 'ADMIN' ? const AdminHome() : const CoachHome()),
+        MaterialPageRoute(
+            builder: (_) => session.role == 'ADMIN'
+                ? const AdminHome()
+                : const CoachHome()),
       );
     } on ApiException catch (e) {
       setState(() => _error = e.message);
@@ -42,12 +56,19 @@ class _LoginScreenState extends State<LoginScreen> {
           ? 'Could not sign in. Check your internet connection and try again.'
           : 'Could not sign in: $message');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      _loadingMessageTimer?.cancel();
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadingMessage = null;
+        });
+      }
     }
   }
 
   @override
   void dispose() {
+    _loadingMessageTimer?.cancel();
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
     super.dispose();
@@ -63,7 +84,11 @@ class _LoginScreenState extends State<LoginScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [AppColors.brandOrangeBright, AppColors.brandOrangeDark, AppColors.brandYellowBright],
+            colors: [
+              AppColors.brandOrangeBright,
+              AppColors.brandOrangeDark,
+              AppColors.brandYellowBright
+            ],
             stops: [0.0, 0.55, 1.0],
           ),
         ),
@@ -76,7 +101,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(24),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 30, offset: const Offset(0, 12))],
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withOpacity(0.25),
+                        blurRadius: 30,
+                        offset: const Offset(0, 12))
+                  ],
                 ),
                 child: Form(
                   key: _formKey,
@@ -94,7 +124,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       Text(
                         'VIMJ Studio',
                         textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(
                               fontWeight: FontWeight.bold,
                               color: AppColors.brandOrange,
                             ),
@@ -103,7 +136,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       Text(
                         'Sign in',
                         textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 32),
                       if (_error != null) ...[
@@ -113,7 +149,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             color: Colors.red.withOpacity(0.08),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Text(_error!, style: const TextStyle(color: Colors.red)),
+                          child: Text(_error!,
+                              style: const TextStyle(color: Colors.red)),
                         ),
                         const SizedBox(height: 16),
                       ],
@@ -128,9 +165,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         decoration: const InputDecoration(
                           labelText: 'Email',
                           labelStyle: TextStyle(color: AppColors.textMuted),
-                          prefixIcon: Icon(Icons.email_outlined, color: AppColors.brandOrange),
+                          prefixIcon: Icon(Icons.email_outlined,
+                              color: AppColors.brandOrange),
                         ),
-                        validator: (v) => (v == null || !v.contains('@')) ? 'Enter a valid email' : null,
+                        validator: (v) => (v == null || !v.contains('@'))
+                            ? 'Enter a valid email'
+                            : null,
                       ),
                       const SizedBox(height: 14),
                       TextFormField(
@@ -139,14 +179,23 @@ class _LoginScreenState extends State<LoginScreen> {
                         style: const TextStyle(color: AppColors.text),
                         decoration: InputDecoration(
                           labelText: 'Password',
-                          labelStyle: const TextStyle(color: AppColors.textMuted),
-                          prefixIcon: const Icon(Icons.lock_outline, color: AppColors.brandOrange),
+                          labelStyle:
+                              const TextStyle(color: AppColors.textMuted),
+                          prefixIcon: const Icon(Icons.lock_outline,
+                              color: AppColors.brandOrange),
                           suffixIcon: IconButton(
-                            icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility, color: AppColors.brandOrange),
-                            onPressed: () => setState(() => _obscure = !_obscure),
+                            icon: Icon(
+                                _obscure
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+                                color: AppColors.brandOrange),
+                            onPressed: () =>
+                                setState(() => _obscure = !_obscure),
                           ),
                         ),
-                        validator: (v) => (v == null || v.isEmpty) ? 'Enter your password' : null,
+                        validator: (v) => (v == null || v.isEmpty)
+                            ? 'Enter your password'
+                            : null,
                       ),
                       const SizedBox(height: 8),
                       Align(
@@ -154,7 +203,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: TextButton(
                           onPressed: _loading
                               ? null
-                              : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ForgotPasswordScreen())),
+                              : () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                      builder: (_) =>
+                                          const ForgotPasswordScreen())),
                           child: const Text('Forgot password?'),
                         ),
                       ),
@@ -162,15 +214,20 @@ class _LoginScreenState extends State<LoginScreen> {
                       ElevatedButton(
                         onPressed: _loading ? null : _submit,
                         child: _loading
-                            ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white))
                             : const Text('Sign in'),
                       ),
-                      if (_loading) ...[
-                        const SizedBox(height: 10),
-                        const Text(
-                          'If the server has been idle, its first response can take up to about a minute while it wakes. Keep this screen open.',
+                      if (_loadingMessage != null) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          _loadingMessage!,
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                          style: const TextStyle(
+                              color: AppColors.textMuted, fontSize: 12),
                         ),
                       ],
                     ],

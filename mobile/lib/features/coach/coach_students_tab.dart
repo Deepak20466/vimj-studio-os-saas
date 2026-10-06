@@ -25,8 +25,7 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
   final Map<int, List<RosterStudent>> _rosterByActivity = {};
   final Map<int, Uint8List?> _photos = {};
   bool _loading = true;
-  bool _hasLoaded = false;
-  String _search = '';
+  String _rosterSearch = '';
   int? _activityFilter;
 
   @override
@@ -36,7 +35,7 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
   }
 
   Future<void> _load() async {
-    if (!_hasLoaded) setState(() => _loading = true);
+    setState(() => _loading = true);
     try {
       final session = await AuthStorage.load();
       if (session == null) return;
@@ -59,7 +58,6 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
-      _hasLoaded = true;
       if (mounted) setState(() => _loading = false);
     }
     _loadPhotos();
@@ -73,7 +71,6 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
   }
 
   Future<void> _loadPhoto(int studentId) async {
-    if (_photos.containsKey(studentId)) return;
     try {
       final bytes =
           await ApiClient.instance.getBytes('/students/$studentId/photo');
@@ -147,7 +144,6 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
             .showSnackBar(const SnackBar(content: Text('Photo saved')));
       // Refresh just this student's thumbnail so it shows next to their name
       // immediately, without re-fetching the whole roster.
-      _photos.remove(s.id);
       await _loadPhoto(s.id);
     } on ApiException catch (e) {
       if (mounted)
@@ -157,37 +153,34 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
   }
 
   Future<void> _deletePhoto(RosterStudent s) async {
-    if (!_photos.containsKey(s.id)) await _loadPhoto(s.id);
-    if (!mounted) return;
-    if (_photos[s.id] == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No saved photo for ${s.name}')),
-      );
-      return;
-    }
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (_) => AlertDialog(
         title: const Text('Delete student photo?'),
         content: Text('Remove the saved photo for ${s.name}?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete',
+                  style: TextStyle(color: AppColors.danger))),
         ],
       ),
     );
     if (confirmed != true) return;
     try {
       await ApiClient.instance.delete('/students/${s.id}/photo');
-      if (!mounted) return;
-      setState(() => _photos[s.id] = null);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Student photo deleted')),
-      );
-    } on ApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        setState(() => _photos[s.id] = null);
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Student photo deleted')));
       }
+    } on ApiException catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -318,14 +311,6 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
 
   @override
   Widget build(BuildContext context) {
-    final query = _search.trim().toLowerCase();
-    final visibleActivities = _activities
-        .where(
-            (a) => _activityFilter == null || a.activityId == _activityFilter)
-        .where((a) {
-      final roster = _rosterByActivity[a.activityId] ?? [];
-      return query.isEmpty || roster.any(_matchesStudent);
-    }).toList();
     return Scaffold(
       appBar: AppBar(
           title: const Text('My Students'),
@@ -336,7 +321,7 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
         icon: const Icon(Icons.add),
         label: const Text('Add Student'),
       ),
-      body: _loading
+      body: _loading && _activities.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _load,
@@ -357,44 +342,52 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
                       padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
                       children: [
                         TextField(
-                          decoration: InputDecoration(
-                            labelText: 'Search students',
-                            hintText: 'Name, phone, or email',
-                            prefixIcon: const Icon(Icons.search),
-                            suffixIcon: _search.isEmpty
-                                ? null
-                                : IconButton(
-                                    icon: const Icon(Icons.clear),
-                                    onPressed: () =>
-                                        setState(() => _search = '')),
-                          ),
-                          onChanged: (value) => setState(() => _search = value),
-                        ),
-                        const SizedBox(height: 8),
-                        DropdownButtonFormField<int?>(
-                          initialValue: _activityFilter,
-                          decoration: const InputDecoration(
-                              labelText: 'Filter by activity'),
-                          items: [
-                            const DropdownMenuItem<int?>(
-                                value: null, child: Text('All activities')),
-                            ..._activities.map((a) => DropdownMenuItem<int?>(
-                                value: a.activityId,
-                                child: Text(a.activityName))),
-                          ],
-                          onChanged: (value) =>
-                              setState(() => _activityFilter = value),
-                        ),
-                        const SizedBox(height: 12),
-                        if (visibleActivities.isEmpty)
-                          const Padding(
-                              padding: EdgeInsets.all(24),
-                              child: Center(
-                                  child: Text(
-                                      'No students match these filters.'))),
-                        ...visibleActivities.map((a) {
-                          final roster = (_rosterByActivity[a.activityId] ?? [])
-                              .where(_matchesStudent)
+                            decoration: InputDecoration(
+                                labelText: 'Search student name or phone',
+                                prefixIcon: const Icon(Icons.search),
+                                suffixIcon: _rosterSearch.isEmpty
+                                    ? null
+                                    : IconButton(
+                                        onPressed: () =>
+                                            setState(() => _rosterSearch = ''),
+                                        icon: const Icon(Icons.clear))),
+                            onChanged: (v) =>
+                                setState(() => _rosterSearch = v)),
+                        Wrap(spacing: 8, children: [
+                          DropdownButton<int?>(
+                              value: _activityFilter,
+                              hint: const Text('All activities'),
+                              items: [
+                                const DropdownMenuItem<int?>(
+                                    value: null, child: Text('All activities')),
+                                ..._activities.map((a) =>
+                                    DropdownMenuItem<int?>(
+                                        value: a.activityId,
+                                        child: Text(a.activityName)))
+                              ],
+                              onChanged: (v) =>
+                                  setState(() => _activityFilter = v)),
+                          if (_rosterSearch.isNotEmpty ||
+                              _activityFilter != null)
+                            TextButton(
+                                onPressed: () => setState(() {
+                                      _rosterSearch = '';
+                                      _activityFilter = null;
+                                    }),
+                                child: const Text('Clear filters'))
+                        ]),
+                        ..._activities
+                            .where((a) =>
+                                _activityFilter == null ||
+                                a.activityId == _activityFilter)
+                            .map((a) {
+                          final roster = _rosterByActivity[a.activityId] ?? [];
+                          final visibleRoster = roster
+                              .where((s) =>
+                                  '${s.name} ${s.phone ?? ''} ${s.phoneSecondary ?? ''} ${s.email}'
+                                      .toLowerCase()
+                                      .contains(
+                                          _rosterSearch.trim().toLowerCase()))
                               .toList();
                           return Card(
                             margin: const EdgeInsets.only(bottom: 12),
@@ -409,17 +402,21 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
                                           fontSize: 16)),
                                   const SizedBox(height: 6),
                                   if (roster.isEmpty)
-                                    Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                            vertical: 8),
-                                        child: Text(
-                                            query.isEmpty
-                                                ? 'No students enrolled yet.'
-                                                : 'No students match this search.',
-                                            style: const TextStyle(
+                                    const Padding(
+                                        padding:
+                                            EdgeInsets.symmetric(vertical: 8),
+                                        child: Text('No students enrolled yet.',
+                                            style: TextStyle(
+                                                color: AppColors.textMuted)))
+                                  else if (visibleRoster.isEmpty)
+                                    const Padding(
+                                        padding:
+                                            EdgeInsets.symmetric(vertical: 8),
+                                        child: Text('No results found.',
+                                            style: TextStyle(
                                                 color: AppColors.textMuted)))
                                   else
-                                    ...roster.map((s) => ListTile(
+                                    ...visibleRoster.map((s) => ListTile(
                                           contentPadding: EdgeInsets.zero,
                                           leading: CircleAvatar(
                                             radius: 20,
@@ -452,13 +449,13 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
                                                   value: 'copy',
                                                   child: Text(
                                                       'Copy Fee Reminder')),
-                                            const PopupMenuItem(
-                                                value: 'photo',
-                                                child: Text('Capture Photo')),
-                                            const PopupMenuItem(
-                                                value: 'delete_photo',
-                                                child: Text('Delete Photo')),
-                                            const PopupMenuItem(
+                                              const PopupMenuItem(
+                                                  value: 'photo',
+                                                  child: Text('Capture Photo')),
+                                              const PopupMenuItem(
+                                                  value: 'delete_photo',
+                                                  child: Text('Delete Photo')),
+                                              const PopupMenuItem(
                                                   value: 'edit',
                                                   child: Text('Edit')),
                                               const PopupMenuItem(
@@ -471,19 +468,19 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
                               ),
                             ),
                           );
-                        }),
+                        }).toList(),
+                        if (_activities
+                            .where((a) =>
+                                _activityFilter == null ||
+                                a.activityId == _activityFilter)
+                            .isEmpty)
+                          const Padding(
+                              padding: EdgeInsets.all(20),
+                              child: Text('No results found.')),
                       ],
                     ),
             ),
     );
-  }
-
-  bool _matchesStudent(RosterStudent student) {
-    final query = _search.trim().toLowerCase();
-    if (query.isEmpty) return true;
-    return '${student.name} ${student.phone ?? ''} ${student.phoneSecondary ?? ''} ${student.email}'
-        .toLowerCase()
-        .contains(query);
   }
 }
 

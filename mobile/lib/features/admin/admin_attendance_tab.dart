@@ -26,6 +26,7 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
 
   int? _filterActivityId;
   String? _filterStatus;
+  String? _approvalFilter;
   String _attendanceSearch = '';
   DateTime? _filterDateFrom;
   DateTime? _filterDateTo;
@@ -35,34 +36,71 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
 
   List<AdminAttendanceRecord> get _visibleRecords {
     final query = _attendanceSearch.trim().toLowerCase();
-    if (query.isEmpty) return _records;
-    return _records.where((r) => [
-      r.studentName,
-      r.activityName,
-      r.coachName ?? '',
-      r.classDate,
-      r.status,
-      r.approvalStatus,
-    ].any((value) => value.toLowerCase().contains(query))).toList();
+    return _records
+        .where((r) =>
+            (query.isEmpty ||
+                [
+                  r.studentName,
+                  r.activityName,
+                  r.coachName ?? '',
+                  r.classDate,
+                  r.status,
+                  r.approvalStatus,
+                ].any((value) => value.toLowerCase().contains(query))) &&
+            (_filterActivityId == null || r.activityId == _filterActivityId) &&
+            (_filterStatus == null || r.status == _filterStatus) &&
+            (_approvalFilter == null || r.approvalStatus == _approvalFilter) &&
+            (_filterDateFrom == null ||
+                r.classDate.compareTo(
+                        _filterDateFrom!.toIso8601String().substring(0, 10)) >=
+                    0) &&
+            (_filterDateTo == null ||
+                r.classDate.compareTo(
+                        _filterDateTo!.toIso8601String().substring(0, 10)) <=
+                    0))
+        .toList();
   }
 
   // --- Coach attendance (separate CRUD) ---
   bool _coachRecordsLoading = true;
   List<Map<String, dynamic>> _coachRecords = [];
   int? _coachFilterId;
+  String _coachSearch = '';
+  String? _coachStatusFilter;
   DateTime? _coachFilterDateFrom;
   DateTime? _coachFilterDateTo;
   int? _removingCoachId;
+  String _missingSearch = '';
+  List<DailyMissingRow> get _visibleMissing => _missing
+      .where((m) => '${m.coachName} ${m.activityName} ${m.date} ${m.endTime}'
+          .toLowerCase()
+          .contains(_missingSearch.trim().toLowerCase()))
+      .toList();
+  List<Map<String, dynamic>> get _visibleCoachRecords => _coachRecords
+      .where((r) =>
+          '${r['coach_name'] ?? ''} ${r['date'] ?? ''} ${r['status'] ?? ''}'
+              .toLowerCase()
+              .contains(_coachSearch.trim().toLowerCase()) &&
+          (_coachStatusFilter == null || r['status'] == _coachStatusFilter))
+      .toList();
 
   Future<void> _exportReport(String kind, {DateTime? date}) async {
     final selected = date ?? DateTime.now();
     try {
-      final query = <String, dynamic>{'month': selected.month, 'year': selected.year, 'kind': kind, 'fmt': 'pdf'};
+      final query = <String, dynamic>{
+        'month': selected.month,
+        'year': selected.year,
+        'kind': kind,
+        'fmt': 'pdf'
+      };
       if (date != null) query['day'] = selected.day;
       final bytes = await ApiClient.instance.getBytes('/reports', query: query);
-      await shareExportedFile(bytes, '${kind}_${selected.year}_${selected.month}${date == null ? '' : '_${selected.day}'}.pdf');
+      await shareExportedFile(bytes,
+          '${kind}_${selected.year}_${selected.month}${date == null ? '' : '_${selected.day}'}.pdf');
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -82,12 +120,21 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
         ApiClient.instance.get('/activities'),
         ApiClient.instance.get('/coaches'),
       ]);
-      final rawMissing = (results[0] as List).map((e) => DailyMissingRow.fromJson(e as Map<String, dynamic>)).toList();
-      _missing = await DismissedItems.filter(_missingAttendanceDismissKey, rawMissing, (m) => m.classId);
-      _activities = (results[1] as List).map((e) => Activity.fromJson(e as Map<String, dynamic>)).toList();
-      _coaches = (results[2] as List).map((e) => Coach.fromJson(e as Map<String, dynamic>)).toList();
+      final rawMissing = (results[0] as List)
+          .map((e) => DailyMissingRow.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _missing = await DismissedItems.filter(
+          _missingAttendanceDismissKey, rawMissing, (m) => m.classId);
+      _activities = (results[1] as List)
+          .map((e) => Activity.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _coaches = (results[2] as List)
+          .map((e) => Coach.fromJson(e as Map<String, dynamic>))
+          .toList();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -95,7 +142,9 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
 
   Future<void> _dismissMissing(DailyMissingRow m) async {
     await DismissedItems.dismiss(_missingAttendanceDismissKey, m.classId);
-    if (mounted) setState(() => _missing = _missing.where((x) => x.classId != m.classId).toList());
+    if (mounted)
+      setState(() =>
+          _missing = _missing.where((x) => x.classId != m.classId).toList());
   }
 
   Future<void> _loadRecords() async {
@@ -104,12 +153,20 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
       final query = <String, dynamic>{};
       if (_filterActivityId != null) query['activity_id'] = _filterActivityId;
       if (_filterStatus != null) query['status_filter'] = _filterStatus;
-      if (_filterDateFrom != null) query['date_from'] = _filterDateFrom!.toIso8601String().substring(0, 10);
-      if (_filterDateTo != null) query['date_to'] = _filterDateTo!.toIso8601String().substring(0, 10);
-      final data = await ApiClient.instance.get('/attendance/students', query: query) as List;
-      _records = data.map((e) => AdminAttendanceRecord.fromJson(e as Map<String, dynamic>)).toList();
+      if (_filterDateFrom != null)
+        query['date_from'] =
+            _filterDateFrom!.toIso8601String().substring(0, 10);
+      if (_filterDateTo != null)
+        query['date_to'] = _filterDateTo!.toIso8601String().substring(0, 10);
+      final data = await ApiClient.instance
+          .get('/attendance/students', query: query) as List;
+      _records = data
+          .map((e) => AdminAttendanceRecord.fromJson(e as Map<String, dynamic>))
+          .toList();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _recordsLoading = false);
     }
@@ -136,12 +193,19 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
     try {
       final query = <String, dynamic>{};
       if (_coachFilterId != null) query['coach_id'] = _coachFilterId;
-      if (_coachFilterDateFrom != null) query['date_from'] = _coachFilterDateFrom!.toIso8601String().substring(0, 10);
-      if (_coachFilterDateTo != null) query['date_to'] = _coachFilterDateTo!.toIso8601String().substring(0, 10);
-      final data = await ApiClient.instance.get('/attendance/coaches', query: query) as List;
+      if (_coachFilterDateFrom != null)
+        query['date_from'] =
+            _coachFilterDateFrom!.toIso8601String().substring(0, 10);
+      if (_coachFilterDateTo != null)
+        query['date_to'] =
+            _coachFilterDateTo!.toIso8601String().substring(0, 10);
+      final data = await ApiClient.instance
+          .get('/attendance/coaches', query: query) as List;
       _coachRecords = data.cast<Map<String, dynamic>>();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _coachRecordsLoading = false);
     }
@@ -150,12 +214,14 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
   Future<void> _pickCoachFilterDate(bool isFrom) async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: (isFrom ? _coachFilterDateFrom : _coachFilterDateTo) ?? DateTime.now(),
+      initialDate: (isFrom ? _coachFilterDateFrom : _coachFilterDateTo) ??
+          DateTime.now(),
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
     );
     if (picked == null) return;
-    setState(() => isFrom ? _coachFilterDateFrom = picked : _coachFilterDateTo = picked);
+    setState(() =>
+        isFrom ? _coachFilterDateFrom = picked : _coachFilterDateTo = picked);
     _loadCoachRecords();
   }
 
@@ -171,8 +237,14 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
 
   Future<void> _openEditCoachRecord(Map<String, dynamic> r) async {
     String status = r['status'] as String? ?? 'PRESENT';
-    final entryCtrl = TextEditingController(text: r['entry_time'] != null ? (r['entry_time'] as String).substring(11, 16) : '');
-    final exitCtrl = TextEditingController(text: r['exit_time'] != null ? (r['exit_time'] as String).substring(11, 16) : '');
+    final entryCtrl = TextEditingController(
+        text: r['entry_time'] != null
+            ? (r['entry_time'] as String).substring(11, 16)
+            : '');
+    final exitCtrl = TextEditingController(
+        text: r['exit_time'] != null
+            ? (r['exit_time'] as String).substring(11, 16)
+            : '');
     final saved = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -181,8 +253,14 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: entryCtrl, decoration: const InputDecoration(labelText: 'Entry time (HH:MM)')),
-              TextField(controller: exitCtrl, decoration: const InputDecoration(labelText: 'Exit time (HH:MM)')),
+              TextField(
+                  controller: entryCtrl,
+                  decoration:
+                      const InputDecoration(labelText: 'Entry time (HH:MM)')),
+              TextField(
+                  controller: exitCtrl,
+                  decoration:
+                      const InputDecoration(labelText: 'Exit time (HH:MM)')),
               DropdownButtonFormField<String>(
                 initialValue: status,
                 decoration: const InputDecoration(labelText: 'Status'),
@@ -190,26 +268,35 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                   DropdownMenuItem(value: 'PRESENT', child: Text('Present')),
                   DropdownMenuItem(value: 'ABSENT', child: Text('Absent')),
                   DropdownMenuItem(value: 'LEAVE', child: Text('Leave')),
-                  DropdownMenuItem(value: 'NOT_CONFIRM', child: Text('Not Confirm')),
-                  DropdownMenuItem(value: 'INCOMPLETE', child: Text('Incomplete')),
+                  DropdownMenuItem(
+                      value: 'NOT_CONFIRM', child: Text('Not Confirm')),
+                  DropdownMenuItem(
+                      value: 'INCOMPLETE', child: Text('Incomplete')),
                 ],
                 onChanged: (v) => setDialogState(() => status = v ?? status),
               ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
             TextButton(
               onPressed: () async {
                 try {
-                  await ApiClient.instance.put('/attendance/coaches/${r['id']}', body: {
-                    if (entryCtrl.text.trim().isNotEmpty) 'entry_time': '${entryCtrl.text.trim()}:00',
-                    if (exitCtrl.text.trim().isNotEmpty) 'exit_time': '${exitCtrl.text.trim()}:00',
+                  await ApiClient.instance
+                      .put('/attendance/coaches/${r['id']}', body: {
+                    if (entryCtrl.text.trim().isNotEmpty)
+                      'entry_time': '${entryCtrl.text.trim()}:00',
+                    if (exitCtrl.text.trim().isNotEmpty)
+                      'exit_time': '${exitCtrl.text.trim()}:00',
                     'status': status,
                   });
                   if (ctx.mounted) Navigator.pop(ctx, true);
                 } on ApiException catch (e) {
-                  if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(e.message)));
+                  if (ctx.mounted)
+                    ScaffoldMessenger.of(ctx)
+                        .showSnackBar(SnackBar(content: Text(e.message)));
                 }
               },
               child: const Text('Save'),
@@ -221,7 +308,9 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
     entryCtrl.dispose();
     exitCtrl.dispose();
     if (saved == true) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Coach attendance updated')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Coach attendance updated')));
       _loadCoachRecords();
     }
   }
@@ -233,10 +322,16 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Delete coach attendance record?'),
-        content: Text('Delete this attendance record for ${r['coach_name']} on ${r['date']}?'),
+        content: Text(
+            'Delete this attendance record for ${r['coach_name']} on ${r['date']}?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete', style: TextStyle(color: AppColors.danger))),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete',
+                  style: TextStyle(color: AppColors.danger))),
         ],
       ),
     );
@@ -244,12 +339,17 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
     setState(() => _removingCoachId = id);
     try {
       await ApiClient.instance.delete('/attendance/coaches/$id');
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Coach attendance record deleted')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Coach attendance record deleted')));
       _loadCoachRecords();
     } on ApiException catch (e) {
       if (mounted) {
-        final message = e.statusCode == 404 ? 'Already deleted — refreshing list' : e.message;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        final message = e.statusCode == 404
+            ? 'Already deleted — refreshing list'
+            : e.message;
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
         if (e.statusCode == 404) _loadCoachRecords();
       }
     } finally {
@@ -271,19 +371,25 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
               DropdownMenuItem(value: 'PRESENT', child: Text('Present')),
               DropdownMenuItem(value: 'ABSENT', child: Text('Absent')),
               DropdownMenuItem(value: 'LEAVE', child: Text('Leave')),
-              DropdownMenuItem(value: 'NOT_CONFIRM', child: Text('Not Confirm')),
+              DropdownMenuItem(
+                  value: 'NOT_CONFIRM', child: Text('Not Confirm')),
             ],
             onChanged: (v) => setDialogState(() => status = v ?? status),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
             TextButton(
               onPressed: () async {
                 try {
-                  await ApiClient.instance.put('/attendance/students/${r.id}', body: {'status': status});
+                  await ApiClient.instance.put('/attendance/students/${r.id}',
+                      body: {'status': status});
                   if (ctx.mounted) Navigator.pop(ctx, true);
                 } on ApiException catch (e) {
-                  if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(e.message)));
+                  if (ctx.mounted)
+                    ScaffoldMessenger.of(ctx)
+                        .showSnackBar(SnackBar(content: Text(e.message)));
                 }
               },
               child: const Text('Save'),
@@ -293,7 +399,9 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
       ),
     );
     if (saved == true) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Attendance updated')));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Attendance updated')));
       _refreshAll();
     }
   }
@@ -306,8 +414,13 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
         title: const Text('Delete attendance record?'),
         content: Text('Delete this attendance record for ${r.studentName}?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete', style: TextStyle(color: AppColors.danger))),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete',
+                  style: TextStyle(color: AppColors.danger))),
         ],
       ),
     );
@@ -315,7 +428,9 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
     setState(() => _removingId = r.id);
     try {
       await ApiClient.instance.delete('/attendance/students/${r.id}');
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Attendance record deleted')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Attendance record deleted')));
       _refreshAll();
     } on ApiException catch (e) {
       if (mounted) {
@@ -323,8 +438,11 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
         // session/device, or a duplicate tap raced this same request) — the
         // end state the admin wanted is already true, so refresh instead of
         // leaving a stale row on screen with a confusing permanent error.
-        final message = e.statusCode == 404 ? 'Already deleted — refreshing list' : e.message;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        final message = e.statusCode == 404
+            ? 'Already deleted — refreshing list'
+            : e.message;
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
         if (e.statusCode == 404) _refreshAll();
       }
     } finally {
@@ -338,10 +456,17 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
       context: context,
       builder: (_) => AlertDialog(
         title: Text(title),
-        content: TextField(controller: ctrl, decoration: const InputDecoration(labelText: 'Reason (optional)'), maxLines: 2),
+        content: TextField(
+            controller: ctrl,
+            decoration: const InputDecoration(labelText: 'Reason (optional)'),
+            maxLines: 2),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, ctrl.text.trim()), child: const Text('Confirm')),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, ctrl.text.trim()),
+              child: const Text('Confirm')),
         ],
       ),
     ).then((value) {
@@ -354,20 +479,28 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
     setState(() => _approvalBusyId = r.id);
     try {
       if (approve) {
-        await ApiClient.instance.put('/attendance/students/${r.id}/approve', body: {'note': null});
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Attendance approved and locked')));
+        await ApiClient.instance
+            .put('/attendance/students/${r.id}/approve', body: {'note': null});
+        if (mounted)
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Attendance approved and locked')));
       } else {
         final note = await _promptReason('Reason for rejecting');
         if (note == null) {
           setState(() => _approvalBusyId = null);
           return; // cancelled the dialog
         }
-        await ApiClient.instance.put('/attendance/students/${r.id}/reject', body: {'note': note.isEmpty ? null : note});
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Attendance rejected and locked')));
+        await ApiClient.instance.put('/attendance/students/${r.id}/reject',
+            body: {'note': note.isEmpty ? null : note});
+        if (mounted)
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Attendance rejected and locked')));
       }
       _loadRecords();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _approvalBusyId = null);
     }
@@ -375,16 +508,22 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
 
   Future<void> _approveAllPending() async {
     if (_approvingAll) return;
-    final pending = _visibleRecords.where((r) => r.approvalStatus == 'PENDING').toList();
+    final pending =
+        _visibleRecords.where((r) => r.approvalStatus == 'PENDING').toList();
     if (pending.isEmpty) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Approve all pending attendance?'),
-        content: Text('Approve ${pending.length} pending record(s) matching the current filters?'),
+        content: Text(
+            'Approve ${pending.length} pending record(s) matching the current filters?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Approve all')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Approve all')),
         ],
       ),
     );
@@ -394,7 +533,9 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
     var failed = 0;
     for (final record in pending) {
       try {
-        await ApiClient.instance.put('/attendance/students/${record.id}/approve', body: {'note': null});
+        await ApiClient.instance.put(
+            '/attendance/students/${record.id}/approve',
+            body: {'note': null});
         approved++;
       } on ApiException {
         failed++;
@@ -403,7 +544,9 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
     if (!mounted) return;
     setState(() => _approvingAll = false);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(failed == 0 ? 'Approved $approved attendance record(s)' : 'Approved $approved; $failed could not be approved. Refresh and review them.'),
+      content: Text(failed == 0
+          ? 'Approved $approved attendance record(s)'
+          : 'Approved $approved; $failed could not be approved. Refresh and review them.'),
     ));
     await _loadRecords();
   }
@@ -428,7 +571,9 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
           width: 280,
           height: 280,
           child: FutureBuilder<Uint8List>(
-            future: ApiClient.instance.getBytes('/attendance/selfie/${r.id}').then((b) => Uint8List.fromList(b)),
+            future: ApiClient.instance
+                .getBytes('/attendance/selfie/${r.id}')
+                .then((b) => Uint8List.fromList(b)),
             builder: (ctx, snapshot) {
               if (snapshot.connectionState != ConnectionState.done) {
                 return const Center(child: CircularProgressIndicator());
@@ -436,11 +581,16 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
               if (snapshot.hasError || !snapshot.hasData) {
                 return const Center(child: Text('Selfie not available.'));
               }
-              return ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.memory(snapshot.data!, fit: BoxFit.contain));
+              return ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.memory(snapshot.data!, fit: BoxFit.contain));
             },
           ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Close'))
+        ],
       ),
     );
   }
@@ -466,39 +616,98 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
         icon: const Icon(Icons.edit_calendar_outlined),
         label: const Text('Manual Entry'),
       ),
-      body: _loading
+      body: _loading &&
+              _records.isEmpty &&
+              _coachRecords.isEmpty &&
+              _missing.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _refreshAll,
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
                 children: [
-                  FutureBuilder<dynamic>(future: ApiClient.instance.get('/reports', query: {'month': DateTime.now().month, 'year': DateTime.now().year}), builder: (context, snapshot) { if (snapshot.hasError) return const Text('Revenue could not be loaded'); if (!snapshot.hasData) return const Text('Loading overall revenue...'); return Text('Overall revenue this month: Rs ${snapshot.data['total_revenue']} (products included)', style: const TextStyle(fontWeight: FontWeight.bold)); }),
-                  ElevatedButton.icon(icon: const Icon(Icons.picture_as_pdf), label: const Text("Overall Revenue & Attendance Reports"), onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => Scaffold(appBar: AppBar(title: const Text("Reports")), body: const AdminReportsTab())))),
+                  FutureBuilder<dynamic>(
+                      future: ApiClient.instance.get('/reports', query: {
+                        'month': DateTime.now().month,
+                        'year': DateTime.now().year
+                      }),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasError)
+                          return const Text('Revenue could not be loaded');
+                        if (!snapshot.hasData)
+                          return const Text('Loading overall revenue...');
+                        return Text(
+                            'Overall revenue this month: Rs ${snapshot.data['total_revenue']} (products included)',
+                            style:
+                                const TextStyle(fontWeight: FontWeight.bold));
+                      }),
+                  ElevatedButton.icon(
+                      icon: const Icon(Icons.picture_as_pdf),
+                      label: const Text("Overall Revenue & Attendance Reports"),
+                      onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                              builder: (_) => Scaffold(
+                                  appBar: AppBar(title: const Text("Reports")),
+                                  body: const AdminReportsTab())))),
                   Wrap(spacing: 8, children: [
-                    OutlinedButton(onPressed: () async {
-                      final picked = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2100));
-                      if (picked != null) _exportReport('classes', date: picked);
-                    }, child: const Text('Choose Day Classes PDF')),
-                    OutlinedButton(onPressed: () => _exportReport('fees_paid'), child: const Text('Fees Paid PDF')),
-                    OutlinedButton(onPressed: () => _exportReport('fees_pending'), child: const Text('Fees Pending PDF')),
+                    OutlinedButton(
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                              context: context,
+                              initialDate: DateTime.now(),
+                              firstDate: DateTime(2000),
+                              lastDate: DateTime(2100));
+                          if (picked != null)
+                            _exportReport('classes', date: picked);
+                        },
+                        child: const Text('Choose Day Classes PDF')),
+                    OutlinedButton(
+                        onPressed: () => _exportReport('fees_paid'),
+                        child: const Text('Fees Paid PDF')),
+                    OutlinedButton(
+                        onPressed: () => _exportReport('fees_pending'),
+                        child: const Text('Fees Pending PDF')),
                   ]),
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                    child: Text('Coaches Missing Attendance Today', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    child: Text('Coaches Missing Attendance Today',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
                   const SizedBox(height: 8),
+                  TextField(
+                      decoration: InputDecoration(
+                          labelText: 'Search coach, activity, or date',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: _missingSearch.isEmpty
+                              ? null
+                              : IconButton(
+                                  onPressed: () =>
+                                      setState(() => _missingSearch = ''),
+                                  icon: const Icon(Icons.clear))),
+                      onChanged: (v) => setState(() => _missingSearch = v)),
                   if (_missing.isEmpty)
-                    const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('All coaches have marked attendance for ended classes today.')))
+                    const Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Center(
+                            child: Text(
+                                'All coaches have marked attendance for ended classes today.')))
+                  else if (_visibleMissing.isEmpty)
+                    const Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Center(child: Text('No results found.')))
                   else
-                    ..._missing.map((m) => Card(
+                    ..._visibleMissing.map((m) => Card(
                           margin: const EdgeInsets.only(bottom: 8),
                           child: ListTile(
-                            leading: const Icon(Icons.warning_amber_rounded, color: AppColors.warning),
+                            leading: const Icon(Icons.warning_amber_rounded,
+                                color: AppColors.warning),
                             title: Text(m.coachName),
-                            subtitle: Text('${m.activityName} · ${m.date} · ends ${m.endTime}'),
+                            subtitle: Text(
+                                '${m.activityName} · ${m.date} · ends ${m.endTime}'),
                             trailing: IconButton(
-                              icon: const Icon(Icons.delete_outline, color: AppColors.danger),
+                              icon: const Icon(Icons.delete_outline,
+                                  color: AppColors.danger),
                               tooltip: 'Dismiss this alert',
                               onPressed: () => _dismissMissing(m),
                             ),
@@ -507,11 +716,15 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                   const SizedBox(height: 20),
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                    child: Text('Student Attendance', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                    child: Text('Student Attendance',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 18)),
                   ),
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                    child: Text('All Attendance Records', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    child: Text('All Attendance Records',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
                   const SizedBox(height: 8),
                   TextField(
@@ -524,32 +737,78 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                           : IconButton(
                               icon: const Icon(Icons.clear),
                               tooltip: 'Clear search',
-                              onPressed: () => setState(() => _attendanceSearch = ''),
+                              onPressed: () =>
+                                  setState(() => _attendanceSearch = ''),
                             ),
                       border: const OutlineInputBorder(),
                       isDense: true,
                     ),
-                    onChanged: (value) => setState(() => _attendanceSearch = value),
+                    onChanged: (value) =>
+                        setState(() => _attendanceSearch = value),
                   ),
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    DropdownButton<String?>(
+                        value: _approvalFilter,
+                        hint: const Text('All review states'),
+                        items: const [
+                          DropdownMenuItem<String?>(
+                              value: null, child: Text('All review states')),
+                          DropdownMenuItem<String?>(
+                              value: 'PENDING', child: Text('Pending')),
+                          DropdownMenuItem<String?>(
+                              value: 'APPROVED', child: Text('Approved')),
+                          DropdownMenuItem<String?>(
+                              value: 'REJECTED', child: Text('Rejected'))
+                        ],
+                        onChanged: (v) => setState(() => _approvalFilter = v)),
+                    if (_attendanceSearch.isNotEmpty ||
+                        _filterActivityId != null ||
+                        _filterStatus != null ||
+                        _approvalFilter != null ||
+                        _filterDateFrom != null ||
+                        _filterDateTo != null)
+                      TextButton(
+                          onPressed: () => setState(() {
+                                _attendanceSearch = '';
+                                _filterActivityId = null;
+                                _filterStatus = null;
+                                _approvalFilter = null;
+                                _filterDateFrom = null;
+                                _filterDateTo = null;
+                              }),
+                          child: const Text('Clear filters'))
+                  ]),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      if (_visibleRecords.any((r) => r.approvalStatus == 'PENDING'))
+                      if (_visibleRecords
+                          .any((r) => r.approvalStatus == 'PENDING'))
                         ElevatedButton.icon(
-                          onPressed: _approvingAll || _recordsLoading ? null : _approveAllPending,
+                          onPressed: _approvingAll || _recordsLoading
+                              ? null
+                              : _approveAllPending,
                           icon: _approvingAll
-                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2))
                               : const Icon(Icons.done_all),
-                          label: Text(_approvingAll ? 'Approving…' : 'Approve filtered pending (${_visibleRecords.where((r) => r.approvalStatus == 'PENDING').length})'),
+                          label: Text(_approvingAll
+                              ? 'Approving…'
+                              : 'Approve filtered pending (${_visibleRecords.where((r) => r.approvalStatus == 'PENDING').length})'),
                         ),
                       DropdownButton<int?>(
                         value: _filterActivityId,
                         hint: const Text('All activities'),
                         items: [
-                          const DropdownMenuItem<int?>(value: null, child: Text('All activities')),
-                          ..._activities.map((a) => DropdownMenuItem<int?>(value: a.id, child: Text(a.name))),
+                          const DropdownMenuItem<int?>(
+                              value: null, child: Text('All activities')),
+                          ..._activities.map((a) => DropdownMenuItem<int?>(
+                              value: a.id, child: Text(a.name))),
                         ],
                         onChanged: (v) {
                           setState(() => _filterActivityId = v);
@@ -560,11 +819,16 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                         value: _filterStatus,
                         hint: const Text('All statuses'),
                         items: const [
-                          DropdownMenuItem<String?>(value: null, child: Text('All statuses')),
-                          DropdownMenuItem<String?>(value: 'PRESENT', child: Text('Present')),
-                          DropdownMenuItem<String?>(value: 'ABSENT', child: Text('Absent')),
-                          DropdownMenuItem<String?>(value: 'LEAVE', child: Text('Leave')),
-                          DropdownMenuItem<String?>(value: 'NOT_CONFIRM', child: Text('Not Confirm')),
+                          DropdownMenuItem<String?>(
+                              value: null, child: Text('All statuses')),
+                          DropdownMenuItem<String?>(
+                              value: 'PRESENT', child: Text('Present')),
+                          DropdownMenuItem<String?>(
+                              value: 'ABSENT', child: Text('Absent')),
+                          DropdownMenuItem<String?>(
+                              value: 'LEAVE', child: Text('Leave')),
+                          DropdownMenuItem<String?>(
+                              value: 'NOT_CONFIRM', child: Text('Not Confirm')),
                         ],
                         onChanged: (v) {
                           setState(() => _filterStatus = v);
@@ -573,36 +837,148 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                       ),
                       OutlinedButton(
                         onPressed: () => _pickFilterDate(true),
-                        child: Text(_filterDateFrom == null ? 'From date' : _filterDateFrom!.toIso8601String().substring(0, 10)),
+                        child: Text(_filterDateFrom == null
+                            ? 'From date'
+                            : _filterDateFrom!
+                                .toIso8601String()
+                                .substring(0, 10)),
                       ),
+                      DropdownButton<String?>(
+                          value: _approvalFilter,
+                          hint: const Text('All reviews'),
+                          items: const [
+                            DropdownMenuItem<String?>(
+                                value: null, child: Text('All reviews')),
+                            DropdownMenuItem<String?>(
+                                value: 'PENDING', child: Text('Pending')),
+                            DropdownMenuItem<String?>(
+                                value: 'APPROVED', child: Text('Approved')),
+                            DropdownMenuItem<String?>(
+                                value: 'REJECTED', child: Text('Rejected'))
+                          ],
+                          onChanged: (v) =>
+                              setState(() => _approvalFilter = v)),
+                      SizedBox(
+                          width: 220,
+                          child: TextField(
+                              decoration: InputDecoration(
+                                  labelText: 'Search coach or date',
+                                  prefixIcon: const Icon(Icons.search),
+                                  suffixIcon: _coachSearch.isEmpty
+                                      ? null
+                                      : IconButton(
+                                          onPressed: () =>
+                                              setState(() => _coachSearch = ''),
+                                          icon: const Icon(Icons.clear))),
+                              onChanged: (v) =>
+                                  setState(() => _coachSearch = v))),
+                      DropdownButton<String?>(
+                          value: _coachStatusFilter,
+                          hint: const Text('All statuses'),
+                          items: const [
+                            DropdownMenuItem<String?>(
+                                value: null, child: Text('All statuses')),
+                            DropdownMenuItem<String?>(
+                                value: 'PRESENT', child: Text('Present')),
+                            DropdownMenuItem<String?>(
+                                value: 'ABSENT', child: Text('Absent')),
+                            DropdownMenuItem<String?>(
+                                value: 'LEAVE', child: Text('Leave')),
+                            DropdownMenuItem<String?>(
+                                value: 'NOT_CONFIRM',
+                                child: Text('Not Confirm'))
+                          ],
+                          onChanged: (v) =>
+                              setState(() => _coachStatusFilter = v)),
+                      if (_coachSearch.isNotEmpty ||
+                          _coachStatusFilter != null ||
+                          _coachFilterId != null ||
+                          _coachFilterDateFrom != null ||
+                          _coachFilterDateTo != null)
+                        TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _coachSearch = '';
+                                _coachStatusFilter = null;
+                                _coachFilterId = null;
+                                _coachFilterDateFrom = null;
+                                _coachFilterDateTo = null;
+                              });
+                              _loadCoachRecords();
+                            },
+                            child: const Text('Clear filters')),
                       OutlinedButton(
                         onPressed: () => _pickFilterDate(false),
-                        child: Text(_filterDateTo == null ? 'To date' : _filterDateTo!.toIso8601String().substring(0, 10)),
+                        child: Text(_filterDateTo == null
+                            ? 'To date'
+                            : _filterDateTo!
+                                .toIso8601String()
+                                .substring(0, 10)),
                       ),
+                      if (_attendanceSearch.isNotEmpty ||
+                          _filterActivityId != null ||
+                          _filterStatus != null ||
+                          _approvalFilter != null ||
+                          _filterDateFrom != null ||
+                          _filterDateTo != null)
+                        TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _attendanceSearch = '';
+                                _filterActivityId = null;
+                                _filterStatus = null;
+                                _approvalFilter = null;
+                                _filterDateFrom = null;
+                                _filterDateTo = null;
+                              });
+                              _loadRecords();
+                            },
+                            child: const Text('Clear filters')),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  if (_recordsLoading)
-                    const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator()))
-                  else if (_visibleRecords.isEmpty)
-                    Padding(padding: const EdgeInsets.all(20), child: Center(child: Text(_attendanceSearch.trim().isEmpty ? 'No attendance records match these filters.' : 'No attendance records match this search.')))
-                  else
+                  if (_recordsLoading && _records.isEmpty)
+                    const Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Center(child: CircularProgressIndicator())),
+                  if (_recordsLoading && _records.isNotEmpty)
+                    const LinearProgressIndicator(),
+                  if (!_recordsLoading && _records.isEmpty)
+                    const Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Center(
+                            child: Text('No attendance records found.'))),
+                  if (!_recordsLoading &&
+                      _records.isNotEmpty &&
+                      _visibleRecords.isEmpty)
+                    const Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Center(child: Text('No results found.'))),
+                  if (_visibleRecords.isNotEmpty)
                     ..._visibleRecords.map((r) => Card(
                           margin: const EdgeInsets.only(bottom: 8),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 8, horizontal: 12),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Expanded(child: Text(r.studentName, style: const TextStyle(fontWeight: FontWeight.bold))),
+                                    Expanded(
+                                        child: Text(r.studentName,
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.bold))),
                                     Wrap(
                                       spacing: 4,
                                       children: [
                                         Chip(
-                                          label: Text(r.status, style: const TextStyle(fontSize: 11, color: Colors.white)),
+                                          label: Text(r.status,
+                                              style: const TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.white)),
                                           backgroundColor: r.status == 'PRESENT'
                                               ? AppColors.success
                                               : r.status == 'ABSENT'
@@ -611,8 +987,12 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                                           visualDensity: VisualDensity.compact,
                                         ),
                                         Chip(
-                                          label: Text(r.approvalStatus, style: const TextStyle(fontSize: 11, color: Colors.white)),
-                                          backgroundColor: _approvalColor(r.approvalStatus),
+                                          label: Text(r.approvalStatus,
+                                              style: const TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.white)),
+                                          backgroundColor:
+                                              _approvalColor(r.approvalStatus),
                                           visualDensity: VisualDensity.compact,
                                         ),
                                       ],
@@ -622,7 +1002,8 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                                 const SizedBox(height: 2),
                                 Text(
                                   '${r.classDate} · ${r.activityName} · ${r.coachName ?? "-"} · ${r.markedManually ? "Manual" : "Coach"}',
-                                  style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                                  style: const TextStyle(
+                                      color: AppColors.textMuted, fontSize: 12),
                                 ),
                                 const SizedBox(height: 8),
                                 Wrap(
@@ -631,29 +1012,65 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                                   crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
                                     if (r.hasSelfie)
-                                      IconButton(icon: const Icon(Icons.photo_camera_outlined, size: 20), tooltip: 'View Selfie', onPressed: () => _viewSelfie(r)),
+                                      IconButton(
+                                          icon: const Icon(
+                                              Icons.photo_camera_outlined,
+                                              size: 20),
+                                          tooltip: 'View Selfie',
+                                          onPressed: () => _viewSelfie(r)),
                                     if (r.approvalStatus == 'PENDING')
                                       _approvalBusyId == r.id
-                                          ? const Padding(padding: EdgeInsets.all(10), child: SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)))
+                                          ? const Padding(
+                                              padding: EdgeInsets.all(10),
+                                              child: SizedBox(
+                                                  height: 16,
+                                                  width: 16,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                          strokeWidth: 2)))
                                           : Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
                                                 IconButton(
-                                                  icon: const Icon(Icons.check_circle_outline, size: 20, color: AppColors.success),
+                                                  icon: const Icon(
+                                                      Icons
+                                                          .check_circle_outline,
+                                                      size: 20,
+                                                      color: AppColors.success),
                                                   tooltip: 'Approve',
-                                                  onPressed: () => _decideApproval(r, true),
+                                                  onPressed: () =>
+                                                      _decideApproval(r, true),
                                                 ),
                                                 IconButton(
-                                                  icon: const Icon(Icons.cancel_outlined, size: 20, color: AppColors.danger),
+                                                  icon: const Icon(
+                                                      Icons.cancel_outlined,
+                                                      size: 20,
+                                                      color: AppColors.danger),
                                                   tooltip: 'Reject',
-                                                  onPressed: () => _decideApproval(r, false),
+                                                  onPressed: () =>
+                                                      _decideApproval(r, false),
                                                 ),
                                               ],
                                             ),
-                                    IconButton(icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _openEditRecord(r)),
+                                    IconButton(
+                                        icon: const Icon(Icons.edit_outlined,
+                                            size: 20),
+                                        onPressed: () => _openEditRecord(r)),
                                     _removingId == r.id
-                                        ? const Padding(padding: EdgeInsets.all(10), child: SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)))
-                                        : IconButton(icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.danger), onPressed: () => _removeRecord(r)),
+                                        ? const Padding(
+                                            padding: EdgeInsets.all(10),
+                                            child: SizedBox(
+                                                height: 16,
+                                                width: 16,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                        strokeWidth: 2)))
+                                        : IconButton(
+                                            icon: const Icon(
+                                                Icons.delete_outline,
+                                                size: 20,
+                                                color: AppColors.danger),
+                                            onPressed: () => _removeRecord(r)),
                                   ],
                                 ),
                               ],
@@ -664,7 +1081,9 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Coach Attendance', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                      const Text('Coach Attendance',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 18)),
                       ElevatedButton.icon(
                         onPressed: _openCoachManualEntry,
                         icon: const Icon(Icons.add, size: 18),
@@ -681,8 +1100,10 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                         value: _coachFilterId,
                         hint: const Text('All coaches'),
                         items: [
-                          const DropdownMenuItem<int?>(value: null, child: Text('All coaches')),
-                          ..._coaches.map((c) => DropdownMenuItem<int?>(value: c.id, child: Text(c.name))),
+                          const DropdownMenuItem<int?>(
+                              value: null, child: Text('All coaches')),
+                          ..._coaches.map((c) => DropdownMenuItem<int?>(
+                              value: c.id, child: Text(c.name))),
                         ],
                         onChanged: (v) {
                           setState(() => _coachFilterId = v);
@@ -691,35 +1112,64 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                       ),
                       OutlinedButton(
                         onPressed: () => _pickCoachFilterDate(true),
-                        child: Text(_coachFilterDateFrom == null ? 'From date' : _coachFilterDateFrom!.toIso8601String().substring(0, 10)),
+                        child: Text(_coachFilterDateFrom == null
+                            ? 'From date'
+                            : _coachFilterDateFrom!
+                                .toIso8601String()
+                                .substring(0, 10)),
                       ),
                       OutlinedButton(
                         onPressed: () => _pickCoachFilterDate(false),
-                        child: Text(_coachFilterDateTo == null ? 'To date' : _coachFilterDateTo!.toIso8601String().substring(0, 10)),
+                        child: Text(_coachFilterDateTo == null
+                            ? 'To date'
+                            : _coachFilterDateTo!
+                                .toIso8601String()
+                                .substring(0, 10)),
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  if (_coachRecordsLoading)
-                    const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator()))
-                  else if (_coachRecords.isEmpty)
-                    const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('No coach attendance records match these filters.')))
-                  else
-                    ..._coachRecords.map((r) {
+                  if (_coachRecordsLoading && _coachRecords.isEmpty)
+                    const Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Center(child: CircularProgressIndicator())),
+                  if (_coachRecordsLoading && _coachRecords.isNotEmpty)
+                    const LinearProgressIndicator(),
+                  if (!_coachRecordsLoading && _coachRecords.isEmpty)
+                    const Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Center(
+                            child: Text(
+                                'No coach attendance records match these filters.'))),
+                  if (!_coachRecordsLoading &&
+                      _coachRecords.isNotEmpty &&
+                      _visibleCoachRecords.isEmpty)
+                    const Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Center(child: Text('No results found.'))),
+                  if (_visibleCoachRecords.isNotEmpty)
+                    ..._visibleCoachRecords.map((r) {
                       final id = r['id'] as int;
                       final status = r['status'] as String? ?? 'PRESENT';
-                      final entry = r['entry_time'] != null ? (r['entry_time'] as String).substring(11, 16) : '-';
-                      final exit = r['exit_time'] != null ? (r['exit_time'] as String).substring(11, 16) : '-';
+                      final entry = r['entry_time'] != null
+                          ? (r['entry_time'] as String).substring(11, 16)
+                          : '-';
+                      final exit = r['exit_time'] != null
+                          ? (r['exit_time'] as String).substring(11, 16)
+                          : '-';
                       return Card(
                         margin: const EdgeInsets.only(bottom: 8),
                         child: ListTile(
                           title: Text(r['coach_name'] as String? ?? '-'),
-                          subtitle: Text('${r['date']} · Entry $entry · Exit $exit'),
+                          subtitle:
+                              Text('${r['date']} · Entry $entry · Exit $exit'),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Chip(
-                                label: Text(status, style: const TextStyle(fontSize: 11, color: Colors.white)),
+                                label: Text(status,
+                                    style: const TextStyle(
+                                        fontSize: 11, color: Colors.white)),
                                 backgroundColor: status == 'PRESENT'
                                     ? AppColors.success
                                     : status == 'ABSENT'
@@ -727,10 +1177,22 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                                         : AppColors.warning,
                                 visualDensity: VisualDensity.compact,
                               ),
-                              IconButton(icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _openEditCoachRecord(r)),
+                              IconButton(
+                                  icon:
+                                      const Icon(Icons.edit_outlined, size: 20),
+                                  onPressed: () => _openEditCoachRecord(r)),
                               _removingCoachId == id
-                                  ? const Padding(padding: EdgeInsets.all(10), child: SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)))
-                                  : IconButton(icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.danger), onPressed: () => _removeCoachRecord(r)),
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(10),
+                                      child: SizedBox(
+                                          height: 16,
+                                          width: 16,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2)))
+                                  : IconButton(
+                                      icon: const Icon(Icons.delete_outline,
+                                          size: 20, color: AppColors.danger),
+                                      onPressed: () => _removeCoachRecord(r)),
                             ],
                           ),
                         ),
@@ -771,9 +1233,13 @@ class _ManualEntryFormState extends State<_ManualEntryForm> {
   Future<void> _loadActivities() async {
     try {
       final data = await ApiClient.instance.get('/activities') as List;
-      _activities = data.map((e) => Activity.fromJson(e as Map<String, dynamic>)).toList();
+      _activities = data
+          .map((e) => Activity.fromJson(e as Map<String, dynamic>))
+          .toList();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _loadingActivities = false);
     }
@@ -794,10 +1260,16 @@ class _ManualEntryFormState extends State<_ManualEntryForm> {
         ApiClient.instance.get('/activities/$id/classes'),
         ApiClient.instance.get('/activities/$id/roster'),
       ]);
-      _classes = (results[0] as List).map((e) => ClassSession.fromJson(e as Map<String, dynamic>)).toList();
-      _roster = (results[1] as List).map((e) => RosterStudent.fromJson(e as Map<String, dynamic>)).toList();
+      _classes = (results[0] as List)
+          .map((e) => ClassSession.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _roster = (results[1] as List)
+          .map((e) => RosterStudent.fromJson(e as Map<String, dynamic>))
+          .toList();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _loadingDetail = false);
     }
@@ -805,7 +1277,8 @@ class _ManualEntryFormState extends State<_ManualEntryForm> {
 
   Future<void> _submit() async {
     if (_classId == null || _studentId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select an activity, class, and student')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Select an activity, class, and student')));
       return;
     }
     setState(() => _submitting = true);
@@ -817,7 +1290,9 @@ class _ManualEntryFormState extends State<_ManualEntryForm> {
       });
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -826,37 +1301,54 @@ class _ManualEntryFormState extends State<_ManualEntryForm> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+      padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 20),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Manual Attendance Entry', style: Theme.of(context).textTheme.titleLarge),
-            const Text('Bypasses geofence and selfie requirements.', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            Text('Manual Attendance Entry',
+                style: Theme.of(context).textTheme.titleLarge),
+            const Text('Bypasses geofence and selfie requirements.',
+                style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
             const SizedBox(height: 16),
             _loadingActivities
                 ? const Center(child: CircularProgressIndicator())
                 : DropdownButtonFormField<int>(
                     initialValue: _activityId,
                     decoration: const InputDecoration(labelText: 'Activity'),
-                    items: _activities.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
+                    items: _activities
+                        .map((a) =>
+                            DropdownMenuItem(value: a.id, child: Text(a.name)))
+                        .toList(),
                     onChanged: _onActivityChanged,
                   ),
             const SizedBox(height: 12),
-            if (_loadingDetail) const Center(child: CircularProgressIndicator()),
+            if (_loadingDetail)
+              const Center(child: CircularProgressIndicator()),
             if (!_loadingDetail && _activityId != null) ...[
               DropdownButtonFormField<int>(
                 initialValue: _classId,
                 decoration: const InputDecoration(labelText: 'Class'),
-                items: _classes.map((c) => DropdownMenuItem(value: c.id, child: Text('${c.date} (${c.startTime}-${c.endTime})'))).toList(),
+                items: _classes
+                    .map((c) => DropdownMenuItem(
+                        value: c.id,
+                        child: Text('${c.date} (${c.startTime}-${c.endTime})')))
+                    .toList(),
                 onChanged: (v) => setState(() => _classId = v),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<int>(
                 initialValue: _studentId,
                 decoration: const InputDecoration(labelText: 'Student'),
-                items: _roster.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
+                items: _roster
+                    .map((s) =>
+                        DropdownMenuItem(value: s.id, child: Text(s.name)))
+                    .toList(),
                 onChanged: (v) => setState(() => _studentId = v),
               ),
               const SizedBox(height: 12),
@@ -867,7 +1359,8 @@ class _ManualEntryFormState extends State<_ManualEntryForm> {
                   DropdownMenuItem(value: 'PRESENT', child: Text('Present')),
                   DropdownMenuItem(value: 'ABSENT', child: Text('Absent')),
                   DropdownMenuItem(value: 'LEAVE', child: Text('Leave')),
-                  DropdownMenuItem(value: 'NOT_CONFIRM', child: Text('Not Confirm')),
+                  DropdownMenuItem(
+                      value: 'NOT_CONFIRM', child: Text('Not Confirm')),
                 ],
                 onChanged: (v) => setState(() => _status = v ?? 'PRESENT'),
               ),
@@ -875,7 +1368,13 @@ class _ManualEntryFormState extends State<_ManualEntryForm> {
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _submitting ? null : _submit,
-              child: _submitting ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Record'),
+              child: _submitting
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Record'),
             ),
           ],
         ),
@@ -900,11 +1399,13 @@ class _CoachManualEntryFormState extends State<_CoachManualEntryForm> {
   String _status = 'PRESENT';
   bool _submitting = false;
 
-  String _fmtTime(TimeOfDay t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:00';
+  String _fmtTime(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:00';
 
   Future<void> _submit() async {
     if (_coachId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select a coach')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Select a coach')));
       return;
     }
     setState(() => _submitting = true);
@@ -918,7 +1419,9 @@ class _CoachManualEntryFormState extends State<_CoachManualEntryForm> {
       });
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -927,19 +1430,29 @@ class _CoachManualEntryFormState extends State<_CoachManualEntryForm> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+      padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 20),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Manual Coach Attendance Entry', style: Theme.of(context).textTheme.titleLarge),
-            const Text('Bypasses geofencing — for correcting or backfilling records.', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            Text('Manual Coach Attendance Entry',
+                style: Theme.of(context).textTheme.titleLarge),
+            const Text(
+                'Bypasses geofencing — for correcting or backfilling records.',
+                style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
             const SizedBox(height: 16),
             DropdownButtonFormField<int>(
               initialValue: _coachId,
               decoration: const InputDecoration(labelText: 'Coach'),
-              items: widget.coaches.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
+              items: widget.coaches
+                  .map(
+                      (c) => DropdownMenuItem(value: c.id, child: Text(c.name)))
+                  .toList(),
               onChanged: (v) => setState(() => _coachId = v),
             ),
             const SizedBox(height: 12),
@@ -948,7 +1461,11 @@ class _CoachManualEntryFormState extends State<_CoachManualEntryForm> {
               title: const Text('Date'),
               subtitle: Text(_date.toIso8601String().substring(0, 10)),
               onTap: () async {
-                final picked = await showDatePicker(context: context, initialDate: _date, firstDate: DateTime(2020), lastDate: DateTime(2100));
+                final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _date,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2100));
                 if (picked != null) setState(() => _date = picked);
               },
             ),
@@ -960,7 +1477,9 @@ class _CoachManualEntryFormState extends State<_CoachManualEntryForm> {
                     title: const Text('Entry Time'),
                     subtitle: Text(_entryTime?.format(context) ?? '-'),
                     onTap: () async {
-                      final picked = await showTimePicker(context: context, initialTime: _entryTime ?? TimeOfDay.now());
+                      final picked = await showTimePicker(
+                          context: context,
+                          initialTime: _entryTime ?? TimeOfDay.now());
                       if (picked != null) setState(() => _entryTime = picked);
                     },
                   ),
@@ -971,7 +1490,9 @@ class _CoachManualEntryFormState extends State<_CoachManualEntryForm> {
                     title: const Text('Exit Time'),
                     subtitle: Text(_exitTime?.format(context) ?? '-'),
                     onTap: () async {
-                      final picked = await showTimePicker(context: context, initialTime: _exitTime ?? TimeOfDay.now());
+                      final picked = await showTimePicker(
+                          context: context,
+                          initialTime: _exitTime ?? TimeOfDay.now());
                       if (picked != null) setState(() => _exitTime = picked);
                     },
                   ),
@@ -985,15 +1506,23 @@ class _CoachManualEntryFormState extends State<_CoachManualEntryForm> {
                 DropdownMenuItem(value: 'PRESENT', child: Text('Present')),
                 DropdownMenuItem(value: 'ABSENT', child: Text('Absent')),
                 DropdownMenuItem(value: 'LEAVE', child: Text('Leave')),
-                DropdownMenuItem(value: 'NOT_CONFIRM', child: Text('Not Confirm')),
-                DropdownMenuItem(value: 'INCOMPLETE', child: Text('Incomplete')),
+                DropdownMenuItem(
+                    value: 'NOT_CONFIRM', child: Text('Not Confirm')),
+                DropdownMenuItem(
+                    value: 'INCOMPLETE', child: Text('Incomplete')),
               ],
               onChanged: (v) => setState(() => _status = v ?? 'PRESENT'),
             ),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _submitting ? null : _submit,
-              child: _submitting ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Record'),
+              child: _submitting
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Record'),
             ),
           ],
         ),

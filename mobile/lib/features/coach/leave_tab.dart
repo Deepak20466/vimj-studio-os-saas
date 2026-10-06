@@ -16,6 +16,38 @@ class _LeaveTabState extends State<LeaveTab> {
   List<LeaveRequest> _leaves = [];
   bool _loading = true;
   int? _busyId;
+  String _search = '';
+  String? _statusFilter;
+  DateTime? _dateFrom;
+  DateTime? _dateTo;
+
+  List<LeaveRequest> get _visibleLeaves => _leaves.where((l) {
+        final q = _search.trim().toLowerCase();
+        return (q.isEmpty ||
+                '${l.reason} ${l.decisionNote ?? ''} ${l.status} ${l.startDate} ${l.endDate}'
+                    .toLowerCase()
+                    .contains(q)) &&
+            (_statusFilter == null || l.status == _statusFilter) &&
+            (_dateFrom == null ||
+                l.startDate.compareTo(
+                        _dateFrom!.toIso8601String().substring(0, 10)) >=
+                    0) &&
+            (_dateTo == null ||
+                l.endDate.compareTo(
+                        _dateTo!.toIso8601String().substring(0, 10)) <=
+                    0);
+      }).toList();
+
+  Future<void> _pickFilterDate(bool from) async {
+    final current = from ? _dateFrom : _dateTo;
+    final picked = await showDatePicker(
+        context: context,
+        initialDate: current ?? DateTime.now(),
+        firstDate: DateTime(2020),
+        lastDate: DateTime(2100));
+    if (picked != null)
+      setState(() => from ? _dateFrom = picked : _dateTo = picked);
+  }
 
   @override
   void initState() {
@@ -27,9 +59,13 @@ class _LeaveTabState extends State<LeaveTab> {
     setState(() => _loading = true);
     try {
       final data = await ApiClient.instance.get('/leave/my') as List;
-      _leaves = data.map((e) => LeaveRequest.fromJson(e as Map<String, dynamic>)).toList();
+      _leaves = data
+          .map((e) => LeaveRequest.fromJson(e as Map<String, dynamic>))
+          .toList();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -52,8 +88,13 @@ class _LeaveTabState extends State<LeaveTab> {
         title: const Text('Cancel leave request?'),
         content: const Text('Cancel this leave request?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('No')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Yes, Cancel', style: TextStyle(color: AppColors.danger))),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('No')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Yes, Cancel',
+                  style: TextStyle(color: AppColors.danger))),
         ],
       ),
     );
@@ -61,10 +102,14 @@ class _LeaveTabState extends State<LeaveTab> {
     setState(() => _busyId = l.id);
     try {
       await ApiClient.instance.delete('/leave/${l.id}');
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Leave request cancelled')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Leave request cancelled')));
       _load();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _busyId = null);
     }
@@ -84,24 +129,80 @@ class _LeaveTabState extends State<LeaveTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Leave Requests'), actions: const [NotificationBellAction(), SizedBox(width: 4)]),
+      appBar: AppBar(
+          title: const Text('Leave Requests'),
+          actions: const [NotificationBellAction(), SizedBox(width: 4)]),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'coach-leave-fab',
         onPressed: _openNewLeaveSheet,
         icon: const Icon(Icons.add),
         label: const Text('Request Leave'),
       ),
-      body: _loading
+      body: _loading && _leaves.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
                 padding: const EdgeInsets.all(12),
                 children: [
+                  TextField(
+                      decoration: InputDecoration(
+                          labelText: 'Search leave requests',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: _search.isEmpty
+                              ? null
+                              : IconButton(
+                                  onPressed: () => setState(() => _search = ''),
+                                  icon: const Icon(Icons.clear))),
+                      onChanged: (v) => setState(() => _search = v)),
+                  Wrap(spacing: 8, children: [
+                    DropdownButton<String?>(
+                        value: _statusFilter,
+                        hint: const Text('All statuses'),
+                        items: const [
+                          DropdownMenuItem(
+                              value: null, child: Text('All statuses')),
+                          DropdownMenuItem(
+                              value: 'PENDING', child: Text('Pending')),
+                          DropdownMenuItem(
+                              value: 'APPROVED', child: Text('Approved')),
+                          DropdownMenuItem(
+                              value: 'REJECTED', child: Text('Rejected'))
+                        ],
+                        onChanged: (v) => setState(() => _statusFilter = v)),
+                    OutlinedButton(
+                        onPressed: () => _pickFilterDate(true),
+                        child: Text(_dateFrom == null
+                            ? 'From date'
+                            : _dateFrom!.toIso8601String().substring(0, 10))),
+                    OutlinedButton(
+                        onPressed: () => _pickFilterDate(false),
+                        child: Text(_dateTo == null
+                            ? 'To date'
+                            : _dateTo!.toIso8601String().substring(0, 10))),
+                    if (_search.isNotEmpty ||
+                        _statusFilter != null ||
+                        _dateFrom != null ||
+                        _dateTo != null)
+                      TextButton(
+                          onPressed: () => setState(() {
+                                _search = '';
+                                _statusFilter = null;
+                                _dateFrom = null;
+                                _dateTo = null;
+                              }),
+                          child: const Text('Clear filters'))
+                  ]),
                   if (_leaves.isEmpty)
-                    const Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No leave requests yet.')))
+                    const Padding(
+                        padding: EdgeInsets.all(32),
+                        child: Center(child: Text('No leave requests yet.')))
+                  else if (_visibleLeaves.isEmpty)
+                    const Padding(
+                        padding: EdgeInsets.all(32),
+                        child: Center(child: Text('No results found.')))
                   else
-                    ..._leaves.map((l) => Card(
+                    ..._visibleLeaves.map((l) => Card(
                           margin: const EdgeInsets.only(bottom: 8),
                           child: Padding(
                             padding: const EdgeInsets.all(12),
@@ -109,11 +210,19 @@ class _LeaveTabState extends State<LeaveTab> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Expanded(child: Text('${l.startDate} to ${l.endDate}', style: const TextStyle(fontWeight: FontWeight.bold))),
+                                    Expanded(
+                                        child: Text(
+                                            '${l.startDate} to ${l.endDate}',
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.bold))),
                                     Chip(
-                                      label: Text(l.status, style: const TextStyle(color: Colors.white, fontSize: 11)),
+                                      label: Text(l.status,
+                                          style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 11)),
                                       backgroundColor: _statusColor(l.status),
                                       visualDensity: VisualDensity.compact,
                                     ),
@@ -121,19 +230,30 @@ class _LeaveTabState extends State<LeaveTab> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(l.reason),
-                                if (l.decisionNote != null && l.decisionNote!.isNotEmpty) ...[
+                                if (l.decisionNote != null &&
+                                    l.decisionNote!.isNotEmpty) ...[
                                   const SizedBox(height: 4),
-                                  Text(l.decisionNote!, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                                  Text(l.decisionNote!,
+                                      style: const TextStyle(
+                                          color: AppColors.textMuted,
+                                          fontSize: 12)),
                                 ],
                                 if (l.status == 'PENDING') ...[
                                   const SizedBox(height: 8),
                                   _busyId == l.id
-                                      ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+                                      ? const Center(
+                                          child: SizedBox(
+                                              width: 20,
+                                              height: 20,
+                                              child: CircularProgressIndicator(
+                                                  strokeWidth: 2)))
                                       : Align(
                                           alignment: Alignment.centerLeft,
                                           child: OutlinedButton(
                                             onPressed: () => _cancel(l),
-                                            style: OutlinedButton.styleFrom(foregroundColor: AppColors.danger),
+                                            style: OutlinedButton.styleFrom(
+                                                foregroundColor:
+                                                    AppColors.danger),
                                             child: const Text('Cancel'),
                                           ),
                                         ),
@@ -181,7 +301,8 @@ class _NewLeaveFormState extends State<_NewLeaveForm> {
 
   Future<void> _submit() async {
     if (_start == null || _end == null || _reasonCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Fill in dates and a reason')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Fill in dates and a reason')));
       return;
     }
     setState(() => _submitting = true);
@@ -194,7 +315,9 @@ class _NewLeaveFormState extends State<_NewLeaveForm> {
       await ApiClient.instance.post('/leave/request', body: body);
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -223,23 +346,30 @@ class _NewLeaveFormState extends State<_NewLeaveForm> {
           const SizedBox(height: 16),
           OutlinedButton(
             onPressed: () => _pickDate(isStart: true),
-            child: Text(_start == null ? 'Select start date' : DateFormat('MMM d, yyyy').format(_start!)),
+            child: Text(_start == null
+                ? 'Select start date'
+                : DateFormat('MMM d, yyyy').format(_start!)),
           ),
           const SizedBox(height: 8),
           OutlinedButton(
             onPressed: () => _pickDate(isStart: false),
-            child: Text(_end == null ? 'Select end date' : DateFormat('MMM d, yyyy').format(_end!)),
+            child: Text(_end == null
+                ? 'Select end date'
+                : DateFormat('MMM d, yyyy').format(_end!)),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _reasonCtrl,
             maxLines: 3,
-            decoration: const InputDecoration(labelText: 'Reason', border: OutlineInputBorder()),
+            decoration: const InputDecoration(
+                labelText: 'Reason', border: OutlineInputBorder()),
           ),
           const SizedBox(height: 16),
           ElevatedButton(
             onPressed: _submitting ? null : _submit,
-            child: _submitting ? const CircularProgressIndicator(color: Colors.white) : const Text('Submit Request'),
+            child: _submitting
+                ? const CircularProgressIndicator(color: Colors.white)
+                : const Text('Submit Request'),
           ),
         ],
       ),

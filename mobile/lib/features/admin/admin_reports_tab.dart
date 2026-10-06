@@ -11,6 +11,7 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
   Map<String, dynamic>? _data;
   String? _error;
   bool _busy = false;
+  String _activitySearch = '';
   @override
   void initState() { super.initState(); _load(); }
   Future<void> _load() async {
@@ -41,7 +42,9 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
       Text(_data!["revenue_basis"].toString()),
       Text('Classes done: ${_data!["classes_done"]} · Fees paid: Rs ${_data!["fee_paid_total"]} · Fees pending: Rs ${_data!["fee_pending_total"]}'),
       for (final kind in ['students_summary', 'attendance', 'classes', 'fees_paid', 'fees_pending', 'revenue']) ElevatedButton(onPressed: () => _pdf(kind), child: Text({'students_summary': 'Student Attendance & Classes', 'attendance': 'Activity Attendance', 'classes': 'Classes Done', 'fees_paid': 'Fees Paid', 'fees_pending': 'Fees Pending', 'revenue': 'Activity & Overall Revenue'}[kind]! + ' PDF')),
-      for (final a in _data!["activities"] as List) Card(child: ListTile(title: Text(a['activity'].toString()), subtitle: Text('Present ${a["present"]}, Absent ${a["absent"]}, Leave ${a["leave"]}, Not Confirm ${a["not_confirm"]}\nRevenue: Rs ${a["revenue"]}'))),
+      TextField(decoration: InputDecoration(labelText: 'Search activity report', prefixIcon: const Icon(Icons.search), suffixIcon: _activitySearch.isEmpty ? null : IconButton(onPressed: () => setState(() => _activitySearch = ''), icon: const Icon(Icons.clear))), onChanged: (v) => setState(() => _activitySearch = v)),
+      if ((_data!["activities"] as List).where((a) => a['activity'].toString().toLowerCase().contains(_activitySearch.trim().toLowerCase())).isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No results found.')),
+      for (final a in (_data!["activities"] as List).where((a) => a['activity'].toString().toLowerCase().contains(_activitySearch.trim().toLowerCase()))) Card(child: ListTile(title: Text(a['activity'].toString()), subtitle: Text('Present ${a["present"]}, Absent ${a["absent"]}, Leave ${a["leave"]}, Not Confirm ${a["not_confirm"]}\nRevenue: Rs ${a["revenue"]}'))),
       Text('Unassigned revenue: Rs ${_data!["unassigned_revenue"]}'),
     ],
   ]);

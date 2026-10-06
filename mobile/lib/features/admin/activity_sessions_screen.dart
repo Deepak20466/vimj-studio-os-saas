@@ -47,6 +47,111 @@ class _ActivitySessionsScreenState extends State<ActivitySessionsScreen> {
   List<Coach> _coaches = [];
   bool _loading = true;
   int? _removingId;
+  String _search = '';
+  int? _coachFilter;
+  String? _dayFilter;
+  String? _locationFilter;
+
+  List<Batch> get _visibleBatches => _batches.where((b) {
+        final query = _search.trim().toLowerCase();
+        final matchesSearch = query.isEmpty ||
+            '${_sessionLabel(b.sessionPeriod)} ${b.startTime} ${b.endTime} '
+                    '${b.daysOfWeek.join(' ')} ${b.location} ${_coachName(b.coachId)}'
+                .toLowerCase()
+                .contains(query);
+        return matchesSearch &&
+            (_coachFilter == null || b.coachId == _coachFilter) &&
+            (_dayFilter == null || b.daysOfWeek.contains(_dayFilter)) &&
+            (_locationFilter == null || b.location == _locationFilter);
+      }).toList();
+
+  bool get _hasFilters =>
+      _search.isNotEmpty ||
+      _coachFilter != null ||
+      _dayFilter != null ||
+      _locationFilter != null;
+
+  Widget _filters() => Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+        child: Column(
+          children: [
+            TextField(
+              decoration: InputDecoration(
+                labelText: 'Search sessions',
+                hintText: 'Coach, location, day, or time',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _search.isEmpty
+                    ? null
+                    : IconButton(
+                        onPressed: () => setState(() => _search = ''),
+                        icon: const Icon(Icons.clear),
+                        tooltip: 'Clear search',
+                      ),
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+              onChanged: (value) => setState(() => _search = value),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                DropdownButton<int?>(
+                  value: _coachFilter,
+                  hint: const Text('All coaches'),
+                  items: [
+                    const DropdownMenuItem<int?>(
+                        value: null, child: Text('All coaches')),
+                    ..._coaches.map((c) => DropdownMenuItem<int?>(
+                        value: c.id, child: Text(c.name))),
+                  ],
+                  onChanged: (value) => setState(() => _coachFilter = value),
+                ),
+                DropdownButton<String?>(
+                  value: _dayFilter,
+                  hint: const Text('All days'),
+                  items: const [
+                    DropdownMenuItem<String?>(
+                        value: null, child: Text('All days')),
+                    DropdownMenuItem(value: 'MON', child: Text('Monday')),
+                    DropdownMenuItem(value: 'TUE', child: Text('Tuesday')),
+                    DropdownMenuItem(value: 'WED', child: Text('Wednesday')),
+                    DropdownMenuItem(value: 'THU', child: Text('Thursday')),
+                    DropdownMenuItem(value: 'FRI', child: Text('Friday')),
+                    DropdownMenuItem(value: 'SAT', child: Text('Saturday')),
+                    DropdownMenuItem(value: 'SUN', child: Text('Sunday')),
+                  ],
+                  onChanged: (value) => setState(() => _dayFilter = value),
+                ),
+                DropdownButton<String?>(
+                  value: _locationFilter,
+                  hint: const Text('All locations'),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                        value: null, child: Text('All locations')),
+                    ..._batches.map((b) => b.location).toSet().map((location) =>
+                        DropdownMenuItem<String?>(
+                            value: location, child: Text(location))),
+                  ],
+                  onChanged: (value) => setState(() => _locationFilter = value),
+                ),
+                if (_hasFilters)
+                  TextButton(
+                    onPressed: () => setState(() {
+                      _search = '';
+                      _coachFilter = null;
+                      _dayFilter = null;
+                      _locationFilter = null;
+                    }),
+                    child: const Text('Clear filters'),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      );
 
   @override
   void initState() {
@@ -154,82 +259,83 @@ class _ActivitySessionsScreenState extends State<ActivitySessionsScreen> {
         icon: const Icon(Icons.add),
         label: const Text('Add Session'),
       ),
-      body: _loading
+      body: _loading && _batches.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _load,
-              child: _batches.isEmpty
-                  ? ListView(children: const [
-                      Padding(
-                          padding: EdgeInsets.all(32),
-                          child: Center(
-                              child: Text(
-                                  'No sessions scheduled yet for this activity.')))
-                    ])
-                  : ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
-                      itemCount: _batches.length,
-                      itemBuilder: (context, i) {
-                        final b = _batches[i];
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                        child: Text(
-                                            '${_sessionLabel(b.sessionPeriod)} · ${b.startTime}-${b.endTime}',
-                                            style: const TextStyle(
-                                                fontWeight: FontWeight.bold))),
-                                    _removingId == b.id
-                                        ? const Padding(
-                                            padding: EdgeInsets.all(10),
-                                            child: SizedBox(
-                                                height: 16,
-                                                width: 16,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                        strokeWidth: 2)))
-                                        : PopupMenuButton<String>(
-                                            onSelected: (v) {
-                                              if (v == 'roster') _openRoster(b);
-                                              if (v == 'edit')
-                                                _openForm(batch: b);
-                                              if (v == 'delete') _remove(b);
-                                            },
-                                            itemBuilder: (_) => [
-                                              const PopupMenuItem(
-                                                  value: 'roster',
-                                                  child: Text('Roster')),
-                                              const PopupMenuItem(
-                                                  value: 'edit',
-                                                  child: Text('Edit')),
-                                              const PopupMenuItem(
-                                                  value: 'delete',
-                                                  child: Text('Delete')),
-                                            ],
-                                          ),
-                                  ],
-                                ),
-                                Text('Days: ${b.daysOfWeek.join(", ")}',
-                                    style: const TextStyle(
-                                        color: AppColors.textMuted)),
-                                Text('Location: ${b.location}',
-                                    style: const TextStyle(
-                                        color: AppColors.textMuted)),
-                                Text('Coach: ${_coachName(b.coachId)}',
-                                    style: const TextStyle(
-                                        color: AppColors.textMuted)),
-                              ],
-                            ),
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(0, 0, 0, 90),
+                itemCount:
+                    1 + (_visibleBatches.isEmpty ? 1 : _visibleBatches.length),
+                itemBuilder: (context, i) {
+                  if (i == 0) return _filters();
+                  if (_visibleBatches.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Center(
+                        child: Text(_batches.isEmpty
+                            ? 'No sessions scheduled yet for this activity.'
+                            : 'No results found.'),
+                      ),
+                    );
+                  }
+                  final b = _visibleBatches[i - 1];
+                  return Card(
+                    margin: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                  child: Text(
+                                      '${_sessionLabel(b.sessionPeriod)} · ${b.startTime}-${b.endTime}',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold))),
+                              _removingId == b.id
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(10),
+                                      child: SizedBox(
+                                          height: 16,
+                                          width: 16,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2)))
+                                  : PopupMenuButton<String>(
+                                      onSelected: (v) {
+                                        if (v == 'roster') _openRoster(b);
+                                        if (v == 'edit') _openForm(batch: b);
+                                        if (v == 'delete') _remove(b);
+                                      },
+                                      itemBuilder: (_) => [
+                                        const PopupMenuItem(
+                                            value: 'roster',
+                                            child: Text('Roster')),
+                                        const PopupMenuItem(
+                                            value: 'edit', child: Text('Edit')),
+                                        const PopupMenuItem(
+                                            value: 'delete',
+                                            child: Text('Delete')),
+                                      ],
+                                    ),
+                            ],
                           ),
-                        );
-                      },
+                          Text('Days: ${b.daysOfWeek.join(", ")}',
+                              style:
+                                  const TextStyle(color: AppColors.textMuted)),
+                          Text('Location: ${b.location}',
+                              style:
+                                  const TextStyle(color: AppColors.textMuted)),
+                          Text('Coach: ${_coachName(b.coachId)}',
+                              style:
+                                  const TextStyle(color: AppColors.textMuted)),
+                        ],
+                      ),
                     ),
+                  );
+                },
+              ),
             ),
     );
   }
@@ -539,7 +645,7 @@ class _SessionRosterScreenState extends State<_SessionRosterScreen> {
       appBar: AppBar(
           title: Text(
               '${widget.activity.name} — ${_sessionLabel(widget.batch.sessionPeriod)} (${widget.batch.startTime}-${widget.batch.endTime})')),
-      body: _loading
+      body: _loading && _roster == null
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [

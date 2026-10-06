@@ -232,6 +232,14 @@ class _SessionPhotoGalleryState extends State<SessionPhotoGallery> {
                   _filterChip('Month', 'month'),
                   _filterChip('Year', 'year'),
                   _filterChip('Choose date', 'date'),
+                  if (_query.isNotEmpty || _dateFilter != 'all')
+                    TextButton(
+                      onPressed: () => setState(() {
+                        _query = '';
+                        _dateFilter = 'all';
+                      }),
+                      child: const Text('Clear filters'),
+                    ),
                 ],
               ),
             ),

@@ -14,6 +14,11 @@ class NotificationCenterScreen extends StatefulWidget {
 class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
   List<AppNotification> _items = [];
   bool _loading = true;
+  String _search = '';
+  String? _statusFilter;
+  List<AppNotification> get _visibleItems => _items.where((n) =>
+      '${n.title} ${n.message} ${n.type}'.toLowerCase().contains(_search.trim().toLowerCase()) &&
+      (_statusFilter == null || (_statusFilter == 'UNREAD' ? !n.isRead : n.isRead))).toList();
 
   @override
   void initState() {
@@ -125,12 +130,15 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
               onRefresh: _load,
               child: _items.isEmpty
                   ? ListView(children: const [Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No notifications yet.')))])
+                  : _visibleItems.isEmpty
+                      ? ListView(padding: const EdgeInsets.all(12), children: [TextField(decoration: InputDecoration(labelText: 'Search notifications', prefixIcon: const Icon(Icons.search), suffixIcon: _search.isEmpty ? null : IconButton(onPressed: () => setState(() => _search = ''), icon: const Icon(Icons.clear))), onChanged: (v) => setState(() => _search = v)), DropdownButton<String?>(value: _statusFilter, hint: const Text('All notifications'), items: const [DropdownMenuItem<String?>(value: null, child: Text('All notifications')), DropdownMenuItem<String?>(value: 'UNREAD', child: Text('Unread')), DropdownMenuItem<String?>(value: 'READ', child: Text('Read'))], onChanged: (v) => setState(() => _statusFilter = v)), if (_search.isNotEmpty || _statusFilter != null) TextButton(onPressed: () => setState(() { _search = ''; _statusFilter = null; }), child: const Text('Clear filters')), const Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No results found.')))] )
                   : ListView.separated(
                       padding: const EdgeInsets.all(12),
-                      itemCount: _items.length,
+                      itemCount: _visibleItems.length + 1,
                       separatorBuilder: (_, __) => const SizedBox(height: 6),
                       itemBuilder: (context, i) {
-                        final n = _items[i];
+                        if (i == 0) return Column(children: [TextField(decoration: InputDecoration(labelText: 'Search notifications', prefixIcon: const Icon(Icons.search), suffixIcon: _search.isEmpty ? null : IconButton(onPressed: () => setState(() => _search = ''), icon: const Icon(Icons.clear))), onChanged: (v) => setState(() => _search = v)), Wrap(spacing: 8, children: [DropdownButton<String?>(value: _statusFilter, hint: const Text('All notifications'), items: const [DropdownMenuItem<String?>(value: null, child: Text('All notifications')), DropdownMenuItem<String?>(value: 'UNREAD', child: Text('Unread')), DropdownMenuItem<String?>(value: 'READ', child: Text('Read'))], onChanged: (v) => setState(() => _statusFilter = v)), if (_search.isNotEmpty || _statusFilter != null) TextButton(onPressed: () => setState(() { _search = ''; _statusFilter = null; }), child: const Text('Clear filters'))])]);
+                        final n = _visibleItems[i - 1];
                         return Card(
                           color: n.isRead ? null : AppColors.brandOrange.withOpacity(0.08),
                           child: ListTile(

@@ -16,6 +16,11 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
   bool _loading = true;
   bool _unpaidOnly = false;
   String _search = '';
+  String? _feeStatusFilter;
+  String _feePeriodFilter = '';
+  String _receiptSearch = '';
+  String _receiptPeriod = '';
+  String _reminderSearch = '';
   List<AdminFeeRecord> _fees = [];
   List<FeeReceiptRecord> _pendingReceipts = [];
   List<FeeReceiptRecord> _approvedReceipts = [];
@@ -33,7 +38,12 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    final showInitialLoader = _fees.isEmpty &&
+        _pendingReceipts.isEmpty &&
+        _approvedReceipts.isEmpty &&
+        _pendingReminders.isEmpty &&
+        _students.isEmpty;
+    if (showInitialLoader) setState(() => _loading = true);
     try {
       final results = await Future.wait([
         ApiClient.instance.get(_unpaidOnly ? '/fees/unpaid' : '/fees'),
@@ -79,13 +89,44 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
 
   List<AdminFeeRecord> get _visibleFees {
     final q = _search.trim().toLowerCase();
-    if (q.isEmpty) return _fees;
     return _fees
         .where((f) =>
-            _feeStudentName(f).toLowerCase().contains(q) ||
-            '${f.month}/${f.year}'.contains(q))
+            (q.isEmpty ||
+                _feeStudentName(f).toLowerCase().contains(q) ||
+                '${f.month}/${f.year}'.contains(q)) &&
+            (_feeStatusFilter == null || f.status == _feeStatusFilter) &&
+            (_feePeriodFilter.isEmpty ||
+                '${f.month}/${f.year}' == _feePeriodFilter))
         .toList();
   }
+
+  List<String> get _feePeriods =>
+      _fees.map((f) => '${f.month}/${f.year}').toSet().toList();
+
+  List<FeeReceiptRecord> get _visiblePendingReceipts => _pendingReceipts
+      .where((r) =>
+          '${_receiptStudentName(r)} ${r.productName ?? ''} ${r.paymentMode} ${r.month}/${r.year} ${r.decisionNote ?? ''}'
+              .toLowerCase()
+              .contains(_receiptSearch.trim().toLowerCase()) &&
+          (_receiptPeriod.isEmpty || '${r.month}/${r.year}' == _receiptPeriod))
+      .toList();
+  List<FeeReceiptRecord> get _visibleApprovedReceipts => _approvedReceipts
+      .where((r) =>
+          '${_receiptStudentName(r)} ${r.productName ?? ''} ${r.month}/${r.year}'
+              .toLowerCase()
+              .contains(_receiptSearch.trim().toLowerCase()) &&
+          (_receiptPeriod.isEmpty || '${r.month}/${r.year}' == _receiptPeriod))
+      .toList();
+  List<FeeReminderDraftRecord> get _visibleReminders => _pendingReminders
+      .where((d) =>
+          '${d.studentName ?? _studentNames[d.studentId] ?? ''} ${d.message} ${d.month}/${d.year}'
+              .toLowerCase()
+              .contains(_reminderSearch.trim().toLowerCase()))
+      .toList();
+  List<String> get _receiptPeriods => {
+        ..._pendingReceipts,
+        ..._approvedReceipts
+      }.map((r) => '${r.month}/${r.year}').toSet().toList();
 
   Future<String?> _promptReason(String title) {
     final ctrl = TextEditingController();
@@ -322,7 +363,43 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                     Text('Pending Fee Receipts (from Coaches)',
                         style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 8),
-                    ..._pendingReceipts.map(
+                    TextField(
+                        decoration: InputDecoration(
+                            labelText: 'Search pending receipts',
+                            prefixIcon: const Icon(Icons.search),
+                            suffixIcon: _receiptSearch.isEmpty
+                                ? null
+                                : IconButton(
+                                    onPressed: () =>
+                                        setState(() => _receiptSearch = ''),
+                                    icon: const Icon(Icons.clear))),
+                        onChanged: (v) => setState(() => _receiptSearch = v)),
+                    Wrap(spacing: 8, children: [
+                      DropdownButton<String>(
+                          value: _receiptPeriod,
+                          hint: const Text('All periods'),
+                          items: [
+                            const DropdownMenuItem(
+                                value: '', child: Text('All periods')),
+                            ..._receiptPeriods.map((p) =>
+                                DropdownMenuItem(value: p, child: Text(p)))
+                          ],
+                          onChanged: (v) =>
+                              setState(() => _receiptPeriod = v ?? '')),
+                      if (_receiptSearch.isNotEmpty ||
+                          _receiptPeriod.isNotEmpty)
+                        TextButton(
+                            onPressed: () => setState(() {
+                                  _receiptSearch = '';
+                                  _receiptPeriod = '';
+                                }),
+                            child: const Text('Clear filters'))
+                    ]),
+                    if (_visiblePendingReceipts.isEmpty)
+                      const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Text('No results found.')),
+                    ..._visiblePendingReceipts.map(
                       (r) => Card(
                         margin: const EdgeInsets.only(bottom: 8),
                         child: ListTile(
@@ -362,7 +439,43 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                     Text('Approved Fee Receipts',
                         style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 8),
-                    ..._approvedReceipts.map(
+                    TextField(
+                        decoration: InputDecoration(
+                            labelText: 'Search approved receipts',
+                            prefixIcon: const Icon(Icons.search),
+                            suffixIcon: _receiptSearch.isEmpty
+                                ? null
+                                : IconButton(
+                                    onPressed: () =>
+                                        setState(() => _receiptSearch = ''),
+                                    icon: const Icon(Icons.clear))),
+                        onChanged: (v) => setState(() => _receiptSearch = v)),
+                    Wrap(spacing: 8, children: [
+                      DropdownButton<String>(
+                          value: _receiptPeriod,
+                          hint: const Text('All periods'),
+                          items: [
+                            const DropdownMenuItem(
+                                value: '', child: Text('All periods')),
+                            ..._receiptPeriods.map((p) =>
+                                DropdownMenuItem(value: p, child: Text(p)))
+                          ],
+                          onChanged: (v) =>
+                              setState(() => _receiptPeriod = v ?? '')),
+                      if (_receiptSearch.isNotEmpty ||
+                          _receiptPeriod.isNotEmpty)
+                        TextButton(
+                            onPressed: () => setState(() {
+                                  _receiptSearch = '';
+                                  _receiptPeriod = '';
+                                }),
+                            child: const Text('Clear filters'))
+                    ]),
+                    if (_visibleApprovedReceipts.isEmpty)
+                      const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Text('No results found.')),
+                    ..._visibleApprovedReceipts.map(
                       (r) => Card(
                         margin: const EdgeInsets.only(bottom: 8),
                         child: ListTile(
@@ -401,7 +514,26 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                     Text('Pending Fee Reminder Drafts (from Coaches)',
                         style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 8),
-                    ..._pendingReminders.map(
+                    TextField(
+                        decoration: InputDecoration(
+                            labelText: 'Search reminder drafts',
+                            prefixIcon: const Icon(Icons.search),
+                            suffixIcon: _reminderSearch.isEmpty
+                                ? null
+                                : IconButton(
+                                    onPressed: () =>
+                                        setState(() => _reminderSearch = ''),
+                                    icon: const Icon(Icons.clear))),
+                        onChanged: (v) => setState(() => _reminderSearch = v)),
+                    if (_reminderSearch.isNotEmpty)
+                      TextButton(
+                          onPressed: () => setState(() => _reminderSearch = ''),
+                          child: const Text('Clear search')),
+                    if (_visibleReminders.isEmpty)
+                      const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Text('No results found.')),
+                    ..._visibleReminders.map(
                       (d) => Card(
                         margin: const EdgeInsets.only(bottom: 8),
                         child: Padding(
@@ -482,6 +614,43 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                         prefixIcon: Icon(Icons.search)),
                     onChanged: (v) => setState(() => _search = v),
                   ),
+                  Wrap(spacing: 8, runSpacing: 4, children: [
+                    DropdownButton<String?>(
+                        value: _feeStatusFilter,
+                        hint: const Text('All statuses'),
+                        items: const [
+                          DropdownMenuItem<String?>(
+                              value: null, child: Text('All statuses')),
+                          DropdownMenuItem<String?>(
+                              value: 'PAID', child: Text('Paid')),
+                          DropdownMenuItem<String?>(
+                              value: 'UNPAID', child: Text('Unpaid')),
+                          DropdownMenuItem<String?>(
+                              value: 'OVERDUE', child: Text('Overdue'))
+                        ],
+                        onChanged: (v) => setState(() => _feeStatusFilter = v)),
+                    DropdownButton<String>(
+                        value: _feePeriodFilter,
+                        hint: const Text('All periods'),
+                        items: [
+                          const DropdownMenuItem(
+                              value: '', child: Text('All periods')),
+                          ..._feePeriods.map(
+                              (p) => DropdownMenuItem(value: p, child: Text(p)))
+                        ],
+                        onChanged: (v) =>
+                            setState(() => _feePeriodFilter = v ?? '')),
+                    if (_search.isNotEmpty ||
+                        _feeStatusFilter != null ||
+                        _feePeriodFilter.isNotEmpty)
+                      TextButton(
+                          onPressed: () => setState(() {
+                                _search = '';
+                                _feeStatusFilter = null;
+                                _feePeriodFilter = '';
+                              }),
+                          child: const Text('Clear filters'))
+                  ]),
                   const SizedBox(height: 8),
                   Text('Fee records',
                       style: Theme.of(context).textTheme.titleMedium),
@@ -497,8 +666,7 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                   else if (_visibleFees.isEmpty)
                     Padding(
                       padding: const EdgeInsets.all(20),
-                      child: Center(
-                          child: Text('No fee records match "$_search".')),
+                      child: const Center(child: Text('No results found.')),
                     )
                   else
                     ..._visibleFees.map(
@@ -639,7 +807,8 @@ class _FeeFormState extends State<_FeeForm> {
         return StatefulBuilder(
           builder: (context, setSheetState) {
             final matches = widget.students
-                .where((s) => s.name.toLowerCase().contains(query.trim().toLowerCase()))
+                .where((s) =>
+                    s.name.toLowerCase().contains(query.trim().toLowerCase()))
                 .toList();
             return SizedBox(
               height: MediaQuery.of(context).size.height * 0.78,
@@ -652,7 +821,8 @@ class _FeeFormState extends State<_FeeForm> {
                 ),
                 child: Column(
                   children: [
-                    Text('Select student', style: Theme.of(context).textTheme.titleLarge),
+                    Text('Select student',
+                        style: Theme.of(context).textTheme.titleLarge),
                     const SizedBox(height: 12),
                     TextField(
                       autofocus: true,
@@ -678,7 +848,8 @@ class _FeeFormState extends State<_FeeForm> {
                                       ? const Icon(Icons.check,
                                           color: AppColors.brandOrange)
                                       : null,
-                                  onTap: () => Navigator.pop(context, student.id),
+                                  onTap: () =>
+                                      Navigator.pop(context, student.id),
                                 );
                               },
                             ),

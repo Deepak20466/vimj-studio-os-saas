@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/api_client.dart';
@@ -25,12 +26,26 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
   List<ClassSession> _classes = [];
   Map<int, Map<String, dynamic>> _summaries = {};
   bool _loading = false;
+  bool _classesLoaded = false;
+  bool _attendanceLoaded = false;
+  bool _attendanceError = false;
   String? _error;
   String _coachName = '';
   String? _myStatus;
   String? _pendingStatus;
   bool _actionLoading = false;
   int _pendingSync = 0;
+  String _classSearch = '';
+  int? _activityFilter;
+  int _loadVersion = 0;
+
+  List<ClassSession> get _visibleClasses => _classes
+      .where((c) =>
+          'class ${c.id} activity ${c.activityId} ${c.startTime} ${c.endTime}'
+              .toLowerCase()
+              .contains(_classSearch.trim().toLowerCase()) &&
+          (_activityFilter == null || c.activityId == _activityFilter))
+      .toList();
 
   @override
   void initState() {
@@ -39,26 +54,77 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
   }
 
   Future<void> _load() async {
+    final version = ++_loadVersion;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final session = await AuthStorage.load();
-      _coachName = session?.name ?? '';
+      if (!mounted || version != _loadVersion) return;
+      setState(() => _coachName = session?.name ?? '');
       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      final results = await Future.wait([
-        ApiClient.instance
-            .get('/activities/classes/my', query: {'class_date': today}),
-        session != null
-            ? ApiClient.instance.get('/coaches/${session.userId}/attendance',
-                query: {'date_from': today, 'date_to': today})
-            : Future.value([]),
+      await Future.wait([
+        _loadClasses(today, version),
+        _loadAttendance(session, today, version),
+        _loadPendingSync(version),
       ]);
-      _classes = (results[0] as List)
+    } catch (_) {
+      if (mounted && version == _loadVersion) {
+        setState(
+            () => _error = 'Could not load dashboard data. Pull to retry.');
+      }
+    } finally {
+      if (mounted && version == _loadVersion) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadClasses(String today, int version) async {
+    try {
+      final data = await ApiClient.instance.get(
+        '/activities/classes/my',
+        query: {'class_date': today},
+      ) as List;
+      final classes = data
           .map((e) => ClassSession.fromJson(e as Map<String, dynamic>))
           .toList();
-      final attendance = results[1] as List;
+      if (!mounted || version != _loadVersion) return;
+      setState(() {
+        _classes = classes;
+        _classesLoaded = true;
+      });
+      unawaited(_loadClassSummaries(classes, version));
+    } on ApiException catch (e) {
+      if (mounted && version == _loadVersion) {
+        setState(() {
+          _classesLoaded = true;
+          _error = e.message;
+        });
+      }
+    } catch (_) {
+      if (mounted && version == _loadVersion) {
+        setState(() {
+          _classesLoaded = true;
+          _error = 'Could not load classes. Pull to retry.';
+        });
+      }
+    }
+  }
+
+  Future<void> _loadAttendance(
+      AuthSession? session, String today, int version) async {
+    if (session == null) {
+      if (mounted && version == _loadVersion) {
+        setState(() {
+          _attendanceLoaded = true;
+          _attendanceError = true;
+        });
+      }
+      return;
+    }
+    try {
+      final attendance = await ApiClient.instance
+          .get('/coaches/${session.userId}/attendance') as List;
       Map<String, dynamic>? todayRecord;
       for (final e in attendance) {
         final a = e as Map<String, dynamic>;
@@ -67,30 +133,57 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
           break;
         }
       }
-      _myStatus = todayRecord?['status'] as String?;
-      _pendingSync = await OfflineQueue.pendingCount();
-      if (mounted) setState(() => _loading = false);
-      _loadSummaries(_classes);
+      if (!mounted || version != _loadVersion) return;
+      setState(() {
+        _myStatus = todayRecord?['status'] as String?;
+        _attendanceLoaded = true;
+        _attendanceError = false;
+      });
     } on ApiException catch (e) {
-      _error = e.message;
-    } catch (e) {
-      _error = 'Failed to load today\'s classes';
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && version == _loadVersion) {
+        setState(() {
+          _attendanceLoaded = true;
+          _attendanceError = true;
+          _error = e.message;
+        });
+      }
+    } catch (_) {
+      if (mounted && version == _loadVersion) {
+        setState(() {
+          _attendanceLoaded = true;
+          _attendanceError = true;
+          _error = 'Could not check attendance. Pull to retry.';
+        });
+      }
     }
   }
 
-  Future<void> _loadSummaries(List<ClassSession> classes) async {
-    final summaryPairs = await Future.wait(classes.map((c) async {
+  Future<void> _loadPendingSync(int version) async {
+    try {
+      final count = await OfflineQueue.pendingCount();
+      if (mounted && version == _loadVersion)
+        setState(() => _pendingSync = count);
+    } catch (_) {
+      // The dashboard remains usable if the local offline queue is unavailable.
+    }
+  }
+
+  Future<void> _loadClassSummaries(
+      List<ClassSession> classes, int version) async {
+    final pairs = await Future.wait(classes.map((c) async {
       try {
         final s = await ApiClient.instance
             .get('/activities/classes/${c.id}/summary') as Map<String, dynamic>;
         return MapEntry(c.id, s);
       } on ApiException {
         return MapEntry(c.id, <String, dynamic>{});
+      } catch (_) {
+        return MapEntry(c.id, <String, dynamic>{});
       }
     }));
-    if (mounted) setState(() => _summaries = Map.fromEntries(summaryPairs));
+    if (mounted && version == _loadVersion) {
+      setState(() => _summaries = Map.fromEntries(pairs));
+    }
   }
 
   Future<void> _submitMyAttendance() async {
@@ -164,7 +257,27 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
               style: TextStyle(fontSize: 12, color: Colors.black54),
             ),
             const SizedBox(height: 8),
-            if (_myStatus != null)
+            if (!_attendanceLoaded || _attendanceError)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Row(
+                  children: [
+                    if (!_attendanceError)
+                      const SizedBox(
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(_attendanceError
+                          ? 'Attendance could not be checked. Pull to retry.'
+                          : "Checking today's attendance..."),
+                    ),
+                  ],
+                ),
+              )
+            else if (_myStatus != null)
               Chip(
                   label: Text(
                       '${_myAttendanceStatusLabels[_myStatus] ?? _myStatus} — locked'))
@@ -174,13 +287,17 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
                 children: _myAttendanceStatusLabels.entries
                     .map((e) => _pendingStatus == e.key
                         ? ElevatedButton(
-                            onPressed: _actionLoading
+                            onPressed: _actionLoading ||
+                                    !_attendanceLoaded ||
+                                    _attendanceError
                                 ? null
                                 : () => setState(() => _pendingStatus = e.key),
                             child: Text(e.value),
                           )
                         : OutlinedButton(
-                            onPressed: _actionLoading
+                            onPressed: _actionLoading ||
+                                    !_attendanceLoaded ||
+                                    _attendanceError
                                 ? null
                                 : () => setState(() => _pendingStatus = e.key),
                             child: Text(e.value),
@@ -189,7 +306,10 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
               ),
               const SizedBox(height: 10),
               ElevatedButton(
-                onPressed: _actionLoading || _pendingStatus == null
+                onPressed: _actionLoading ||
+                        !_attendanceLoaded ||
+                        _attendanceError ||
+                        _pendingStatus == null
                     ? null
                     : _submitMyAttendance,
                 child: Text(_actionLoading ? 'Submitting...' : 'Submit'),
@@ -211,13 +331,52 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
             Text("Today's Classes",
                 style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
-            if (_classes.isEmpty)
+            TextField(
+                decoration: InputDecoration(
+                    labelText: 'Search classes',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _classSearch.isEmpty
+                        ? null
+                        : IconButton(
+                            onPressed: () => setState(() => _classSearch = ''),
+                            icon: const Icon(Icons.clear))),
+                onChanged: (v) => setState(() => _classSearch = v)),
+            Wrap(spacing: 8, children: [
+              DropdownButton<int?>(
+                  value: _activityFilter,
+                  hint: const Text('All activities'),
+                  items: [
+                    const DropdownMenuItem<int?>(
+                        value: null, child: Text('All activities')),
+                    ..._classes.map((c) => c.activityId).toSet().map((id) =>
+                        DropdownMenuItem<int?>(
+                            value: id, child: Text('Activity #$id')))
+                  ],
+                  onChanged: (v) => setState(() => _activityFilter = v)),
+              if (_classSearch.isNotEmpty || _activityFilter != null)
+                TextButton(
+                    onPressed: () => setState(() {
+                          _classSearch = '';
+                          _activityFilter = null;
+                        }),
+                    child: const Text('Clear filters'))
+            ]),
+            if (!_classesLoaded)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_classes.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
                 child: Center(child: Text('No classes scheduled today.')),
               )
+            else if (_visibleClasses.isEmpty)
+              const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(child: Text('No results found.')))
             else
-              ..._classes.map((c) {
+              ..._visibleClasses.map((c) {
                 final s = _summaries[c.id];
                 return Card(
                   child: Padding(
@@ -225,11 +384,13 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
                     child: ListTile(
                       leading: const Icon(Icons.fitness_center),
                       title: Text('${c.startTime} - ${c.endTime}'),
-                      subtitle: s == null || s.isEmpty
-                          ? const Text('-')
-                          : Text(
-                              'Students: ${s['enrolled_count']} · Marked: ${s['marked_count']} · Paid/Unpaid: ${s['fee_paid_count']}/${s['fee_unpaid_count']}',
-                              style: const TextStyle(fontSize: 12)),
+                      subtitle: s == null
+                          ? const Text('Loading class details...')
+                          : s.isEmpty
+                              ? const Text('-')
+                              : Text(
+                                  'Students: ${s['enrolled_count']} · Marked: ${s['marked_count']} · Paid/Unpaid: ${s['fee_paid_count']}/${s['fee_unpaid_count']}',
+                                  style: const TextStyle(fontSize: 12)),
                       isThreeLine: s != null && s.isNotEmpty,
                       trailing: ElevatedButton(
                         onPressed: () => Navigator.of(context).push(

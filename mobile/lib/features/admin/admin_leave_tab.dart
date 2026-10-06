@@ -18,6 +18,29 @@ class _AdminLeaveTabState extends State<AdminLeaveTab> {
   bool _historyLoading = true;
   List<AdminLeaveRequest> _history = [];
   String? _statusFilter;
+  String _pendingSearch = '';
+  String _historySearch = '';
+  DateTime? _pendingFrom;
+  DateTime? _pendingTo;
+  DateTime? _historyFrom;
+  DateTime? _historyTo;
+
+  Future<void> _pickDate({required bool pending, required bool from}) async {
+    final current = pending ? (from ? _pendingFrom : _pendingTo) : (from ? _historyFrom : _historyTo);
+    final picked = await showDatePicker(context: context, initialDate: current ?? DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2100));
+    if (picked == null) return;
+    setState(() {
+      if (pending) { if (from) { _pendingFrom = picked; } else { _pendingTo = picked; } }
+      else { if (from) { _historyFrom = picked; } else { _historyTo = picked; } }
+    });
+  }
+
+  List<AdminLeaveRequest> _filter(List<AdminLeaveRequest> input, String query, DateTime? from, DateTime? to) => input.where((l) {
+        final q = query.trim().toLowerCase();
+        return (q.isEmpty || '${l.coachName ?? ''} ${l.reason} ${l.decisionNote ?? ''} ${l.startDate} ${l.endDate} ${l.status}'.toLowerCase().contains(q)) &&
+            (from == null || l.startDate.compareTo(from.toIso8601String().substring(0, 10)) >= 0) &&
+            (to == null || l.endDate.compareTo(to.toIso8601String().substring(0, 10)) <= 0);
+      }).toList();
 
   @override
   void initState() {
@@ -123,12 +146,16 @@ class _AdminLeaveTabState extends State<AdminLeaveTab> {
               style: TextStyle(color: AppColors.textMuted, fontSize: 12),
             ),
             const SizedBox(height: 12),
+            TextField(decoration: InputDecoration(labelText: 'Search pending requests', prefixIcon: const Icon(Icons.search), suffixIcon: _pendingSearch.isEmpty ? null : IconButton(onPressed: () => setState(() => _pendingSearch = ''), icon: const Icon(Icons.clear))), onChanged: (v) => setState(() => _pendingSearch = v)),
+            Wrap(spacing: 8, children: [OutlinedButton(onPressed: () => _pickDate(pending: true, from: true), child: Text(_pendingFrom == null ? 'From date' : _pendingFrom!.toIso8601String().substring(0, 10))), OutlinedButton(onPressed: () => _pickDate(pending: true, from: false), child: Text(_pendingTo == null ? 'To date' : _pendingTo!.toIso8601String().substring(0, 10))), if (_pendingSearch.isNotEmpty || _pendingFrom != null || _pendingTo != null) TextButton(onPressed: () => setState(() { _pendingSearch = ''; _pendingFrom = null; _pendingTo = null; }), child: const Text('Clear filters'))]),
             if (_pendingLoading)
               const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
             else if (_pending.isEmpty)
               const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('No leave requests awaiting a decision.')))
+            else if (_filter(_pending, _pendingSearch, _pendingFrom, _pendingTo).isEmpty)
+              const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('No results found.')))
             else
-              ..._pending.map((l) => Card(
+              ..._filter(_pending, _pendingSearch, _pendingFrom, _pendingTo).map((l) => Card(
                     margin: const EdgeInsets.only(bottom: 8),
                     child: Padding(
                       padding: const EdgeInsets.all(12),
@@ -180,12 +207,16 @@ class _AdminLeaveTabState extends State<AdminLeaveTab> {
               ],
             ),
             const SizedBox(height: 8),
+            TextField(decoration: InputDecoration(labelText: 'Search leave history', prefixIcon: const Icon(Icons.search), suffixIcon: _historySearch.isEmpty ? null : IconButton(onPressed: () => setState(() => _historySearch = ''), icon: const Icon(Icons.clear))), onChanged: (v) => setState(() => _historySearch = v)),
+            Wrap(spacing: 8, children: [OutlinedButton(onPressed: () => _pickDate(pending: false, from: true), child: Text(_historyFrom == null ? 'From date' : _historyFrom!.toIso8601String().substring(0, 10))), OutlinedButton(onPressed: () => _pickDate(pending: false, from: false), child: Text(_historyTo == null ? 'To date' : _historyTo!.toIso8601String().substring(0, 10))), if (_historySearch.isNotEmpty || _historyFrom != null || _historyTo != null || _statusFilter != null) TextButton(onPressed: () { setState(() { _historySearch = ''; _historyFrom = null; _historyTo = null; _statusFilter = null; }); _loadHistory(); }, child: const Text('Clear filters'))]),
             if (_historyLoading)
               const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
             else if (_history.isEmpty)
               const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('No leave requests found.')))
+            else if (_filter(_history, _historySearch, _historyFrom, _historyTo).isEmpty)
+              const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('No results found.')))
             else
-              ..._history.map((l) {
+              ..._filter(_history, _historySearch, _historyFrom, _historyTo).map((l) {
                 final decisionNote = l.decisionNote;
                 final createdAt = l.createdAt;
                 return Card(

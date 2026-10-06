@@ -12,6 +12,20 @@ class AdminCoachesTab extends StatefulWidget {
 
 class _AdminCoachesTabState extends State<AdminCoachesTab> {
   List<Coach> _coaches = [];
+  String _statusFilter = 'ALL';
+  List<Coach> get _visibleCoaches {
+    final query = _search.trim().toLowerCase();
+    return _coaches
+        .where((c) =>
+            (query.isEmpty ||
+                '${c.name} ${c.email} ${c.phone ?? ''}'
+                    .toLowerCase()
+                    .contains(query)) &&
+            (_statusFilter == 'ALL' ||
+                (_statusFilter == 'ACTIVE' ? c.isActive : !c.isActive)))
+        .toList();
+  }
+
   bool _loading = true;
   String _search = '';
 
@@ -24,10 +38,13 @@ class _AdminCoachesTabState extends State<AdminCoachesTab> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final data = await ApiClient.instance.get('/coaches', query: {'search': _search.isEmpty ? null : _search}) as List;
-      _coaches = data.map((e) => Coach.fromJson(e as Map<String, dynamic>)).toList();
+      final data = await ApiClient.instance.get('/coaches') as List;
+      _coaches =
+          data.map((e) => Coach.fromJson(e as Map<String, dynamic>)).toList();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -54,10 +71,13 @@ class _AdminCoachesTabState extends State<AdminCoachesTab> {
 
   Future<void> _toggleActive(Coach c) async {
     try {
-      await ApiClient.instance.put('/coaches/${c.id}', body: {'is_active': !c.isActive});
+      await ApiClient.instance
+          .put('/coaches/${c.id}', body: {'is_active': !c.isActive});
       _load();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -68,8 +88,13 @@ class _AdminCoachesTabState extends State<AdminCoachesTab> {
         title: const Text('Remove coach?'),
         content: Text('Remove ${c.name}? This cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove', style: TextStyle(color: AppColors.danger))),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Remove',
+                  style: TextStyle(color: AppColors.danger))),
         ],
       ),
     );
@@ -78,7 +103,9 @@ class _AdminCoachesTabState extends State<AdminCoachesTab> {
       await ApiClient.instance.delete('/coaches/${c.id}');
       _load();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -95,35 +122,75 @@ class _AdminCoachesTabState extends State<AdminCoachesTab> {
         children: [
           Padding(
             padding: const EdgeInsets.all(12),
-            child: TextField(
-              decoration: const InputDecoration(hintText: 'Search by name or email...', prefixIcon: Icon(Icons.search)),
-              onChanged: (v) {
-                _search = v;
-                _load();
-              },
-            ),
+            child: Column(children: [
+              TextField(
+                decoration: InputDecoration(
+                  hintText: 'Search by name or email...',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: (_search.isEmpty && _statusFilter == 'ALL')
+                      ? null
+                      : IconButton(
+                          tooltip: 'Clear filters',
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            setState(() {
+                              _search = '';
+                              _statusFilter = 'ALL';
+                            });
+                          },
+                        ),
+                ),
+                onChanged: (v) => setState(() => _search = v),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                  value: _statusFilter,
+                  decoration: const InputDecoration(labelText: 'Status'),
+                  items: const [
+                    DropdownMenuItem(value: 'ALL', child: Text('All coaches')),
+                    DropdownMenuItem(value: 'ACTIVE', child: Text('Active')),
+                    DropdownMenuItem(value: 'INACTIVE', child: Text('Inactive'))
+                  ],
+                  onChanged: (v) => setState(() => _statusFilter = v ?? 'ALL'))
+            ]),
           ),
           Expanded(
-            child: _loading
+            child: _loading && _coaches.isEmpty
                 ? const Center(child: CircularProgressIndicator())
                 : RefreshIndicator(
                     onRefresh: _load,
-                    child: _coaches.isEmpty
-                        ? ListView(children: const [Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No coaches found.')))])
+                    child: _visibleCoaches.isEmpty
+                        ? ListView(children: [
+                            Padding(
+                                padding: const EdgeInsets.all(32),
+                                child: Center(
+                                    child: Text(
+                                        _coaches.isEmpty && _search.isEmpty
+                                            ? 'No coaches found.'
+                                            : 'No results found.')))
+                          ])
                         : ListView.builder(
                             padding: const EdgeInsets.fromLTRB(12, 0, 12, 90),
-                            itemCount: _coaches.length,
+                            itemCount: _visibleCoaches.length,
                             itemBuilder: (context, i) {
-                              final c = _coaches[i];
+                              final c = _visibleCoaches[i];
                               return Card(
                                 margin: const EdgeInsets.only(bottom: 10),
                                 child: ListTile(
-                                  title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  subtitle: Text('${c.email}\n${c.phone ?? "-"}'),
+                                  title: Text(c.name,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold)),
+                                  subtitle:
+                                      Text('${c.email}\n${c.phone ?? "-"}'),
                                   isThreeLine: true,
                                   leading: CircleAvatar(
-                                    backgroundColor: c.isActive ? AppColors.success.withOpacity(0.15) : AppColors.danger.withOpacity(0.15),
-                                    child: Icon(Icons.sports, color: c.isActive ? AppColors.success : AppColors.danger),
+                                    backgroundColor: c.isActive
+                                        ? AppColors.success.withOpacity(0.15)
+                                        : AppColors.danger.withOpacity(0.15),
+                                    child: Icon(Icons.sports,
+                                        color: c.isActive
+                                            ? AppColors.success
+                                            : AppColors.danger),
                                   ),
                                   trailing: PopupMenuButton<String>(
                                     onSelected: (v) {
@@ -133,10 +200,19 @@ class _AdminCoachesTabState extends State<AdminCoachesTab> {
                                       if (v == 'delete') _remove(c);
                                     },
                                     itemBuilder: (_) => [
-                                      const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                                      const PopupMenuItem(value: 'activities', child: Text('Manage Activities')),
-                                      PopupMenuItem(value: 'toggle', child: Text(c.isActive ? 'Deactivate' : 'Activate')),
-                                      const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                                      const PopupMenuItem(
+                                          value: 'edit', child: Text('Edit')),
+                                      const PopupMenuItem(
+                                          value: 'activities',
+                                          child: Text('Manage Activities')),
+                                      PopupMenuItem(
+                                          value: 'toggle',
+                                          child: Text(c.isActive
+                                              ? 'Deactivate'
+                                              : 'Activate')),
+                                      const PopupMenuItem(
+                                          value: 'delete',
+                                          child: Text('Delete')),
                                     ],
                                   ),
                                 ),
@@ -161,26 +237,36 @@ class _CoachForm extends StatefulWidget {
 
 class _CoachFormState extends State<_CoachForm> {
   late final _nameCtrl = TextEditingController(text: widget.coach?.name ?? '');
-  late final _emailCtrl = TextEditingController(text: widget.coach?.email ?? '');
-  late final _phoneCtrl = TextEditingController(text: widget.coach?.phone ?? '');
+  late final _emailCtrl =
+      TextEditingController(text: widget.coach?.email ?? '');
+  late final _phoneCtrl =
+      TextEditingController(text: widget.coach?.phone ?? '');
   final _passwordCtrl = TextEditingController();
   bool _saving = false;
 
   Future<void> _submit() async {
     if (_nameCtrl.text.trim().isEmpty || _emailCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Name and email are required')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Name and email are required')));
       return;
     }
     setState(() => _saving = true);
     try {
       if (widget.coach != null) {
-        final body = <String, dynamic>{'name': _nameCtrl.text.trim(), 'phone': _phoneCtrl.text.trim()};
-        if (_emailCtrl.text.trim() != widget.coach!.email) body['email'] = _emailCtrl.text.trim();
-        if (_passwordCtrl.text.isNotEmpty) body['password'] = _passwordCtrl.text;
-        await ApiClient.instance.put('/coaches/${widget.coach!.id}', body: body);
+        final body = <String, dynamic>{
+          'name': _nameCtrl.text.trim(),
+          'phone': _phoneCtrl.text.trim()
+        };
+        if (_emailCtrl.text.trim() != widget.coach!.email)
+          body['email'] = _emailCtrl.text.trim();
+        if (_passwordCtrl.text.isNotEmpty)
+          body['password'] = _passwordCtrl.text;
+        await ApiClient.instance
+            .put('/coaches/${widget.coach!.id}', body: body);
       } else {
         if (_passwordCtrl.text.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password is required for a new coach')));
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Password is required for a new coach')));
           setState(() => _saving = false);
           return;
         }
@@ -193,7 +279,9 @@ class _CoachFormState extends State<_CoachForm> {
       }
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -212,29 +300,49 @@ class _CoachFormState extends State<_CoachForm> {
   Widget build(BuildContext context) {
     final editing = widget.coach != null;
     return Padding(
-      padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+      padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 20),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(editing ? 'Edit Coach' : 'Add Coach', style: Theme.of(context).textTheme.titleLarge),
+            Text(editing ? 'Edit Coach' : 'Add Coach',
+                style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
-            TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
+            TextField(
+                controller: _nameCtrl,
+                decoration: const InputDecoration(labelText: 'Name')),
             const SizedBox(height: 12),
-            TextField(controller: _emailCtrl, decoration: const InputDecoration(labelText: 'Email / Login ID')),
+            TextField(
+                controller: _emailCtrl,
+                decoration:
+                    const InputDecoration(labelText: 'Email / Login ID')),
             const SizedBox(height: 12),
-            TextField(controller: _phoneCtrl, decoration: const InputDecoration(labelText: 'Phone'), keyboardType: TextInputType.phone),
+            TextField(
+                controller: _phoneCtrl,
+                decoration: const InputDecoration(labelText: 'Phone'),
+                keyboardType: TextInputType.phone),
             const SizedBox(height: 12),
             TextField(
               controller: _passwordCtrl,
               obscureText: true,
-              decoration: InputDecoration(labelText: editing ? 'New Password (optional)' : 'Password'),
+              decoration: InputDecoration(
+                  labelText: editing ? 'New Password (optional)' : 'Password'),
             ),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _saving ? null : _submit,
-              child: _saving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : Text(editing ? 'Save' : 'Create'),
+              child: _saving
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : Text(editing ? 'Save' : 'Create'),
             ),
           ],
         ),
@@ -270,10 +378,16 @@ class _CoachActivitiesSheetState extends State<_CoachActivitiesSheet> {
         ApiClient.instance.get('/activities'),
         ApiClient.instance.get('/coaches/${widget.coach.id}/activities'),
       ]);
-      _all = (results[0] as List).map((e) => Activity.fromJson(e as Map<String, dynamic>)).toList();
-      _selected = (results[1] as List).map((e) => (e as Map<String, dynamic>)['activity_id'] as int).toSet();
+      _all = (results[0] as List)
+          .map((e) => Activity.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _selected = (results[1] as List)
+          .map((e) => (e as Map<String, dynamic>)['activity_id'] as int)
+          .toSet();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -282,10 +396,13 @@ class _CoachActivitiesSheetState extends State<_CoachActivitiesSheet> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      await ApiClient.instance.put('/coaches/${widget.coach.id}/activities', body: {'activity_ids': _selected.toList()});
+      await ApiClient.instance.put('/coaches/${widget.coach.id}/activities',
+          body: {'activity_ids': _selected.toList()});
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -294,13 +411,18 @@ class _CoachActivitiesSheetState extends State<_CoachActivitiesSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+      padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 20),
       child: SizedBox(
         height: MediaQuery.of(context).size.height * 0.6,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Activities for ${widget.coach.name}', style: Theme.of(context).textTheme.titleLarge),
+            Text('Activities for ${widget.coach.name}',
+                style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
             Expanded(
               child: _loading
@@ -326,7 +448,13 @@ class _CoachActivitiesSheetState extends State<_CoachActivitiesSheet> {
             const SizedBox(height: 8),
             ElevatedButton(
               onPressed: _saving ? null : _save,
-              child: _saving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Save'),
+              child: _saving
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Save'),
             ),
           ],
         ),

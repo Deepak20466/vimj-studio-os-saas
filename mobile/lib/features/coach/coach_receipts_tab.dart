@@ -19,6 +19,46 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
   bool _loading = true;
   int? _downloadingId;
   int? _downloadingCsvId;
+  String _search = '';
+  String _statusFilter = 'ALL';
+  int? _monthFilter;
+  int? _yearFilter;
+
+  List<FeeReceiptRecord> get _visibleReceipts {
+    final query = _search.trim().toLowerCase();
+    return _receipts.where((r) {
+      final student =
+          (r.studentName ?? 'Student #${r.studentId}').toLowerCase();
+      final matchesSearch = query.isEmpty ||
+          student.contains(query) ||
+          r.paymentMode.toLowerCase().contains(query) ||
+          (r.productName ?? '').toLowerCase().contains(query) ||
+          (r.billingDate ?? '${r.month}/${r.year}')
+              .toLowerCase()
+              .contains(query);
+      return matchesSearch &&
+          (_statusFilter == 'ALL' || r.status == _statusFilter) &&
+          (_monthFilter == null || r.month == _monthFilter) &&
+          (_yearFilter == null || r.year == _yearFilter);
+    }).toList();
+  }
+
+  Future<void> _chooseMonth() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(_yearFilter ?? now.year, _monthFilter ?? now.month),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      initialDatePickerMode: DatePickerMode.year,
+    );
+    if (picked != null) {
+      setState(() {
+        _monthFilter = picked.month;
+        _yearFilter = picked.year;
+      });
+    }
+  }
 
   @override
   void initState() {
@@ -143,7 +183,7 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
         icon: const Icon(Icons.add),
         label: const Text('Record Payment'),
       ),
-      body: _loading
+      body: _loading && _receipts.isEmpty && _students.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _load,
@@ -163,56 +203,127 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
                                   child:
                                       Text('No fee receipts submitted yet.')))
                         ])
-                      : ListView.builder(
+                      : ListView(
                           padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
-                          itemCount: _receipts.length,
-                          itemBuilder: (context, i) {
-                            final r = _receipts[i];
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              child: ListTile(
-                                title: Text(
-                                    '${r.studentName ?? "Student #${r.studentId}"} — ${r.productName?.isNotEmpty == true ? "${r.productName}: " : ""}₹${r.amount} + product ${r.productAmount} = ${(double.parse(r.amount) + double.parse(r.productAmount)).toStringAsFixed(2)}'),
-                                subtitle: Text(
-                                    '${r.billingDate ?? "${r.month}/${r.year}"} · ${r.paymentMode}${r.decisionNote != null ? "\n${r.decisionNote}" : ""}'),
-                                isThreeLine: r.decisionNote != null,
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    _downloadingId == r.id
-                                        ? const SizedBox(
-                                            width: 20,
-                                            height: 20,
-                                            child: CircularProgressIndicator(
-                                                strokeWidth: 2))
-                                        : IconButton(
-                                            icon: const Icon(
-                                                Icons.picture_as_pdf_outlined),
-                                            tooltip: 'Receipt (PDF)',
-                                            onPressed: () => _downloadPdf(r)),
-                                    _downloadingCsvId == r.id
-                                        ? const SizedBox(
-                                            width: 20,
-                                            height: 20,
-                                            child: CircularProgressIndicator(
-                                                strokeWidth: 2))
-                                        : IconButton(
-                                            icon: const Icon(
-                                                Icons.table_chart_outlined),
-                                            tooltip: 'Receipt (CSV)',
-                                            onPressed: () => _downloadCsv(r)),
-                                    Chip(
-                                        label: Text(r.status,
-                                            style: const TextStyle(
-                                                fontSize: 11,
-                                                color: Colors.white)),
-                                        backgroundColor:
-                                            _statusColor(r.status)),
-                                  ],
-                                ),
+                          children: [
+                            TextField(
+                              decoration: InputDecoration(
+                                hintText:
+                                    'Search student, product, date, or mode',
+                                prefixIcon: const Icon(Icons.search),
+                                suffixIcon: _search.isEmpty
+                                    ? null
+                                    : IconButton(
+                                        icon: const Icon(Icons.clear),
+                                        onPressed: () =>
+                                            setState(() => _search = ''),
+                                      ),
+                                border: const OutlineInputBorder(),
                               ),
-                            );
-                          },
+                              onChanged: (value) =>
+                                  setState(() => _search = value),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                DropdownButton<String>(
+                                  value: _statusFilter,
+                                  underline: const SizedBox.shrink(),
+                                  items: const [
+                                    DropdownMenuItem(
+                                        value: 'ALL',
+                                        child: Text('All statuses')),
+                                    DropdownMenuItem(
+                                        value: 'PENDING',
+                                        child: Text('Pending')),
+                                    DropdownMenuItem(
+                                        value: 'APPROVED',
+                                        child: Text('Approved')),
+                                    DropdownMenuItem(
+                                        value: 'REJECTED',
+                                        child: Text('Rejected')),
+                                  ],
+                                  onChanged: (value) => setState(
+                                      () => _statusFilter = value ?? 'ALL'),
+                                ),
+                                OutlinedButton.icon(
+                                  onPressed: _chooseMonth,
+                                  icon: const Icon(Icons.calendar_month),
+                                  label: Text(_monthFilter == null
+                                      ? 'Any month'
+                                      : '$_monthFilter/$_yearFilter'),
+                                ),
+                                if (_monthFilter != null ||
+                                    _statusFilter != 'ALL')
+                                  TextButton(
+                                    onPressed: () => setState(() {
+                                      _monthFilter = null;
+                                      _yearFilter = null;
+                                      _statusFilter = 'ALL';
+                                    }),
+                                    child: const Text('Clear filters'),
+                                  ),
+                              ],
+                            ),
+                            if (_visibleReceipts.isEmpty)
+                              const Padding(
+                                padding: EdgeInsets.all(32),
+                                child: Center(
+                                    child: Text(
+                                        'No receipts match these search and filter options.')),
+                              ),
+                            ..._visibleReceipts.map((r) => Card(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  child: ListTile(
+                                    title: Text(
+                                        '${r.studentName ?? "Student #${r.studentId}"} — ${r.productName?.isNotEmpty == true ? "${r.productName}: " : ""}₹${r.amount} + product ${r.productAmount} = ${(double.parse(r.amount) + double.parse(r.productAmount)).toStringAsFixed(2)}'),
+                                    subtitle: Text(
+                                        '${r.billingDate ?? "${r.month}/${r.year}"} · ${r.paymentMode}${r.decisionNote != null ? "\n${r.decisionNote}" : ""}'),
+                                    isThreeLine: r.decisionNote != null,
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        _downloadingId == r.id
+                                            ? const SizedBox(
+                                                width: 20,
+                                                height: 20,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                        strokeWidth: 2))
+                                            : IconButton(
+                                                icon: const Icon(Icons
+                                                    .picture_as_pdf_outlined),
+                                                tooltip: 'Receipt (PDF)',
+                                                onPressed: () =>
+                                                    _downloadPdf(r)),
+                                        _downloadingCsvId == r.id
+                                            ? const SizedBox(
+                                                width: 20,
+                                                height: 20,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                        strokeWidth: 2))
+                                            : IconButton(
+                                                icon: const Icon(
+                                                    Icons.table_chart_outlined),
+                                                tooltip: 'Receipt (CSV)',
+                                                onPressed: () =>
+                                                    _downloadCsv(r)),
+                                        Chip(
+                                            label: Text(r.status,
+                                                style: const TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.white)),
+                                            backgroundColor:
+                                                _statusColor(r.status)),
+                                      ],
+                                    ),
+                                  ),
+                                )),
+                          ],
                         ),
             ),
     );
