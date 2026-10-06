@@ -129,5 +129,6 @@ following additional updates:
 - Web login has a 75-second timeout and displays a wake-up explanation while waiting, then
   an actionable retry message on timeout. Mobile retains its 75-second login timeout and
   now displays the same explanation during the wait; timeout already offers a retry message.
-- Follow-up Android package version: 1.25.1+35. Verify the tagged GitHub release before
-  treating the updated APK as available to users.
+- Follow-up Android package version: 1.25.1+35. GitHub Actions run 37448001267 completed
+  successfully and published all three APKs at
+  https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.25.1.
