@@ -159,5 +159,5 @@ following additional updates:
 - No schema or migration changes are required. Verify the Flutter build, backend regression
   tests, and all three Android ABI APKs before tagging a release.
 - Release package target for this update: 1.26.4+40. GitHub Actions builds use the
-  repository's debug-signing setup; verify the generated certificate against the latest
-  published APK before sharing it as an update install.
+  persistent signing key configured with GitHub Actions secrets. Keep the matching backup
+  keystore at `%USERPROFILE%/vimj-signing/` and never commit or share it publicly.

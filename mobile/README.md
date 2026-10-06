@@ -145,3 +145,12 @@ and installed from it.
   setup outside this codebase's scope. SMS/WhatsApp reminders are sent
   directly by the backend and don't depend on this.
 
+## Android release signing
+
+GitHub Actions signs release APKs with a persistent upload keystore. Configure
+`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and
+`ANDROID_KEY_PASSWORD` as repository Actions secrets. Keep a private backup of the
+keystore and credentials; never commit them. The release workflow decodes the key
+only on its ephemeral runner. All future APKs must use this same key so Android can
+install them as updates without uninstalling.
+

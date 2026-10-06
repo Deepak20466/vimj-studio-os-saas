@@ -28,8 +28,20 @@ jobs:
       - name: Configure Gradle wrapper for hosted runner
         working-directory: mobile/android
         run: sed -i 's#^distributionUrl=.*#distributionUrl=https\\://services.gradle.org/distributions/gradle-9.3.1-all.zip#' gradle/wrapper/gradle-wrapper.properties
+      - name: Decode persistent Android signing key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > mobile/android/app/vimj-upload-key.jks
+          test -s mobile/android/app/vimj-upload-key.jks
       - name: Build split APKs
         working-directory: mobile
+        env:
+          ANDROID_KEYSTORE_PATH: vimj-upload-key.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: flutter build apk --release --split-per-abi
       - name: Create release if missing
         env:
