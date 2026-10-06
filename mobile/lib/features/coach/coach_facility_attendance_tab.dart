@@ -27,6 +27,7 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
   String? _selectedDate = _isoDate(DateTime.now());
   List<AdminAttendanceRecord> _records = [];
   bool _recordsLoading = true;
+  String _attendanceSearch = '';
 
   DateTime get _monthStart => DateTime(_viewMonth.year, _viewMonth.month, 1);
   DateTime get _monthEnd => DateTime(_viewMonth.year, _viewMonth.month + 1, 0);
@@ -268,6 +269,13 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
     }
     final facility = _facilityByDate[key];
     final students = _studentByDate[key] ?? const <AdminAttendanceRecord>[];
+    final query = _attendanceSearch.trim().toLowerCase();
+    final visibleStudents = students.where((r) => query.isEmpty || [
+      r.studentName,
+      r.activityName,
+      r.status,
+      r.approvalStatus,
+    ].any((value) => value.toLowerCase().contains(query))).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -293,10 +301,30 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
         const SizedBox(height: 18),
         Text('Student Attendance', style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 6),
+        TextField(
+          decoration: InputDecoration(
+            labelText: 'Search attendance',
+            hintText: 'Student, activity, or status',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _attendanceSearch.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.clear),
+                    tooltip: 'Clear search',
+                    onPressed: () => setState(() => _attendanceSearch = ''),
+                  ),
+            border: const OutlineInputBorder(),
+            isDense: true,
+          ),
+          onChanged: (value) => setState(() => _attendanceSearch = value),
+        ),
+        const SizedBox(height: 8),
         if (students.isEmpty)
           const Text('No student attendance marked on this date.', style: TextStyle(fontSize: 12, color: AppColors.textMuted))
+        else if (visibleStudents.isEmpty)
+          const Text('No student attendance matches this search.', style: TextStyle(fontSize: 12, color: AppColors.textMuted))
         else
-          ...students.map((r) => Container(
+          ...visibleStudents.map((r) => Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(

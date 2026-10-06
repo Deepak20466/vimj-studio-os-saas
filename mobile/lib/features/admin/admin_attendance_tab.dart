@@ -26,11 +26,25 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
 
   int? _filterActivityId;
   String? _filterStatus;
+  String _attendanceSearch = '';
   DateTime? _filterDateFrom;
   DateTime? _filterDateTo;
   int? _removingId;
   int? _approvalBusyId;
   bool _approvingAll = false;
+
+  List<AdminAttendanceRecord> get _visibleRecords {
+    final query = _attendanceSearch.trim().toLowerCase();
+    if (query.isEmpty) return _records;
+    return _records.where((r) => [
+      r.studentName,
+      r.activityName,
+      r.coachName ?? '',
+      r.classDate,
+      r.status,
+      r.approvalStatus,
+    ].any((value) => value.toLowerCase().contains(query))).toList();
+  }
 
   // --- Coach attendance (separate CRUD) ---
   bool _coachRecordsLoading = true;
@@ -361,7 +375,7 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
 
   Future<void> _approveAllPending() async {
     if (_approvingAll) return;
-    final pending = _records.where((r) => r.approvalStatus == 'PENDING').toList();
+    final pending = _visibleRecords.where((r) => r.approvalStatus == 'PENDING').toList();
     if (pending.isEmpty) return;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -500,17 +514,35 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                     child: Text('All Attendance Records', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
                   const SizedBox(height: 8),
+                  TextField(
+                    decoration: InputDecoration(
+                      labelText: 'Search attendance',
+                      hintText: 'Student, activity, coach, date, or status',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _attendanceSearch.isEmpty
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.clear),
+                              tooltip: 'Clear search',
+                              onPressed: () => setState(() => _attendanceSearch = ''),
+                            ),
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    onChanged: (value) => setState(() => _attendanceSearch = value),
+                  ),
+                  const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      if (_records.any((r) => r.approvalStatus == 'PENDING'))
+                      if (_visibleRecords.any((r) => r.approvalStatus == 'PENDING'))
                         ElevatedButton.icon(
                           onPressed: _approvingAll || _recordsLoading ? null : _approveAllPending,
                           icon: _approvingAll
                               ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                               : const Icon(Icons.done_all),
-                          label: Text(_approvingAll ? 'Approving…' : 'Approve filtered pending (${_records.where((r) => r.approvalStatus == 'PENDING').length})'),
+                          label: Text(_approvingAll ? 'Approving…' : 'Approve filtered pending (${_visibleRecords.where((r) => r.approvalStatus == 'PENDING').length})'),
                         ),
                       DropdownButton<int?>(
                         value: _filterActivityId,
@@ -552,10 +584,10 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                   const SizedBox(height: 12),
                   if (_recordsLoading)
                     const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator()))
-                  else if (_records.isEmpty)
-                    const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('No attendance records match these filters.')))
+                  else if (_visibleRecords.isEmpty)
+                    Padding(padding: const EdgeInsets.all(20), child: Center(child: Text(_attendanceSearch.trim().isEmpty ? 'No attendance records match these filters.' : 'No attendance records match this search.')))
                   else
-                    ..._records.map((r) => Card(
+                    ..._visibleRecords.map((r) => Card(
                           margin: const EdgeInsets.only(bottom: 8),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),

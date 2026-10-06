@@ -161,3 +161,13 @@ following additional updates:
 - Release package target for this update: 1.26.4+40. GitHub Actions builds use the
   persistent signing key configured with GitHub Actions secrets. Keep the matching backup
   keystore at `%USERPROFILE%/vimj-signing/` and never commit or share it publicly.
+
+## Mobile Attendance Search (2026-10-07)
+
+- Admin Attendance search filters the currently loaded records by student, activity, coach,
+  date, attendance status, and approval status. Bulk approval follows the visible search
+  and other active filters.
+- Coach Attendance search filters student attendance for the selected calendar date by
+  student, activity, attendance status, and approval status.
+- Package version target: 1.26.5+41. Build with the persistent Android release key so this
+  update installs over 1.26.4 without another uninstall.
