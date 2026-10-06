@@ -48,4 +48,5 @@ Coach student-photo removal (2026-10-06):
 - Added a confirmed Delete Photo action to each coach student menu on mobile and a Remove Photo action beside Capture Photo on coach web.
 - Added the authenticated student-photo DELETE API. Admins can remove any student's photo; coaches can remove photos only for students on their assigned activity rosters. Removing a photo preserves the student, attendance, and fee records.
 - Regression coverage checks successful removal, missing-photo handling, and that a coach cannot remove a photo outside their roster.
-- Android update: version 1.26.3+39; release verification and download link will be recorded after publishing.
+- Android update: version 1.26.3+39. GitHub Actions run 37462527351 completed successfully and published all three ABI APKs at https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.26.3.
+- Verified the deployed backend OpenAPI includes `DELETE /students/{student_id}/photo`. Backend regression suite (8 tests), frontend lint and production build, Flutter analysis, Flutter widget test, and local split-ABI release build passed.
