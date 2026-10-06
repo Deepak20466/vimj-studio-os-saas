@@ -158,3 +158,6 @@ following additional updates:
   endpoint does not block faster data. Render cold-start time remains controlled by hosting.
 - No schema or migration changes are required. Verify the Flutter build, backend regression
   tests, and all three Android ABI APKs before tagging a release.
+- Release package target for this update: 1.26.4+40. GitHub Actions builds use the
+  repository's debug-signing setup; verify the generated certificate against the latest
+  published APK before sharing it as an update install.
