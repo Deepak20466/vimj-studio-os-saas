@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/export_helper.dart';
+import '../../core/search_utils.dart';
 
 /// Shared Admin/Coach gallery. The API scopes Coach results and delete access
 /// to the signed-in coach, while Admins can manage every uploaded session photo.
@@ -78,12 +79,20 @@ class _SessionPhotoGalleryState extends State<SessionPhotoGallery> {
   }
 
   List<Map<String, dynamic>> get _visiblePhotos {
-    final q = _query.trim().toLowerCase();
     return _photos.where((photo) {
       final date = DateTime.tryParse(photo['date'] as String? ?? '');
-      final textMatch = q.isEmpty ||
-          ['activity_name', 'coach_name', 'date', 'start_time', 'end_time']
-              .any((key) => '${photo[key] ?? ''}'.toLowerCase().contains(q));
+      final textMatch = matchesSearchQuery(
+        [
+          photo['activity_name'],
+          photo['coach_name'],
+          photo['date'],
+          photo['start_time'],
+          photo['end_time'],
+          photo['class_id'],
+          photo['uploaded_at'],
+        ],
+        _query,
+      );
       var dateMatch = true;
       if (date != null) {
         if (_dateFilter == 'day' || _dateFilter == 'date') {

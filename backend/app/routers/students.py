@@ -3,6 +3,7 @@ import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -113,7 +114,22 @@ def update_student(
 
     # A coach may only correct contact details for their own roster; deactivating a
     # student's account or resetting their password stays admin-only.
-    fields = ("name", "phone", "phone_secondary") if current_user.role == UserRole.COACH else ("name", "phone", "phone_secondary", "is_active")
+    fields = (
+        ("name", "phone", "phone_secondary")
+        if current_user.role == UserRole.COACH
+        else ("name", "email", "phone", "phone_secondary", "is_active")
+    )
+    if current_user.role == UserRole.ADMIN and payload.email is not None:
+        email = str(payload.email).strip()
+        if email.lower() != student.email.lower():
+            email_in_use = db.query(User).filter(
+                func.lower(User.email) == email.lower(), User.id != student.id
+            ).first()
+            if email_in_use:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Email already registered",
+                )
     for field in fields:
         value = getattr(payload, field)
         if value is not None:

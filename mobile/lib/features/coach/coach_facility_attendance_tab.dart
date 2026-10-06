@@ -6,6 +6,7 @@ import '../../core/app_theme.dart';
 import '../../core/auth_storage.dart';
 import '../../core/models.dart';
 import '../../core/export_helper.dart';
+import '../../core/search_utils.dart';
 import '../shared/notification_bell_action.dart';
 
 String _isoDate(DateTime d) => DateFormat('yyyy-MM-dd').format(d);
@@ -289,13 +290,29 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
     }
     final facility = _facilityByDate[key];
     final students = _studentByDate[key] ?? const <AdminAttendanceRecord>[];
-    final query = _attendanceSearch.trim().toLowerCase();
-    final visibleStudents = students.where((r) => (query.isEmpty || [
-      r.studentName,
-      r.activityName,
-      r.status,
-      r.approvalStatus,
-    ].any((value) => value.toLowerCase().contains(query))) && (_attendanceStatusFilter == null || r.status == _attendanceStatusFilter) && (_approvalFilter == null || r.approvalStatus == _approvalFilter) && (_activityFilter == null || r.activityId == _activityFilter)).toList();
+    final visibleStudents = students
+        .where((r) =>
+            matchesSearchQuery(
+                  [
+                    r.studentName,
+                    r.activityName,
+                    r.status,
+                    r.approvalStatus,
+                    r.classDate,
+                    r.timestamp,
+                    r.id,
+                    r.studentId,
+                    r.classId,
+                    r.activityId,
+                    r.coachName,
+                  ],
+                  _attendanceSearch,
+                ) &&
+            (_attendanceStatusFilter == null ||
+                r.status == _attendanceStatusFilter) &&
+            (_approvalFilter == null || r.approvalStatus == _approvalFilter) &&
+            (_activityFilter == null || r.activityId == _activityFilter))
+        .toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -356,23 +373,36 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(child: Text(r.studentName, style: const TextStyle(fontWeight: FontWeight.bold))),
-                        Wrap(
-                          spacing: 4,
-                          children: [
-                            Chip(
-                              label: Text(r.status, style: const TextStyle(fontSize: 10, color: Colors.white)),
-                              backgroundColor: _statusColor(r.status),
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            Chip(
-                              label: Text(_approvalLabel(r.approvalStatus), style: const TextStyle(fontSize: 10, color: Colors.white)),
-                              backgroundColor: _approvalColor(r.approvalStatus),
-                              visualDensity: VisualDensity.compact,
-                            ),
-                          ],
+                        Expanded(
+                          child: Text(r.studentName,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Wrap(
+                            alignment: WrapAlignment.end,
+                            spacing: 4,
+                            children: [
+                              Chip(
+                                label: Text(r.status,
+                                    style: const TextStyle(
+                                        fontSize: 10, color: Colors.white)),
+                                backgroundColor: _statusColor(r.status),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              Chip(
+                                label: Text(_approvalLabel(r.approvalStatus),
+                                    style: const TextStyle(
+                                        fontSize: 10, color: Colors.white)),
+                                backgroundColor:
+                                    _approvalColor(r.approvalStatus),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),

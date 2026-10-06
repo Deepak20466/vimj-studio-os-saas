@@ -24,6 +24,14 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _loadingMessage;
   Timer? _loadingMessageTimer;
 
+  @override
+  void initState() {
+    super.initState();
+    // Wake a sleeping production API while the user enters credentials; this
+    // stays in the background and never blocks the login screen.
+    unawaited(ApiClient.instance.warmUp());
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() {
@@ -162,9 +170,15 @@ class _LoginScreenState extends State<LoginScreen> {
                         // otherwise dark mode's default light input text is nearly
                         // invisible here.
                         style: const TextStyle(color: AppColors.text),
+                        cursorColor: AppColors.brandOrange,
                         decoration: const InputDecoration(
                           labelText: 'Email',
                           labelStyle: TextStyle(color: AppColors.textMuted),
+                          floatingLabelStyle:
+                              TextStyle(color: AppColors.brandOrangeDark),
+                          filled: true,
+                          fillColor: Colors.white,
+                          hintStyle: TextStyle(color: AppColors.textMuted),
                           prefixIcon: Icon(Icons.email_outlined,
                               color: AppColors.brandOrange),
                         ),
@@ -177,9 +191,16 @@ class _LoginScreenState extends State<LoginScreen> {
                         controller: _passwordCtrl,
                         obscureText: _obscure,
                         style: const TextStyle(color: AppColors.text),
+                        cursorColor: AppColors.brandOrange,
                         decoration: InputDecoration(
                           labelText: 'Password',
                           labelStyle:
+                              const TextStyle(color: AppColors.textMuted),
+                          floatingLabelStyle: const TextStyle(
+                              color: AppColors.brandOrangeDark),
+                          filled: true,
+                          fillColor: Colors.white,
+                          hintStyle:
                               const TextStyle(color: AppColors.textMuted),
                           prefixIcon: const Icon(Icons.lock_outline,
                               color: AppColors.brandOrange),

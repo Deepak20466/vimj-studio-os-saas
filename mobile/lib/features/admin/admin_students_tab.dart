@@ -474,11 +474,17 @@ class _StudentFormState extends State<_StudentForm> {
           .showSnackBar(const SnackBar(content: Text('Name is required')));
       return;
     }
+    if (widget.student != null && _emailCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Email is required')));
+      return;
+    }
     setState(() => _saving = true);
     try {
       if (widget.student != null) {
         final body = <String, dynamic>{
           'name': _nameCtrl.text.trim(),
+          'email': _emailCtrl.text.trim(),
           'phone': _phoneCtrl.text.trim(),
           'phone_secondary': _phoneSecondaryCtrl.text.trim(),
         };
@@ -544,10 +550,13 @@ class _StudentFormState extends State<_StudentForm> {
             const SizedBox(height: 12),
             TextField(
               controller: _emailCtrl,
-              enabled: !editing,
+              keyboardType: TextInputType.emailAddress,
+              autocorrect: false,
               decoration: InputDecoration(
                   labelText: 'Email',
-                  helperText: editing ? 'Email cannot be changed here' : null),
+                  helperText: editing
+                      ? 'Students cannot use this address to sign in'
+                      : 'Optional contact email'),
             ),
             const SizedBox(height: 12),
             TextField(

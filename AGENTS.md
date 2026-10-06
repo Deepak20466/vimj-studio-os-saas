@@ -171,3 +171,26 @@ following additional updates:
   student, activity, attendance status, and approval status.
 - Package version target: 1.26.5+41. Build with the persistent Android release key so this
   update installs over 1.26.4 without another uninstall.
+
+## Mobile Search, Student Email, and Login Fixes (2026-10-07)
+
+- Admin and Coach Attendance searches now match case-insensitively across all searchable
+  row details, including names, activity, coach, date/time, status, and record identifiers.
+  Search terms may be entered together, and separators such as the underscore in
+  `NOT_CONFIRM` match the displayed “Not Confirm” wording.
+- The shared Admin/Coach session-photo gallery search now matches combined activity, coach,
+  date, time, session ID, and upload-date terms.
+- Admin can edit a student's email from the mobile student form. The API persists the new
+  email and rejects duplicates; coach edits remain limited to their existing contact fields.
+- The Coach More sheet now sizes to its contents, and Attendance headers/status rows wrap
+  within phone-width screens.
+- Login starts a background `/health` request while the login screen is open so a sleeping
+  production host can wake while credentials are entered. The app navigates to the existing
+  dashboard shell as soon as login succeeds while dashboard data loads separately. Email and
+  password fields retain a white surface with dark, readable text in dark mode.
+- Verification: backend regression tests (9 passed); Flutter tests (13 passed, including
+  search UI, dark-mode login, More-sheet sizing, and phone-width dashboard checks); Flutter
+  analysis (0 errors/warnings; 171 informational notices).
+- Android package target: 1.26.8+44; release tag: `mobile-v1.26.8`. Build and publish the
+  split-ABI APKs through `.github/workflows/release-mobile.yml` so they use the persistent
+  GitHub Actions signing key.

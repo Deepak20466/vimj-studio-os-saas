@@ -124,6 +124,27 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  testWidgets('login credentials stay legible in dark mode', (tester) async {
+    final api = _AttendanceApi();
+    api.install();
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.dark(),
+      home: const LoginScreen(),
+    ));
+    await tester.pump();
+
+    final fields =
+        tester.widgetList<TextField>(find.byType(TextField)).toList();
+    final decorations =
+        tester.widgetList<InputDecorator>(find.byType(InputDecorator)).toList();
+    expect(fields[0].style?.color, AppColors.text);
+    expect(fields[1].style?.color, AppColors.text);
+    expect(decorations[0].decoration.fillColor, Colors.white);
+    expect(decorations[1].decoration.fillColor, Colors.white);
+    expect(
+        api.requests.any((request) => request.url.path == '/health'), isTrue);
+  });
+
   testWidgets(
       'Admin can sign in, load summary progressively, and change revenue period',
       (tester) async {

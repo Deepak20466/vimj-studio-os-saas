@@ -54,6 +54,16 @@ class ApiClient {
     );
   }
 
+  /// Best-effort, non-authenticated ping used by the login screen to wake the
+  /// production host while the user is entering credentials.
+  Future<void> warmUp() async {
+    try {
+      await _http.get(_uri('/health')).timeout(_loginTimeout);
+    } catch (_) {
+      // A warm-up failure must not affect the actual login attempt.
+    }
+  }
+
   Future<Map<String, String>> _headers({bool auth = true}) async {
     final headers = {'Content-Type': 'application/json'};
     if (auth) {

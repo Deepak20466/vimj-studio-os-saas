@@ -51,6 +51,19 @@ class RequestedChanges(unittest.TestCase):
         roster = self.client.get(f"/activities/{self.yoga.id}/roster").json()
         self.assertEqual(roster[0]['phone'], '1234567890')
         self.assertEqual(roster[0]['phone_secondary'], '0987654321')
+    def test_admin_can_update_student_email(self):
+        response = self.client.put(f"/students/{self.s1.id}", json={"email": "updated@example.com"})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()['email'], 'updated@example.com')
+
+        duplicate = self.client.put(f"/students/{self.s1.id}", json={"email": self.s2.email})
+        self.assertEqual(duplicate.status_code, 400, duplicate.text)
+        self.assertEqual(self.db.query(User).filter_by(id=self.s1.id).one().email, 'updated@example.com')
+
+        self.app.dependency_overrides[require_admin_or_coach] = lambda: self.coach
+        coach_update = self.client.put(f"/students/{self.s1.id}", json={"email": "coach-change@example.com"})
+        self.assertEqual(coach_update.status_code, 200, coach_update.text)
+        self.assertEqual(coach_update.json()['email'], 'updated@example.com')
     def test_product_invoice_receipt_and_reports(self):
         r = self.client.post('/fees', json={'student_id': self.s1.id, 'month':9, 'year':2026, 'amount':'100', 'product_amount':'25', 'due_date':'2026-09-10'})
         self.assertEqual(r.status_code,201, r.text)

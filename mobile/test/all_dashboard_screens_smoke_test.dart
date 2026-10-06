@@ -123,6 +123,9 @@ Future<void> _tapCoachMore(
 ) async {
   await tester.tap(find.byType(NavigationDestination).at(4));
   await tester.pump(const Duration(milliseconds: 450));
+  final viewportHeight = tester.getSize(find.byType(Scaffold).first).height;
+  final sheetHeight = tester.getRect(find.byType(BottomSheet).last).height;
+  expect(sheetHeight, lessThan(viewportHeight * 0.55));
   final item = find.widgetWithText(ListTile, menuTitle).last;
   await tester.ensureVisible(item);
   await tester.pump(const Duration(milliseconds: 350));

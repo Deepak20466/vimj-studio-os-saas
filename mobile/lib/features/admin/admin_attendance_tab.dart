@@ -6,6 +6,7 @@ import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/dismissed_items.dart';
 import '../../core/models.dart';
+import '../../core/search_utils.dart';
 
 const _missingAttendanceDismissKey = 'missing_attendance';
 
@@ -35,18 +36,25 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
   bool _approvingAll = false;
 
   List<AdminAttendanceRecord> get _visibleRecords {
-    final query = _attendanceSearch.trim().toLowerCase();
     return _records
         .where((r) =>
-            (query.isEmpty ||
-                [
-                  r.studentName,
-                  r.activityName,
-                  r.coachName ?? '',
-                  r.classDate,
-                  r.status,
-                  r.approvalStatus,
-                ].any((value) => value.toLowerCase().contains(query))) &&
+            matchesSearchQuery(
+                  [
+                    r.studentName,
+                    r.activityName,
+                    r.coachName,
+                    r.classDate,
+                    r.timestamp,
+                    r.status,
+                    r.approvalStatus,
+                    r.id,
+                    r.studentId,
+                    r.classId,
+                    r.activityId,
+                    r.coachId,
+                  ],
+                  _attendanceSearch,
+                ) &&
             (_filterActivityId == null || r.activityId == _filterActivityId) &&
             (_filterStatus == null || r.status == _filterStatus) &&
             (_approvalFilter == null || r.approvalStatus == _approvalFilter) &&
@@ -72,16 +80,27 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
   int? _removingCoachId;
   String _missingSearch = '';
   List<DailyMissingRow> get _visibleMissing => _missing
-      .where((m) => '${m.coachName} ${m.activityName} ${m.date} ${m.endTime}'
-          .toLowerCase()
-          .contains(_missingSearch.trim().toLowerCase()))
+      .where((m) => matchesSearchQuery(
+          [m.coachName, m.activityName, m.date, m.endTime, m.classId],
+          _missingSearch))
       .toList();
   List<Map<String, dynamic>> get _visibleCoachRecords => _coachRecords
       .where((r) =>
-          '${r['coach_name'] ?? ''} ${r['date'] ?? ''} ${r['status'] ?? ''}'
-              .toLowerCase()
-              .contains(_coachSearch.trim().toLowerCase()) &&
-          (_coachStatusFilter == null || r['status'] == _coachStatusFilter))
+          matchesSearchQuery(
+                [
+                  r['coach_name'],
+                  r['coach_id'],
+                  r['date'],
+                  r['status'],
+                  r['entry_time'],
+                  r['exit_time'],
+                  r['id'],
+                ],
+                _coachSearch,
+              ) &&
+              (_coachStatusFilter == null ||
+                  r['status'] == _coachStatusFilter) &&
+              (_coachFilterId == null || r['coach_id'] == _coachFilterId))
       .toList();
 
   Future<void> _exportReport(String kind, {DateTime? date}) async {
@@ -1078,8 +1097,11 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                           ),
                         )),
                   const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    alignment: WrapAlignment.spaceBetween,
                     children: [
                       const Text('Coach Attendance',
                           style: TextStyle(

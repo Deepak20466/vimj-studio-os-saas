@@ -53,15 +53,10 @@ class _CoachHomeState extends State<CoachHome> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (sheetContext) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.65,
-        minChildSize: 0.4,
-        maxChildSize: 0.9,
-        builder: (context, scrollController) => SafeArea(
-          child: ListView(
-            controller: scrollController,
-            padding: EdgeInsets.zero,
+      builder: (sheetContext) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               const Padding(
                   padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
