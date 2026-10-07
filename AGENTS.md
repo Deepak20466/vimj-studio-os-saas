@@ -587,6 +587,6 @@ following additional updates:
   and Student Attendance headings “Updated Today” for today, “Updated
   Yesterday” for yesterday, and “Updated MMM d” for other selected dates.
   Keep the calendar icon on both badges.
-- Release target: mobile version `1.26.27+63`, tag `mobile-v1.26.27`, through
+- Release target: mobile version `1.26.29+65`, tag `mobile-v1.26.29`, through
   `.github/workflows/release-mobile.yml` using the persistent Android signing
   key. Never commit or share the signing key.
