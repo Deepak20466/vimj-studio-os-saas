@@ -73,10 +73,13 @@ class _CoachFacilityAttendanceTabState
   Future<void> _loadMonthRecords() async {
     setState(() => _recordsLoading = true);
     try {
-      final data = await ApiClient.instance.get('/attendance/students', query: {
-        'date_from': _isoDate(_monthStart),
-        'date_to': _isoDate(_monthEnd),
-      }) as List;
+      final data = await ApiClient.instance.getAllPages(
+        '/attendance/students',
+        query: {
+          'date_from': _isoDate(_monthStart),
+          'date_to': _isoDate(_monthEnd),
+        },
+      );
       _records = data
           .map((e) => AdminAttendanceRecord.fromJson(e as Map<String, dynamic>))
           .toList();

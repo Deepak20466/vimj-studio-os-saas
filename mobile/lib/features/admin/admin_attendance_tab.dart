@@ -312,7 +312,7 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
       if (_filterDateTo != null)
         query['date_to'] = _filterDateTo!.toIso8601String().substring(0, 10);
       final data = await ApiClient.instance
-          .get('/attendance/students', query: query) as List;
+          .getAllPages('/attendance/students', query: query);
       _records = data
           .map((e) => AdminAttendanceRecord.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -338,19 +338,19 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
     final to = _calendarDateKey(_calendarMonthEnd);
     try {
       final results = await Future.wait([
-        ApiClient.instance.get('/attendance/students', query: {
+        ApiClient.instance.getAllPages('/attendance/students', query: {
           'date_from': from,
           'date_to': to,
         }),
-        ApiClient.instance.get('/attendance/coaches', query: {
+        ApiClient.instance.getAllPages('/attendance/coaches', query: {
           'date_from': from,
           'date_to': to,
         }),
       ]);
-      _calendarRecords = (results[0] as List)
+      _calendarRecords = results[0]
           .map((e) => AdminAttendanceRecord.fromJson(e as Map<String, dynamic>))
           .toList();
-      _calendarCoachRecords = (results[1] as List).cast<Map<String, dynamic>>();
+      _calendarCoachRecords = results[1].cast<Map<String, dynamic>>();
     } on ApiException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -811,7 +811,7 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
         query['date_to'] =
             _coachFilterDateTo!.toIso8601String().substring(0, 10);
       final data = await ApiClient.instance
-          .get('/attendance/coaches', query: query) as List;
+          .getAllPages('/attendance/coaches', query: query);
       _coachRecords = data.cast<Map<String, dynamic>>();
     } on ApiException catch (e) {
       if (mounted)

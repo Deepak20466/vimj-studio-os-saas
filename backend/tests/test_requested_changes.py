@@ -233,4 +233,37 @@ class RequestedChanges(unittest.TestCase):
         self.app.dependency_overrides[get_current_user] = lambda: self.coach
         self.assertEqual(self.client.get('/attendance/list-visibility').status_code, 403)
 
+    def test_attendance_lists_support_limit_and_offset(self):
+        student_rows = [
+            StudentAttendance(
+                student_id=student.id,
+                class_id=self.cls.id,
+                coach_id=self.coach.id,
+                status=AttendanceStatus.PRESENT,
+            )
+            for student in (self.s1, self.s2)
+        ]
+        coach_rows = [
+            CoachAttendance(
+                coach_id=self.coach.id,
+                date=date(2026, 9, day),
+                status=CoachAttendanceStatus.PRESENT,
+            )
+            for day in (10, 11)
+        ]
+        self.db.add_all(student_rows + coach_rows)
+        self.db.commit()
+
+        for path in ('/attendance/students', '/attendance/coaches'):
+            first_page = self.client.get(path, params={'limit': 1, 'offset': 0})
+            second_page = self.client.get(path, params={'limit': 1, 'offset': 1})
+            self.assertEqual(first_page.status_code, 200, first_page.text)
+            self.assertEqual(second_page.status_code, 200, second_page.text)
+            self.assertEqual(len(first_page.json()), 1)
+            self.assertEqual(len(second_page.json()), 1)
+            self.assertNotEqual(first_page.json()[0]['id'], second_page.json()[0]['id'])
+
+        too_many = self.client.get('/attendance/students', params={'limit': 501})
+        self.assertEqual(too_many.status_code, 422)
+
 if __name__ == '__main__': unittest.main()

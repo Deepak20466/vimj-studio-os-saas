@@ -104,3 +104,25 @@ Final release checks (2026-10-02):
   All match GitHub's asset digests, pass `apksigner verify`, and use the
   persistent signing certificate SHA-256
   `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
+
+## 2026-10-08 Attendance Search Pagination and Login Connection
+
+- Admin Student Attendance and Coach Attendance lists now request the records
+  in pages of up to 500 and search the full filtered history. Admin and Coach
+  calendar views also retrieve every page for the selected month; Coach's
+  selected-day attendance search remains scoped to that calendar day.
+- The attendance API accepts `limit` (1-500) and `offset` on student and coach
+  list endpoints. Defaults preserve the existing first-page response for older
+  clients. No database migration is required.
+- Login keeps the early splash/login health warm-up and no longer starts a
+  second health request at submit time, reducing duplicate traffic alongside
+  authentication. Render cold-start time is still controlled by the host.
+- Release target: mobile version `1.26.18+54`, tag `mobile-v1.26.18`, through
+  `.github/workflows/release-mobile.yml` using the persistent signing key.
+  Never commit or share the signing key.
+- Verification: all 11 backend regression tests passed; all 26 Flutter tests
+  passed; Flutter analysis completed with no errors or warnings (196
+  informational lints); local split-ABI release compilation succeeded for
+  armeabi-v7a, arm64-v8a, and x86_64.
+- Add the production deployment, GitHub Actions run, published APK checksums,
+  and signing verification after release completion.

@@ -1,7 +1,7 @@
 from datetime import date as date_type, datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -227,6 +227,8 @@ def list_student_attendance(
     approval_status: Optional[AttendanceApprovalStatus] = None,
     date_from: Optional[date_type] = None,
     date_to: Optional[date_type] = None,
+    limit: int = Query(default=500, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_coach),
 ):
@@ -253,7 +255,16 @@ def list_student_attendance(
     if date_to:
         query = query.filter(ClassSession.date <= date_to)
 
-    records = query.order_by(ClassSession.date.desc(), StudentAttendance.timestamp.desc()).limit(500).all()
+    records = (
+        query.order_by(
+            ClassSession.date.desc(),
+            StudentAttendance.timestamp.desc(),
+            StudentAttendance.id.desc(),
+        )
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
 
     result = []
     for r in records:
@@ -381,6 +392,8 @@ def list_coach_attendance(
     coach_id: Optional[int] = None,
     date_from: Optional[date_type] = None,
     date_to: Optional[date_type] = None,
+    limit: int = Query(default=500, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
@@ -393,7 +406,12 @@ def list_coach_attendance(
     if date_to:
         query = query.filter(CoachAttendance.date <= date_to)
 
-    records = query.order_by(CoachAttendance.date.desc()).limit(500).all()
+    records = (
+        query.order_by(CoachAttendance.date.desc(), CoachAttendance.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
     coaches = {u.id: u.name for u in db.query(User).filter(User.id.in_([r.coach_id for r in records])).all()}
     return [
         CoachAttendanceAdminOut(

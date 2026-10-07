@@ -305,6 +305,41 @@ class ApiClient {
           {Map<String, dynamic>? query, bool auth = true}) =>
       _request('GET', path, query: query, auth: auth);
 
+  /// Reads every row from a paginated attendance endpoint. The API caps each
+  /// response at 500 rows, so callers can search the complete filtered result
+  /// set without forcing the server to build one unbounded response.
+  Future<List<dynamic>> getAllPages(String path,
+      {Map<String, dynamic>? query, int pageSize = 500}) async {
+    if (pageSize < 1 || pageSize > 500) {
+      throw ArgumentError.value(
+          pageSize, 'pageSize', 'must be between 1 and 500');
+    }
+
+    final rows = <dynamic>[];
+    var offset = 0;
+    String? previousPageSignature;
+    while (true) {
+      final page = await get(path, query: {
+        ...?query,
+        'limit': pageSize,
+        'offset': offset,
+      });
+      if (page is! List) {
+        throw ApiException(
+            0, 'The server returned an invalid attendance list.');
+      }
+      final pageSignature = jsonEncode(page);
+      if (offset > 0 && pageSignature == previousPageSignature) {
+        throw ApiException(
+            0, 'Attendance paging is unavailable. Please try again shortly.');
+      }
+      previousPageSignature = pageSignature;
+      rows.addAll(page);
+      if (page.length < pageSize) return rows;
+      offset += page.length;
+    }
+  }
+
   Future<dynamic> post(String path, {Object? body, bool auth = true}) =>
       _request('POST', path, body: body, auth: auth);
 

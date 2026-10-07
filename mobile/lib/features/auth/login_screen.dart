@@ -46,11 +46,9 @@ class _LoginScreenState extends State<LoginScreen> {
           _loadingMessage = 'Waking up the service can take a little while.');
     });
     try {
-      // Reuse the background wake-up request started when this shared login
-      // page opened, or refresh it if the user left the page idle. Keep it
-      // parallel so the bounded login request is never extended by another
-      // timeout.
-      unawaited(ApiClient.instance.warmUp());
+      // Splash and this screen already start the health warm-up before the
+      // user submits. Let the login request proceed alone here instead of
+      // opening a second connection alongside it after a long idle.
       final session =
           await AuthApi.login(_emailCtrl.text.trim(), _passwordCtrl.text);
       if (!mounted) return;
