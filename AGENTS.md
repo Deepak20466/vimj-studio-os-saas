@@ -378,5 +378,16 @@ following additional updates:
   signing key. Never commit or share the signing key.
 - Verification on 2026-10-07: all 24 Flutter tests passed; backend regression
   tests passed (10); Flutter analysis completed with 0 errors/warnings and 174
-  informational lints; backend Python compilation passed. Record production
-  migration, workflow run, APK checksums, and signing verification after release.
+  informational lints; backend Python compilation passed. Production deployment
+  completed: the authenticated visibility endpoint is live (unauthenticated
+  request returns 401) and the health endpoint returns 200.
+- Published from commit `f83eb098671c212881a880f2fd485afb44da308d` by GitHub
+  Actions run `37659266491`:
+  https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.26.15
+- Published APK SHA-256: arm64-v8a
+  `e2a29d8e911bfebc44677897905b17d7ebd1f4d00cc3341a2e76e2c791844226`,
+  armeabi-v7a `796d5bba8b3f33b5906e261d69097cd908ccb80575b033ee23d066c904ce1a2f`,
+  x86_64 `23f678978d12c4876c840e88aaee456a776fcc1040cad9fbf1a33189892d8559`.
+  All assets match GitHub's published digests and pass `apksigner verify`; all
+  use signing certificate SHA-256
+  `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
