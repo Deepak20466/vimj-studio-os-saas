@@ -1,4 +1,5 @@
 import 'admin_reports_tab.dart';
+import 'admin_pending_fees_pdf.dart';
 import '../../core/export_helper.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -159,6 +160,22 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
       if (mounted)
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<void> _exportPendingFeesReport() async {
+    try {
+      await AdminPendingFeesPdf.exportForMonth(_calendarMonth);
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Could not create PDF: $e')));
+      }
     }
   }
 
@@ -1176,8 +1193,7 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                         onPressed: () => _exportReport('fees_paid'),
                         child: const Text('Fees Paid PDF')),
                     OutlinedButton(
-                        onPressed: () => _exportReport('fees_pending',
-                            date: _calendarMonth, includeDay: false),
+                        onPressed: _exportPendingFeesReport,
                         child: const Text('Fees Pending PDF')),
                   ]),
                   const Padding(

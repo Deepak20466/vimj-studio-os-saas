@@ -245,3 +245,27 @@ following additional updates:
   `5e54b1ef872e0a217e4b43d70fe1d42b71d3609d0009f7c972a3c3b08630419a`, armeabi-v7a
   `b7060034c116d6f8e9965358d95fdb54ff26691108ab97ef433c9495f499b053`, x86_64
   `702a89e21a63bb391521b1a274094c9f5fc1d4bf3c125b1d328194d2d6429fcb`.
+
+## 2026-10-07 Admin Pending Fees PDF and Login Recovery
+
+- Keep this update scoped to Flutter mobile and this notes file. Do not change
+  web, backend, or unrelated Admin Attendance behavior.
+- The existing Admin Attendance “Fees Pending PDF” button uses the month shown
+  in the Attendance calendar and includes only that month's non-PAID fees with
+  a positive balance. The PDF shows the number of unique students who still owe,
+  each student's name, enrolled activities, status, remaining balance, and the
+  total outstanding balance. Paid records are excluded.
+- Admin and Coach share the login/API client. The splash screen starts the
+  background health warm-up before the login form appears. A login waits for an
+  in-flight warm-up before its single retry after a transient gateway or
+  connection failure; the full login attempt remains bounded to 75 seconds.
+  Server failures return an actionable message.
+- Release target: mobile version `1.26.11+47`, tag `mobile-v1.26.11`, through
+  `.github/workflows/release-mobile.yml`. GitHub Actions must use the existing
+  persistent signing key; never commit or share the key.
+- Verification: pending-fee report tests (2 passed), Admin/Coach dashboard
+  smoke tests (2 passed), targeted Dart analysis (no errors), and local
+  split-ABI Android release compilation passed for armeabi-v7a, arm64-v8a, and
+  x86_64. The full Flutter test run had 14 passes and one failure in the Admin
+  Attendance search test (`search_ui_test.dart`), where the search helper found
+  multiple matching fields on its second query.

@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/auth_storage.dart';
 import '../admin/admin_home.dart';
@@ -34,6 +36,9 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!mounted) return;
 
     if (session == null) {
+      // Start waking the production API before the login form is displayed.
+      // LoginScreen joins this request, so credential entry can overlap startup.
+      unawaited(ApiClient.instance.warmUp());
       _goToLogin();
       return;
     }

@@ -7,6 +7,8 @@ import 'auth_storage.dart';
 
 const _requestTimeout = Duration(seconds: 25);
 const _loginTimeout = Duration(seconds: 75);
+const _loginTimeoutMessage =
+    'The server is taking too long to wake up. Please try signing in again in a moment.';
 
 class ApiException implements Exception {
   final int statusCode;
@@ -146,10 +148,16 @@ class ApiClient {
     bool auth = true,
     bool isRetry = false,
     bool retriedTransient = false,
+    Stopwatch? loginTimer,
   }) async {
+    final requestLoginTimer =
+        loginTimer ?? (path == '/auth/login' ? (Stopwatch()..start()) : null);
     final uri = _uri(path, query);
     final headers = await _headers(auth: auth);
     final encodedBody = body != null ? jsonEncode(body) : null;
+    final timeout = path == '/auth/login'
+        ? _remainingLoginTimeout(requestLoginTimer)
+        : _requestTimeout;
 
     http.Response response;
     try {
@@ -161,7 +169,7 @@ class ApiClient {
         case 'POST':
           response = await _http
               .post(uri, headers: headers, body: encodedBody)
-              .timeout(path == '/auth/login' ? _loginTimeout : _requestTimeout);
+              .timeout(timeout);
           break;
         case 'PUT':
           response = await _http
@@ -178,12 +186,21 @@ class ApiClient {
       }
     } on TimeoutException {
       if (path == '/auth/login') {
-        throw ApiException(0,
-            'The server is taking too long to wake up. Please try signing in again in a moment.');
+        throw ApiException(0, _loginTimeoutMessage);
       }
       throw ApiException(0,
           'The server did not respond in time. Check your connection and try again.');
     } on http.ClientException {
+      if (path == '/auth/login' && !retriedTransient) {
+        await _waitForLoginRetry(requestLoginTimer);
+        return _request(method, path,
+            query: query,
+            body: body,
+            auth: auth,
+            isRetry: isRetry,
+            retriedTransient: true,
+            loginTimer: requestLoginTimer);
+      }
       throw ApiException(0,
           'Could not connect to the server. Check your connection and try again.');
     }
@@ -194,13 +211,18 @@ class ApiClient {
     if (!retriedTransient &&
         (method == 'GET' || path == '/auth/login') &&
         const {502, 503, 504}.contains(response.statusCode)) {
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+      if (path == '/auth/login') {
+        await _waitForLoginRetry(requestLoginTimer);
+      } else {
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+      }
       return _request(method, path,
           query: query,
           body: body,
           auth: auth,
           isRetry: isRetry,
-          retriedTransient: true);
+          retriedTransient: true,
+          loginTimer: requestLoginTimer);
     }
 
     if (response.statusCode == 401 && auth && !isRetry) {
@@ -231,7 +253,37 @@ class ApiClient {
     } catch (_) {
       // keep default message
     }
+    if (response.statusCode >= 500 &&
+        response.statusCode < 600 &&
+        message == 'Request failed (${response.statusCode})') {
+      message = path == '/auth/login'
+          ? 'The server is temporarily unavailable. Please try signing in again shortly.'
+          : 'The server is temporarily unavailable. Please try again shortly.';
+    }
     throw ApiException(response.statusCode, message);
+  }
+
+  Duration _remainingLoginTimeout(Stopwatch? timer) {
+    final remaining = _loginTimeout - (timer?.elapsed ?? Duration.zero);
+    if (remaining <= Duration.zero) {
+      throw ApiException(0, _loginTimeoutMessage);
+    }
+    return remaining;
+  }
+
+  Future<void> _waitForLoginRetry(Stopwatch? timer) async {
+    final remaining = _remainingLoginTimeout(timer);
+    final pendingWarmUp = _warmUpFuture;
+    try {
+      if (pendingWarmUp != null) {
+        await pendingWarmUp.timeout(remaining);
+      } else {
+        await Future<void>.delayed(const Duration(milliseconds: 400))
+            .timeout(remaining);
+      }
+    } on TimeoutException {
+      throw ApiException(0, _loginTimeoutMessage);
+    }
   }
 
   Future<dynamic> get(String path,
@@ -291,6 +343,12 @@ class ApiClient {
         }
       } catch (_) {
         // keep default message — body wasn't JSON
+      }
+      if (response.statusCode >= 500 &&
+          response.statusCode < 600 &&
+          message == 'Download failed (${response.statusCode})') {
+        message =
+            'The server is temporarily unavailable. Please try again shortly.';
       }
       throw ApiException(response.statusCode, message);
     }
