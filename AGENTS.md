@@ -391,3 +391,33 @@ following additional updates:
   All assets match GitHub's published digests and pass `apksigner verify`; all
   use signing certificate SHA-256
   `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
+
+## 2026-10-08 Admin Attendance Toolbars and Login Recovery
+
+- Keep this update scoped to Flutter mobile, release notes in this file, and
+  this project's existing `AGENTS.md`. Do not change web, backend, or other
+  Admin Attendance behavior.
+- Admin Student Attendance keeps one sticky search/hide toolbar. Move its
+  activity, status, review, date, clear-filter, and filtered-approval controls
+  into the same sticky area; remove duplicate or mis-scoped filter controls.
+- Admin Coach Attendance keeps one sticky search/hide toolbar with coach,
+  status, date, and clear-filter controls. Keep one sticky Manual Entry action
+  that offers both student and coach attendance entry, removing the duplicate
+  inline coach button without removing either entry workflow.
+- The clear-filter control shows a compact active-filter count. Coach
+  attendance cards use a consistent title, status, detail, and action layout
+  that stays readable on narrow phone screens.
+- Preserve the selected-day calendar search and existing attendance data,
+  approval, hide/show, and visibility-preference behavior.
+- Harden shared mobile login retries for transient request timeouts while
+  retaining the background health warm-up and 75-second overall login bound.
+- Release target: mobile version `1.26.20+56`, tag `mobile-v1.26.20`, through
+  `.github/workflows/release-mobile.yml` using the persistent Android signing
+  key. Never commit or share the signing key.
+- Local verification on 2026-10-08: all 31 Flutter tests passed; Flutter
+  analysis completed with no errors or warnings (192 informational lints); the
+  local split-ABI release compile succeeded for armeabi-v7a, arm64-v8a, and
+  x86_64. Local APKs use the Android debug certificate, so publish only the
+  GitHub Actions APKs signed with the persistent release key.
+- Published commit, workflow run, APK checksums, and signing verification will
+  be recorded here after the GitHub release completes.

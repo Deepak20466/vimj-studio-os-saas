@@ -13,6 +13,10 @@ import 'package:vimj_attendance/features/coach/coach_facility_attendance_tab.dar
 import 'package:vimj_attendance/features/shared/session_photo_gallery.dart';
 
 class _SearchApi {
+  _SearchApi({this.studentRecordCount = 1, this.coachRecordCount = 0});
+
+  final int studentRecordCount;
+  final int coachRecordCount;
   final String today = DateTime.now().toIso8601String().substring(0, 10);
   final attendanceSearchRequests = <Uri>[];
 
@@ -24,9 +28,22 @@ class _SearchApi {
     final Object body;
     switch (request.url.path) {
       case '/attendance/daily-missing':
-      case '/attendance/coaches':
       case '/coaches/7/attendance':
         body = <dynamic>[];
+      case '/attendance/coaches':
+        body = List.generate(
+          coachRecordCount,
+          (index) => {
+            'id': 100 + index,
+            'coach_id': 5,
+            'coach_name':
+                coachRecordCount == 1 ? 'Coach One' : 'Coach One ${index + 1}',
+            'date': today,
+            'status': 'PRESENT',
+            'entry_time': '${today}T09:00:00',
+            'exit_time': '${today}T10:00:00',
+          },
+        );
       case '/activities':
         body = [
           {'id': 12, 'name': 'Yoga', 'capacity': 20, 'monthly_fee': '100'}
@@ -51,7 +68,16 @@ class _SearchApi {
             }
           ];
         } else {
-          body = [_attendanceRecord()];
+          body = List.generate(
+            studentRecordCount,
+            (index) => {
+              ..._attendanceRecord(),
+              'id': 9 + index,
+              'student_name': studentRecordCount == 1
+                  ? 'Maya Sharma'
+                  : 'Maya Sharma ${index + 1}',
+            },
+          );
         }
       case '/activities/session-photos':
         body = [
@@ -231,6 +257,116 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('Admin attendance filters remain in one sticky toolbar',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    _SearchApi(studentRecordCount: 16).install();
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: const Scaffold(body: AdminAttendanceTab()),
+    ));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('All Attendance Records'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    final studentSearch = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField &&
+          widget.decoration?.hintText ==
+              'Student, activity, coach, date, or status',
+    );
+    expect(studentSearch, findsOneWidget);
+    expect(find.text('All activities'), findsOneWidget);
+    expect(find.text('All statuses'), findsOneWidget);
+    expect(find.text('All reviews'), findsOneWidget);
+    expect(find.text('All review states'), findsNothing);
+    expect(find.textContaining('Approve filtered pending'), findsOneWidget);
+
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -520));
+    await tester.pumpAndSettle();
+    expect(studentSearch, findsOneWidget);
+    expect(find.text('All activities'), findsOneWidget);
+    expect(find.text('All statuses'), findsOneWidget);
+    expect(find.text('All reviews'), findsOneWidget);
+
+    await tester.enterText(studentSearch, 'Maya');
+    await tester.pump();
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('clear-student-attendance-filters')),
+        matching: find.text('1'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Clear 1 active filters'), findsOneWidget);
+  });
+
+  testWidgets('Coach attendance filters remain in one sticky toolbar',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    _SearchApi(coachRecordCount: 16).install();
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: const Scaffold(body: AdminAttendanceTab()),
+    ));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('coach-attendance-section')),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    final coachSearch = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField && widget.decoration?.hintText == 'Coach or date',
+    );
+    expect(coachSearch, findsOneWidget);
+    expect(find.text('All coaches'), findsOneWidget);
+    expect(find.text('All statuses'), findsOneWidget);
+
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -520));
+    await tester.pumpAndSettle();
+    expect(coachSearch, findsOneWidget);
+    expect(find.text('All coaches'), findsOneWidget);
+    expect(find.text('All statuses'), findsOneWidget);
+
+    await tester.enterText(coachSearch, 'Coach One');
+    await tester.pump();
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('clear-coach-attendance-filters')),
+        matching: find.text('1'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Clear 1 active filters'), findsOneWidget);
+  });
+
+  testWidgets('Admin Attendance has one sticky manual entry action',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    _SearchApi().install();
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: const Scaffold(body: AdminAttendanceTab()),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Manual Entry'), findsOneWidget);
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    expect(find.text('Student attendance'), findsOneWidget);
+    expect(find.text('Coach attendance'), findsOneWidget);
   });
 
   testWidgets('Coach attendance searches the selected day details',

@@ -7,6 +7,7 @@ import 'auth_storage.dart';
 
 const _requestTimeout = Duration(seconds: 25);
 const _loginTimeout = Duration(seconds: 75);
+const _loginAttemptTimeout = Duration(seconds: 25);
 const _loginRetryWarmUpWait = Duration(seconds: 2);
 const _loginTimeoutMessage =
     'The server is taking too long to wake up. Please try signing in again in a moment.';
@@ -157,7 +158,7 @@ class ApiClient {
     final headers = await _headers(auth: auth);
     final encodedBody = body != null ? jsonEncode(body) : null;
     final timeout = path == '/auth/login'
-        ? _remainingLoginTimeout(requestLoginTimer)
+        ? _loginAttemptBudget(requestLoginTimer)
         : _requestTimeout;
 
     http.Response response;
@@ -187,6 +188,16 @@ class ApiClient {
       }
     } on TimeoutException {
       if (path == '/auth/login') {
+        if (!retriedTransient) {
+          await _waitForLoginRetry(requestLoginTimer);
+          return _request(method, path,
+              query: query,
+              body: body,
+              auth: auth,
+              isRetry: isRetry,
+              retriedTransient: true,
+              loginTimer: requestLoginTimer);
+        }
         throw ApiException(0, _loginTimeoutMessage);
       }
       throw ApiException(0,
@@ -275,6 +286,11 @@ class ApiClient {
       throw ApiException(0, _loginTimeoutMessage);
     }
     return remaining;
+  }
+
+  Duration _loginAttemptBudget(Stopwatch? timer) {
+    final remaining = _remainingLoginTimeout(timer);
+    return remaining < _loginAttemptTimeout ? remaining : _loginAttemptTimeout;
   }
 
   Future<void> _waitForLoginRetry(Stopwatch? timer) async {

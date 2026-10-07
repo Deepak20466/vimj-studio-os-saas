@@ -54,6 +54,28 @@ void main() {
     expect(result, {'access_token': 'token'});
   });
 
+  test('login retries a transient request timeout once', () async {
+    var attempts = 0;
+    ApiClient.instance.setClientForTesting(MockClient((request) async {
+      attempts++;
+      if (attempts == 1) throw TimeoutException('temporary timeout');
+      return http.Response(
+        jsonEncode({'access_token': 'token'}),
+        200,
+        headers: const {'content-type': 'application/json'},
+      );
+    }));
+
+    final result = await ApiClient.instance.post(
+      '/auth/login',
+      body: const {'email': 'coach@example.test', 'password': 'secret'},
+      auth: false,
+    );
+
+    expect(attempts, 2);
+    expect(result, {'access_token': 'token'});
+  });
+
   test('login retry does not wait for a stalled health warm-up', () async {
     final healthResponse = Completer<http.Response>();
     var loginAttempts = 0;
