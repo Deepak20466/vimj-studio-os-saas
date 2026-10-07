@@ -469,6 +469,7 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                 style: titleStyle,
               ),
             ),
+            _attendanceTakenBadge(),
           ],
         );
 
@@ -502,6 +503,53 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _attendanceTakenBadge() {
+    final theme = Theme.of(context);
+    return Tooltip(
+      message: 'Attendance taken',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.primaryContainer,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.sticky_note_2_outlined,
+                size: 14, color: theme.colorScheme.onPrimaryContainer),
+            const SizedBox(width: 4),
+            Text(
+              'Taken',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onPrimaryContainer,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _attendanceTodayBadge() {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        'Today',
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.onSecondaryContainer,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -1443,6 +1491,10 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
               const SizedBox(width: 8),
               Text('Coach Attendance',
                   style: Theme.of(context).textTheme.titleSmall),
+              if (DateUtils.isSameDay(selected, DateTime.now())) ...[
+                const SizedBox(width: 8),
+                _attendanceTodayBadge(),
+              ],
             ],
           ),
           const SizedBox(height: 6),
@@ -1545,6 +1597,10 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                       ),
                     ),
                   ),
+                  if (DateUtils.isSameDay(selected, DateTime.now())) ...[
+                    _attendanceTodayBadge(),
+                    const SizedBox(width: 4),
+                  ],
                   TextButton.icon(
                     key: const ValueKey('toggle-calendar-student-attendance'),
                     onPressed: () => setState(() =>

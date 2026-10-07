@@ -464,6 +464,18 @@ following additional updates:
   use the persistent signing certificate SHA-256
   `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
 
+## 2026-10-08 Attendance Section Context Badges
+
+- In mobile Admin Attendance, show a compact “Today” badge beside selected-day
+  Coach Attendance and Student Attendance headings only when the selected
+  calendar date is the current local date.
+- Add a theme-colored note icon and “Taken” badge beside the main Student
+  Attendance and Coach Attendance section headings.
+- Keep this change within the Flutter mobile Admin Attendance screen.
+- Release target: mobile version `1.26.25+61`, tag `mobile-v1.26.25`, through
+  `.github/workflows/release-mobile.yml` using the persistent Android signing
+  key. Never commit or share the signing key.
+
 ## 2026-10-08 Remove Duplicate Admin Calendar Searches
 
 - Keep this correction scoped to the Flutter mobile Admin Attendance screen and
