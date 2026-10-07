@@ -484,5 +484,12 @@ following additional updates:
   local split-ABI release compile succeeded for armeabi-v7a, arm64-v8a, and
   x86_64. Local APKs use the Android debug certificate; publish only signed
   GitHub Actions APKs.
-- Do not tag or publish this release until the user requests it. Show the
-  requested layout sketch before the next release.
+- Published from commit `8c1c4ef93ab1c87b956bed333df9b7f3d9c99845` by GitHub
+  Actions run `37693197470`: https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.26.22
+- Published APK SHA-256: arm64-v8a
+  `2e765b7524ba11c1ca0cf095e0286d067bd4523c6cbb4636e70a8cb9f2e203c2`,
+  armeabi-v7a `106e932c28a2c84c3732ab1f559df1c18cf0b74266744e5f2a8c192ebc2c029a`,
+  x86_64 `a315485131245d6acb198bfc6331975386f20471301db459a1c76d52935bfd63`.
+  All assets match GitHub's published digests and pass `apksigner verify`; all
+  use the persistent signing certificate SHA-256
+  `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
