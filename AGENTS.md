@@ -238,4 +238,10 @@ following additional updates:
 - Release target: mobile version `1.26.10+46`, tag `mobile-v1.26.10`, using the existing
   signed split-ABI GitHub Actions workflow. Never commit or share the signing key.
 - Local Android split-ABI release compilation passed for armeabi-v7a, arm64-v8a, and
-  x86_64. GitHub Actions will produce the persistent-key signed release APK assets.
+  x86_64. GitHub Actions produced the persistent-key signed release APK assets.
+- Published successfully from commit `57c1c9f` by GitHub Actions run `37633784608`:
+  https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.26.10
+- Release APK SHA-256: arm64-v8a
+  `5e54b1ef872e0a217e4b43d70fe1d42b71d3609d0009f7c972a3c3b08630419a`, armeabi-v7a
+  `b7060034c116d6f8e9965358d95fdb54ff26691108ab97ef433c9495f499b053`, x86_64
+  `702a89e21a63bb391521b1a274094c9f5fc1d4bf3c125b1d328194d2d6429fcb`.
