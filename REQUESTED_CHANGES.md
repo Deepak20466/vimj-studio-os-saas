@@ -124,5 +124,15 @@ Final release checks (2026-10-02):
   passed; Flutter analysis completed with no errors or warnings (196
   informational lints); local split-ABI release compilation succeeded for
   armeabi-v7a, arm64-v8a, and x86_64.
-- Add the production deployment, GitHub Actions run, published APK checksums,
-  and signing verification after release completion.
+- Production OpenAPI confirms `limit` and `offset` are live on both attendance
+  list endpoints.
+- Published from commit `5591851f49637def07afb1d841b2e7b6d39ce12e` by GitHub
+  Actions run `37673858999`:
+  https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.26.18
+- Published APK SHA-256: arm64-v8a
+  `df30bf2ed86c944d9872eceeacb434027dcfc44c37a2d066f7022da9e5d79980`,
+  armeabi-v7a `6fa33386271df8110b1fc211489a3daf3ab6c3971d997613e3908704f61e66ea`,
+  x86_64 `a3500726b655fbc71e4af23a6684d804ecc944753d9c07592313a9fa0ca28060`.
+  All match GitHub's asset digests and pass `apksigner verify`; all use the
+  persistent signing certificate SHA-256
+  `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
