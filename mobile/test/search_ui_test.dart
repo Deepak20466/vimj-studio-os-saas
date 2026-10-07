@@ -154,21 +154,26 @@ void main() {
       home: const Scaffold(body: AdminAttendanceTab()),
     ));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('All Attendance Records'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
 
     await _enterSearch(
       tester,
       'maya yoga',
-      hintText: 'Student, activity, coach, status, or approval',
+      hintText: 'Student, activity, coach, date, or status',
     );
     expect(find.text('Maya Sharma'), findsWidgets);
 
     await _enterSearch(
       tester,
       'maya ballet',
-      hintText: 'Student, activity, coach, status, or approval',
+      hintText: 'Student, activity, coach, date, or status',
     );
-    expect(find.text('No student attendance matches these filters.'),
-        findsOneWidget);
+    expect(find.text('No results found.'), findsOneWidget);
   });
 
   testWidgets('Admin attendance record lists can be hidden independently',
@@ -454,6 +459,103 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Student attendance'), findsOneWidget);
     expect(find.text('Coach attendance'), findsOneWidget);
+  });
+
+  testWidgets('Admin calendar details do not duplicate sticky searches',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    _SearchApi().install();
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: const Scaffold(body: AdminAttendanceTab()),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('No coach attendance marked on this date.'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.hintText ==
+                'Student, activity, coach, status, or approval',
+      ),
+      findsNothing,
+    );
+    expect(find.text('All statuses'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('Coaches Missing Attendance Today'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.labelText == 'Search coach, activity, or date',
+      ),
+      findsNothing,
+    );
+    expect(find.text('Coaches Missing Attendance Today'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Student and coach attendance headings stay sticky per section',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    _SearchApi(studentRecordCount: 18, coachRecordCount: 18).install();
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: const Scaffold(body: AdminAttendanceTab()),
+    ));
+    await tester.pumpAndSettle();
+
+    final studentHeading =
+        find.byKey(const ValueKey('student-section-heading'));
+    await tester.scrollUntilVisible(
+      find.text('All Attendance Records'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -600));
+    await tester.pumpAndSettle();
+    expect(studentHeading, findsOneWidget);
+    final studentTitle = find.descendant(
+      of: studentHeading,
+      matching: find.text('Student Attendance'),
+    );
+    expect(tester.getTopLeft(studentTitle).dy, lessThan(60));
+
+    final coachHeading = find.byKey(const ValueKey('coach-section-heading'));
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('coach-attendance-section')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -450));
+    await tester.pumpAndSettle();
+    expect(coachHeading, findsOneWidget);
+    final coachTitle = find.descendant(
+      of: coachHeading,
+      matching: find.text('Coach Attendance'),
+    );
+    expect(tester.getTopLeft(coachTitle).dy, lessThan(80));
+    expect(
+      studentHeading.evaluate().isEmpty ||
+          tester.getTopLeft(studentTitle).dy < 0,
+      isTrue,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Coach attendance searches the selected day details',

@@ -463,3 +463,26 @@ following additional updates:
   All assets match GitHub's published digests, pass `apksigner verify`, and
   use the persistent signing certificate SHA-256
   `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
+
+## 2026-10-08 Remove Duplicate Admin Calendar Searches
+
+- Keep this correction scoped to the Flutter mobile Admin Attendance screen and
+  this notes file. Do not change web, backend, or unrelated attendance behavior.
+- Remove the selected-day Student Attendance search field inside the calendar
+  detail and the Coaches Missing Attendance Today search field below it. Keep
+  the selected-day status, review, and activity filters, attendance details,
+  and the main sticky searches for All Attendance Records and Coach Attendance.
+- Keep each main Student Attendance and Coach Attendance heading pinned while
+  its records scroll, handing off the sticky heading at the section boundary.
+  Style the headings as separate sections and make All Attendance Records a
+  visually subordinate row under Student Attendance.
+- Release target: mobile version `1.26.22+58`, tag `mobile-v1.26.22`, through
+  `.github/workflows/release-mobile.yml` using the persistent Android signing
+  key. Never commit or share the signing key.
+- Local verification on 2026-10-08: all 34 Flutter tests passed; Flutter
+  analysis completed with no errors or warnings (193 informational lints); the
+  local split-ABI release compile succeeded for armeabi-v7a, arm64-v8a, and
+  x86_64. Local APKs use the Android debug certificate; publish only signed
+  GitHub Actions APKs.
+- Do not tag or publish this release until the user requests it. Show the
+  requested layout sketch before the next release.

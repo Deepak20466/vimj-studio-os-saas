@@ -11,16 +11,16 @@ import '../../core/app_theme.dart';
 import '../../core/dismissed_items.dart';
 import '../../core/models.dart';
 import '../../core/search_utils.dart';
-import '../shared/pinned_search_section.dart';
 
 const _missingAttendanceDismissKey = 'missing_attendance';
 const _missingSectionStartKey = ValueKey<String>('missing-section-start');
-const _missingSearchToolbarKey = ValueKey<String>('missing-search-toolbar');
 const _missingSectionEndKey = ValueKey<String>('missing-section-end');
 const _studentSectionStartKey = ValueKey<String>('student-section-start');
+const _studentSectionHeadingKey = ValueKey<String>('student-section-heading');
 const _studentSearchToolbarKey = ValueKey<String>('student-search-toolbar');
 const _studentSectionEndKey = ValueKey<String>('student-section-end');
 const _coachSectionStartKey = ValueKey<String>('coach-section-start');
+const _coachSectionHeadingKey = ValueKey<String>('coach-section-heading');
 const _coachSearchToolbarKey = ValueKey<String>('coach-search-toolbar');
 const _coachSectionEndKey = ValueKey<String>('coach-section-end');
 const _attendancePageSize = 500;
@@ -73,7 +73,6 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
   bool _calendarLoading = true;
   List<AdminAttendanceRecord> _calendarRecords = [];
   List<Map<String, dynamic>> _calendarCoachRecords = [];
-  String _calendarSearch = '';
   String? _calendarStatusFilter;
   String? _calendarApprovalFilter;
   int? _calendarActivityFilter;
@@ -152,12 +151,6 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
   DateTime? _coachFilterDateFrom;
   DateTime? _coachFilterDateTo;
   int? _removingCoachId;
-  String _missingSearch = '';
-  List<DailyMissingRow> get _visibleMissing => _missing
-      .where((m) => matchesSearchQuery(
-          [m.coachName, m.activityName, m.date, m.endTime, m.classId],
-          _missingSearch))
-      .toList();
   List<Map<String, dynamic>> get _visibleCoachRecords => _coachRecords
       .where((r) =>
           matchesSearchQuery(
@@ -272,6 +265,11 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
   double get _coachAttendanceToolbarHeight => _coachFiltersExpanded
       ? _coachAttendanceToolbarExpandedHeight
       : _attendanceToolbarCollapsedHeight;
+
+  double get _coachAttendanceHeadingHeight {
+    if (_showCoachAttendanceRecords) return 48;
+    return MediaQuery.sizeOf(context).width < 384 ? 100 : 72;
+  }
 
   String _activeFilterMessage(int count) => count == 0
       ? 'No active filters'
@@ -434,6 +432,68 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
           ),
         );
       },
+    );
+  }
+
+  Widget _attendanceSectionHeading({
+    required String title,
+    required IconData icon,
+    Key? titleKey,
+    Widget? trailing,
+  }) {
+    final theme = Theme.of(context);
+    final titleStyle = theme.textTheme.titleMedium?.copyWith(
+      color: theme.colorScheme.onSurface,
+      fontWeight: FontWeight.w700,
+    );
+
+    Widget titleRow() => Row(
+          children: [
+            Icon(icon, size: 20, color: theme.colorScheme.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                title,
+                key: titleKey,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: titleStyle,
+              ),
+            ),
+          ],
+        );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (trailing == null) return titleRow();
+          if (constraints.maxWidth < 340) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                titleRow(),
+                const SizedBox(height: 4),
+                Align(alignment: Alignment.centerRight, child: trailing),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: titleRow()),
+              const SizedBox(width: 8),
+              trailing,
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -1139,7 +1199,6 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
       _calendarMonth =
           DateTime(_calendarMonth.year, _calendarMonth.month + offset, 1);
       _calendarSelectedDate = null;
-      _calendarSearch = '';
       _calendarStatusFilter = null;
       _calendarApprovalFilter = null;
       _calendarActivityFilter = null;
@@ -1152,7 +1211,6 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
     setState(() {
       _calendarMonth = DateTime(now.year, now.month, 1);
       _calendarSelectedDate = now;
-      _calendarSearch = '';
       _calendarStatusFilter = null;
       _calendarApprovalFilter = null;
       _calendarActivityFilter = null;
@@ -1362,24 +1420,7 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
     final students = _calendarStudentsByDate[key] ?? const [];
     final coaches = _calendarCoachesByDate[key] ?? const [];
     final visibleStudents = students.where((record) {
-      return matchesSearchQuery(
-            [
-              record.studentName,
-              record.activityName,
-              record.coachName,
-              record.classDate,
-              record.timestamp,
-              record.status,
-              record.approvalStatus,
-              record.id,
-              record.studentId,
-              record.classId,
-              record.activityId,
-              record.coachId,
-            ],
-            _calendarSearch,
-          ) &&
-          (_calendarStatusFilter == null ||
+      return (_calendarStatusFilter == null ||
               record.status == _calendarStatusFilter) &&
           (_calendarApprovalFilter == null ||
               record.approvalStatus == _calendarApprovalFilter) &&
@@ -1425,34 +1466,11 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
             );
           }),
         const SizedBox(height: 12),
-        PinnedSearchSection(
-          padding: EdgeInsets.zero,
-          search: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Student Attendance',
-                  style: Theme.of(context).textTheme.titleSmall),
-              const SizedBox(height: 6),
-              TextField(
-                decoration: InputDecoration(
-                  labelText: 'Search attendance',
-                  hintText: 'Student, activity, coach, status, or approval',
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: _calendarSearch.isEmpty
-                      ? null
-                      : IconButton(
-                          icon: const Icon(Icons.clear),
-                          tooltip: 'Clear search',
-                          onPressed: () => setState(() => _calendarSearch = ''),
-                        ),
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                ),
-                onChanged: (value) => setState(() => _calendarSearch = value),
-              ),
-            ],
-          ),
-          results: Column(children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Student Attendance',
+                style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -1507,13 +1525,11 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                   onChanged: (value) =>
                       setState(() => _calendarActivityFilter = value),
                 ),
-                if (_calendarSearch.isNotEmpty ||
-                    _calendarStatusFilter != null ||
+                if (_calendarStatusFilter != null ||
                     _calendarApprovalFilter != null ||
                     _calendarActivityFilter != null)
                   TextButton(
                     onPressed: () => setState(() {
-                      _calendarSearch = '';
                       _calendarStatusFilter = null;
                       _calendarApprovalFilter = null;
                       _calendarActivityFilter = null;
@@ -1590,7 +1606,7 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                       ],
                     ),
                   )),
-          ]),
+          ],
         ),
       ],
     );
@@ -2162,32 +2178,14 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                           TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 ),
                 const SizedBox(height: 8),
-                KeyedSubtree(
-                  key: _missingSearchToolbarKey,
-                  child: TextField(
-                      decoration: InputDecoration(
-                          labelText: 'Search coach, activity, or date',
-                          prefixIcon: const Icon(Icons.search),
-                          suffixIcon: _missingSearch.isEmpty
-                              ? null
-                              : IconButton(
-                                  onPressed: () =>
-                                      setState(() => _missingSearch = ''),
-                                  icon: const Icon(Icons.clear))),
-                      onChanged: (v) => setState(() => _missingSearch = v)),
-                ),
                 if (_missing.isEmpty)
                   const Padding(
                       padding: EdgeInsets.all(20),
                       child: Center(
                           child: Text(
                               'All coaches have marked attendance for ended classes today.')))
-                else if (_visibleMissing.isEmpty)
-                  const Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Center(child: Text('No results found.')))
                 else
-                  ..._visibleMissing.map((m) => Card(
+                  ..._missing.map((m) => Card(
                         margin: const EdgeInsets.only(bottom: 8),
                         child: ListTile(
                           leading: const Icon(Icons.warning_amber_rounded,
@@ -2209,46 +2207,61 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                     key: _studentSectionStartKey,
                     child: const SizedBox.shrink()),
                 const SizedBox(height: 20),
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                  child: Text('Student Attendance',
-                      style:
-                          TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                KeyedSubtree(
+                  key: _studentSectionHeadingKey,
+                  child: _attendanceSectionHeading(
+                    title: 'Student Attendance',
+                    icon: Icons.groups_outlined,
+                  ),
                 ),
                 Padding(
                   padding:
-                      const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                  child: Row(
-                    children: [
-                      const Expanded(
-                        child: Text('All Attendance Records',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16)),
-                      ),
-                      if (!_showAllAttendanceRecords && !_recordsLoading)
-                        Tooltip(
-                          message:
-                              '${_visibleRecords.length} matching student attendance records',
-                          child: Chip(
-                            label: Text('${_visibleRecords.length}'),
-                            visualDensity: VisualDensity.compact,
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                            padding: EdgeInsets.zero,
+                      const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: Theme.of(context).colorScheme.outlineVariant),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'All Attendance Records',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w600),
                           ),
                         ),
-                      if (!_showAllAttendanceRecords)
-                        Tooltip(
-                          message: 'Show all student attendance records',
-                          child: TextButton.icon(
-                            key:
-                                const ValueKey('toggle-all-student-attendance'),
-                            onPressed: _toggleStudentAttendanceRecords,
-                            icon: const Icon(Icons.visibility_outlined),
-                            label: const Text('Show'),
+                        if (!_showAllAttendanceRecords && !_recordsLoading)
+                          Tooltip(
+                            message:
+                                '${_visibleRecords.length} matching student attendance records',
+                            child: Chip(
+                              label: Text('${_visibleRecords.length}'),
+                              visualDensity: VisualDensity.compact,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              padding: EdgeInsets.zero,
+                            ),
                           ),
-                        ),
-                    ],
+                        if (!_showAllAttendanceRecords)
+                          Tooltip(
+                            message: 'Show all student attendance records',
+                            child: TextButton.icon(
+                              key: const ValueKey(
+                                  'toggle-all-student-attendance'),
+                              onPressed: _toggleStudentAttendanceRecords,
+                              icon: const Icon(Icons.visibility_outlined),
+                              label: const Text('Show'),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
                 if (_showAllAttendanceRecords) ...[
@@ -2430,42 +2443,43 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                 ],
                 KeyedSubtree(
                     key: _studentSectionEndKey, child: const SizedBox.shrink()),
-                const SizedBox(height: 24),
                 KeyedSubtree(
                     key: _coachSectionStartKey, child: const SizedBox.shrink()),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  alignment: WrapAlignment.spaceBetween,
-                  children: [
-                    const Text('Coach Attendance',
-                        key: ValueKey('coach-attendance-section'),
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 18)),
-                    if (!_showCoachAttendanceRecords && !_coachRecordsLoading)
-                      Tooltip(
-                        message:
-                            '${_visibleCoachRecords.length} matching coach attendance records',
-                        child: Chip(
-                          label: Text('${_visibleCoachRecords.length}'),
-                          visualDensity: VisualDensity.compact,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          padding: EdgeInsets.zero,
-                        ),
-                      ),
-                    if (!_showCoachAttendanceRecords)
-                      Tooltip(
-                        message: 'Show coach attendance records',
-                        child: TextButton.icon(
-                          key: const ValueKey('toggle-coach-attendance'),
-                          onPressed: _toggleCoachAttendanceRecords,
-                          icon: const Icon(Icons.visibility_outlined),
-                          label: const Text('Show'),
-                        ),
-                      ),
-                  ],
+                const SizedBox(height: 20),
+                KeyedSubtree(
+                  key: _coachSectionHeadingKey,
+                  child: _attendanceSectionHeading(
+                    title: 'Coach Attendance',
+                    titleKey: const ValueKey('coach-attendance-section'),
+                    icon: Icons.badge_outlined,
+                    trailing: !_showCoachAttendanceRecords
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (!_coachRecordsLoading) ...[
+                                Chip(
+                                  label: Text('${_visibleCoachRecords.length}'),
+                                  visualDensity: VisualDensity.compact,
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  padding: EdgeInsets.zero,
+                                ),
+                                const SizedBox(width: 4),
+                              ],
+                              Tooltip(
+                                message: 'Show coach attendance records',
+                                child: TextButton.icon(
+                                  key:
+                                      const ValueKey('toggle-coach-attendance'),
+                                  onPressed: _toggleCoachAttendanceRecords,
+                                  icon: const Icon(Icons.visibility_outlined),
+                                  label: const Text('Show'),
+                                ),
+                              ),
+                            ],
+                          )
+                        : null,
+                  ),
                 ),
                 if (_showCoachAttendanceRecords) ...[
                   const SizedBox(height: 8),
@@ -2636,7 +2650,9 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
 
               Widget sectionSliver({
                 required Key startKey,
-                required Key searchKey,
+                required Key? headingKey,
+                required double headingHeight,
+                required Key? searchKey,
                 required Key endKey,
                 required double toolbarHeight,
               }) {
@@ -2646,9 +2662,20 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                   return const SliverToBoxAdapter(child: SizedBox.shrink());
                 }
                 final sectionChildren = children.sublist(start + 1, end);
-                final searchIndex = sectionChildren
-                    .indexWhere((child) => child.key == searchKey);
-                if (searchIndex < 0) {
+                final stickyHeaders = <MapEntry<int, double>>[
+                  if (headingKey != null)
+                    MapEntry(
+                        sectionChildren
+                            .indexWhere((child) => child.key == headingKey),
+                        headingHeight),
+                  if (searchKey != null)
+                    MapEntry(
+                        sectionChildren
+                            .indexWhere((child) => child.key == searchKey),
+                        toolbarHeight),
+                ].where((header) => header.key >= 0).toList()
+                  ..sort((a, b) => a.key.compareTo(b.key));
+                if (stickyHeaders.isEmpty) {
                   return SliverPadding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     sliver: SliverList(
@@ -2657,26 +2684,34 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                 }
 
                 final sectionSlivers = <Widget>[];
-                final beforeSearch = sectionChildren.sublist(0, searchIndex);
-                if (beforeSearch.isNotEmpty) {
-                  sectionSlivers.add(paddedList(beforeSearch));
+                var nextIndex = 0;
+                var stickyHeight = 0.0;
+                for (final header in stickyHeaders) {
+                  if (header.key < nextIndex) continue;
+                  final beforeHeader =
+                      sectionChildren.sublist(nextIndex, header.key);
+                  if (beforeHeader.isNotEmpty) {
+                    sectionSlivers.add(paddedList(beforeHeader));
+                  }
+                  sectionSlivers.add(SliverPersistentHeader(
+                    pinned: true,
+                    delegate: _StickyAttendanceToolbarDelegate(
+                      height: header.value,
+                      child: sectionChildren[header.key],
+                    ),
+                  ));
+                  stickyHeight += header.value;
+                  nextIndex = header.key + 1;
                 }
-                sectionSlivers.add(SliverPersistentHeader(
-                  pinned: true,
-                  delegate: _StickyAttendanceToolbarDelegate(
-                    height: toolbarHeight,
-                    child: sectionChildren[searchIndex],
-                  ),
-                ));
-                final afterSearch = sectionChildren.sublist(searchIndex + 1);
-                if (afterSearch.isNotEmpty) {
-                  sectionSlivers.add(paddedList(afterSearch));
+                if (nextIndex < sectionChildren.length) {
+                  sectionSlivers
+                      .add(paddedList(sectionChildren.sublist(nextIndex)));
                 }
                 // Give a pinned header enough trailing scroll extent to leave
                 // the viewport cleanly at the section boundary.
                 sectionSlivers.add(
                   SliverToBoxAdapter(
-                    child: SizedBox(height: toolbarHeight),
+                    child: SizedBox(height: stickyHeight),
                   ),
                 );
                 return SliverMainAxisGroup(slivers: sectionSlivers);
@@ -2688,18 +2723,24 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                   paddedList(children.sublist(0, missingStart), top: 12),
                 sectionSliver(
                   startKey: _missingSectionStartKey,
-                  searchKey: _missingSearchToolbarKey,
+                  headingKey: null,
+                  headingHeight: 0,
+                  searchKey: null,
                   endKey: _missingSectionEndKey,
-                  toolbarHeight: 72,
+                  toolbarHeight: 0,
                 ),
                 sectionSliver(
                   startKey: _studentSectionStartKey,
+                  headingKey: _studentSectionHeadingKey,
+                  headingHeight: 44,
                   searchKey: _studentSearchToolbarKey,
                   endKey: _studentSectionEndKey,
                   toolbarHeight: _studentAttendanceToolbarHeight,
                 ),
                 sectionSliver(
                   startKey: _coachSectionStartKey,
+                  headingKey: _coachSectionHeadingKey,
+                  headingHeight: _coachAttendanceHeadingHeight,
                   searchKey: _coachSearchToolbarKey,
                   endKey: _coachSectionEndKey,
                   toolbarHeight: _coachAttendanceToolbarHeight,
