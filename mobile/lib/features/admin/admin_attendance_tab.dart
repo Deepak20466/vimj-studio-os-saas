@@ -2,6 +2,7 @@ import 'admin_reports_tab.dart';
 import '../../core/export_helper.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/dismissed_items.dart';
@@ -35,26 +36,64 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
   int? _approvalBusyId;
   bool _approvingAll = false;
 
+  DateTime _calendarMonth =
+      DateTime(DateTime.now().year, DateTime.now().month, 1);
+  DateTime? _calendarSelectedDate = DateTime.now();
+  bool _calendarLoading = true;
+  List<AdminAttendanceRecord> _calendarRecords = [];
+  List<Map<String, dynamic>> _calendarCoachRecords = [];
+  String _calendarSearch = '';
+  String? _calendarStatusFilter;
+  String? _calendarApprovalFilter;
+  int? _calendarActivityFilter;
+
+  DateTime get _calendarMonthStart =>
+      DateTime(_calendarMonth.year, _calendarMonth.month, 1);
+  DateTime get _calendarMonthEnd =>
+      DateTime(_calendarMonth.year, _calendarMonth.month + 1, 0);
+  int get _calendarDaysInMonth => _calendarMonthEnd.day;
+  int get _calendarLeadingBlanks => _calendarMonthStart.weekday % 7;
+
+  String _calendarDateKey(DateTime date) =>
+      DateFormat('yyyy-MM-dd').format(date);
+
+  Map<String, List<AdminAttendanceRecord>> get _calendarStudentsByDate {
+    final result = <String, List<AdminAttendanceRecord>>{};
+    for (final record in _calendarRecords) {
+      result.putIfAbsent(record.classDate, () => []).add(record);
+    }
+    return result;
+  }
+
+  Map<String, List<Map<String, dynamic>>> get _calendarCoachesByDate {
+    final result = <String, List<Map<String, dynamic>>>{};
+    for (final record in _calendarCoachRecords) {
+      final date = (record['date'] as String?)?.substring(0, 10);
+      if (date != null) result.putIfAbsent(date, () => []).add(record);
+    }
+    return result;
+  }
+
   List<AdminAttendanceRecord> get _visibleRecords {
     return _records
         .where((r) =>
             matchesSearchQuery(
-                  [
-                    r.studentName,
-                    r.activityName,
-                    r.coachName,
-                    r.classDate,
-                    r.timestamp,
-                    r.status,
-                    r.approvalStatus,
-                    r.id,
-                    r.studentId,
-                    r.classId,
-                    r.activityId,
-                    r.coachId,
-                  ],
-                  _attendanceSearch,
-                ) &&
+              [
+                r.studentName,
+                r.activityName,
+                r.coachName,
+                r.classDate,
+                r.timestamp,
+                r.status,
+                r.approvalStatus,
+                r.id,
+                r.studentId,
+                r.classId,
+                r.activityId,
+                r.coachId,
+              ],
+              _attendanceSearch,
+            ) &&
             (_filterActivityId == null || r.activityId == _filterActivityId) &&
             (_filterStatus == null || r.status == _filterStatus) &&
             (_approvalFilter == null || r.approvalStatus == _approvalFilter) &&
@@ -87,23 +126,23 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
   List<Map<String, dynamic>> get _visibleCoachRecords => _coachRecords
       .where((r) =>
           matchesSearchQuery(
-                [
-                  r['coach_name'],
-                  r['coach_id'],
-                  r['date'],
-                  r['status'],
-                  r['entry_time'],
-                  r['exit_time'],
-                  r['id'],
-                ],
-                _coachSearch,
-              ) &&
-              (_coachStatusFilter == null ||
-                  r['status'] == _coachStatusFilter) &&
-              (_coachFilterId == null || r['coach_id'] == _coachFilterId))
+            [
+              r['coach_name'],
+              r['coach_id'],
+              r['date'],
+              r['status'],
+              r['entry_time'],
+              r['exit_time'],
+              r['id'],
+            ],
+            _coachSearch,
+          ) &&
+          (_coachStatusFilter == null || r['status'] == _coachStatusFilter) &&
+          (_coachFilterId == null || r['coach_id'] == _coachFilterId))
       .toList();
 
-  Future<void> _exportReport(String kind, {DateTime? date}) async {
+  Future<void> _exportReport(String kind,
+      {DateTime? date, bool includeDay = true}) async {
     final selected = date ?? DateTime.now();
     try {
       final query = <String, dynamic>{
@@ -112,10 +151,10 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
         'kind': kind,
         'fmt': 'pdf'
       };
-      if (date != null) query['day'] = selected.day;
+      if (date != null && includeDay) query['day'] = selected.day;
       final bytes = await ApiClient.instance.getBytes('/reports', query: query);
       await shareExportedFile(bytes,
-          '${kind}_${selected.year}_${selected.month}${date == null ? '' : '_${selected.day}'}.pdf');
+          '${kind}_${selected.year}_${selected.month}${date == null || !includeDay ? '' : '_${selected.day}'}.pdf');
     } on ApiException catch (e) {
       if (mounted)
         ScaffoldMessenger.of(context)
@@ -129,6 +168,7 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
     _load();
     _loadRecords();
     _loadCoachRecords();
+    _loadCalendarData();
   }
 
   Future<void> _load() async {
@@ -195,6 +235,453 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
     await _load();
     await _loadRecords();
     await _loadCoachRecords();
+    await _loadCalendarData();
+  }
+
+  Future<void> _loadCalendarData() async {
+    if (mounted) setState(() => _calendarLoading = true);
+    final from = _calendarDateKey(_calendarMonthStart);
+    final to = _calendarDateKey(_calendarMonthEnd);
+    try {
+      final results = await Future.wait([
+        ApiClient.instance.get('/attendance/students', query: {
+          'date_from': from,
+          'date_to': to,
+        }),
+        ApiClient.instance.get('/attendance/coaches', query: {
+          'date_from': from,
+          'date_to': to,
+        }),
+      ]);
+      _calendarRecords = (results[0] as List)
+          .map((e) => AdminAttendanceRecord.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _calendarCoachRecords = (results[1] as List).cast<Map<String, dynamic>>();
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _calendarLoading = false);
+    }
+  }
+
+  void _moveCalendarMonth(int offset) {
+    setState(() {
+      _calendarMonth =
+          DateTime(_calendarMonth.year, _calendarMonth.month + offset, 1);
+      _calendarSelectedDate = null;
+      _calendarSearch = '';
+      _calendarStatusFilter = null;
+      _calendarApprovalFilter = null;
+      _calendarActivityFilter = null;
+    });
+    _loadCalendarData();
+  }
+
+  void _showCalendarToday() {
+    final now = DateTime.now();
+    setState(() {
+      _calendarMonth = DateTime(now.year, now.month, 1);
+      _calendarSelectedDate = now;
+      _calendarSearch = '';
+      _calendarStatusFilter = null;
+      _calendarApprovalFilter = null;
+      _calendarActivityFilter = null;
+    });
+    _loadCalendarData();
+  }
+
+  Color _calendarStatusColor(String status) {
+    switch (status) {
+      case 'PRESENT':
+        return AppColors.success;
+      case 'ABSENT':
+        return AppColors.danger;
+      case 'NOT_CONFIRM':
+        return Colors.indigo;
+      default:
+        return AppColors.warning;
+    }
+  }
+
+  Color _calendarApprovalColor(String status) {
+    switch (status) {
+      case 'APPROVED':
+        return AppColors.success;
+      case 'REJECTED':
+        return AppColors.danger;
+      default:
+        return AppColors.warning;
+    }
+  }
+
+  String _calendarTime(String? value) {
+    if (value == null) return '-';
+    final parsed = DateTime.tryParse(value);
+    if (parsed == null) return '-';
+    final time = parsed.toLocal();
+    final hour = time.hour % 12 == 0 ? 12 : time.hour % 12;
+    final suffix = time.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:${time.minute.toString().padLeft(2, '0')} $suffix';
+  }
+
+  Widget _calendarDot(Color color) => Container(
+        width: 6,
+        height: 6,
+        margin: const EdgeInsets.only(right: 2, top: 1),
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      );
+
+  Widget _calendarDayCell(DateTime day) {
+    final key = _calendarDateKey(day);
+    final students = _calendarStudentsByDate[key] ?? const [];
+    final coaches = _calendarCoachesByDate[key] ?? const [];
+    final statuses = students.map((record) => record.status).toSet();
+    final markerColors = <Color>[
+      ...coaches
+          .map((record) => record['status'] as String? ?? '')
+          .where((status) => status.isNotEmpty)
+          .toSet()
+          .map(_calendarStatusColor),
+      ...statuses.map(_calendarStatusColor),
+    ].toSet().take(4);
+    final isToday = _calendarDateKey(DateTime.now()) == key;
+    final isSelected = _calendarSelectedDate != null &&
+        _calendarDateKey(_calendarSelectedDate!) == key;
+    return GestureDetector(
+      onTap: () => setState(() => _calendarSelectedDate = day),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.brandLight : AppColors.bg,
+          border: Border.all(
+            color: isToday || isSelected
+                ? AppColors.brandOrange
+                : AppColors.textMuted.withOpacity(0.25),
+            width: isToday || isSelected ? 1.4 : 1,
+          ),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${day.day}',
+                style:
+                    const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 2),
+            Row(children: markerColors.map(_calendarDot).toList()),
+            if (students.isNotEmpty || coaches.isNotEmpty)
+              Text(
+                  students.length + coaches.length > 99
+                      ? '99+'
+                      : '${students.length + coaches.length}',
+                  style:
+                      const TextStyle(fontSize: 9, color: AppColors.textMuted)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAttendanceCalendar() {
+    return Column(
+      children: [
+        Row(
+          children: [
+            IconButton(
+                icon: const Icon(Icons.chevron_left),
+                onPressed: () => _moveCalendarMonth(-1)),
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(DateFormat('MMMM yyyy').format(_calendarMonth),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium),
+                  ),
+                  const SizedBox(width: 4),
+                  TextButton(
+                    onPressed: _showCalendarToday,
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      minimumSize: const Size(0, 40),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('Today'),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+                icon: const Icon(Icons.chevron_right),
+                onPressed: () => _moveCalendarMonth(1)),
+          ],
+        ),
+        if (_calendarLoading) const LinearProgressIndicator(),
+        const SizedBox(height: 8),
+        GridView.count(
+          crossAxisCount: 7,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 3,
+          crossAxisSpacing: 3,
+          childAspectRatio: 0.9,
+          children: [
+            for (final weekday in const ['S', 'M', 'T', 'W', 'T', 'F', 'S'])
+              Center(
+                child: Text(weekday,
+                    style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textMuted)),
+              ),
+            for (var i = 0; i < _calendarLeadingBlanks; i++)
+              const SizedBox.shrink(),
+            for (var day = 1; day <= _calendarDaysInMonth; day++)
+              _calendarDayCell(
+                  DateTime(_calendarMonth.year, _calendarMonth.month, day)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCalendarDetail() {
+    final selected = _calendarSelectedDate;
+    if (selected == null) {
+      return const Text(
+          'Select a day on the calendar to view coach and student attendance.',
+          style: TextStyle(fontSize: 12, color: AppColors.textMuted));
+    }
+    final key = _calendarDateKey(selected);
+    final students = _calendarStudentsByDate[key] ?? const [];
+    final coaches = _calendarCoachesByDate[key] ?? const [];
+    final visibleStudents = students.where((record) {
+      return matchesSearchQuery(
+            [
+              record.studentName,
+              record.activityName,
+              record.coachName,
+              record.classDate,
+              record.timestamp,
+              record.status,
+              record.approvalStatus,
+              record.id,
+              record.studentId,
+              record.classId,
+              record.activityId,
+              record.coachId,
+            ],
+            _calendarSearch,
+          ) &&
+          (_calendarStatusFilter == null ||
+              record.status == _calendarStatusFilter) &&
+          (_calendarApprovalFilter == null ||
+              record.approvalStatus == _calendarApprovalFilter) &&
+          (_calendarActivityFilter == null ||
+              record.activityId == _calendarActivityFilter);
+    }).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(DateFormat('EEEE, MMM d, yyyy').format(selected),
+            style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 14),
+        Text('Coach Attendance', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 6),
+        if (coaches.isEmpty)
+          const Text('No coach attendance marked on this date.',
+              style: TextStyle(fontSize: 12, color: AppColors.textMuted))
+        else
+          ...coaches.map((record) {
+            final status = record['status'] as String? ?? 'UNKNOWN';
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Wrap(
+                spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(record['coach_name'] as String? ?? 'Unknown coach',
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  Chip(
+                    label: Text(status,
+                        style:
+                            const TextStyle(fontSize: 10, color: Colors.white)),
+                    backgroundColor: _calendarStatusColor(status),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  Text(
+                      'Entry ${_calendarTime(record['entry_time'] as String?)} · Exit ${_calendarTime(record['exit_time'] as String?)}',
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.textMuted)),
+                ],
+              ),
+            );
+          }),
+        const SizedBox(height: 12),
+        Text('Student Attendance',
+            style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 6),
+        TextField(
+          decoration: InputDecoration(
+            labelText: 'Search attendance',
+            hintText: 'Student, activity, coach, status, or approval',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _calendarSearch.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.clear),
+                    tooltip: 'Clear search',
+                    onPressed: () => setState(() => _calendarSearch = ''),
+                  ),
+            border: const OutlineInputBorder(),
+            isDense: true,
+          ),
+          onChanged: (value) => setState(() => _calendarSearch = value),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            DropdownButton<String?>(
+              value: _calendarStatusFilter,
+              hint: const Text('All statuses'),
+              items: const [
+                DropdownMenuItem<String?>(
+                    value: null, child: Text('All statuses')),
+                DropdownMenuItem<String?>(
+                    value: 'PRESENT', child: Text('Present')),
+                DropdownMenuItem<String?>(
+                    value: 'ABSENT', child: Text('Absent')),
+                DropdownMenuItem<String?>(value: 'LEAVE', child: Text('Leave')),
+                DropdownMenuItem<String?>(
+                    value: 'NOT_CONFIRM', child: Text('Not Confirm')),
+              ],
+              onChanged: (value) =>
+                  setState(() => _calendarStatusFilter = value),
+            ),
+            DropdownButton<String?>(
+              value: _calendarApprovalFilter,
+              hint: const Text('All reviews'),
+              items: const [
+                DropdownMenuItem<String?>(
+                    value: null, child: Text('All reviews')),
+                DropdownMenuItem<String?>(
+                    value: 'PENDING', child: Text('Pending')),
+                DropdownMenuItem<String?>(
+                    value: 'APPROVED', child: Text('Approved')),
+                DropdownMenuItem<String?>(
+                    value: 'REJECTED', child: Text('Rejected')),
+              ],
+              onChanged: (value) =>
+                  setState(() => _calendarApprovalFilter = value),
+            ),
+            DropdownButton<int?>(
+              value: _calendarActivityFilter,
+              hint: const Text('All activities'),
+              items: [
+                const DropdownMenuItem<int?>(
+                    value: null, child: Text('All activities')),
+                ...{
+                  for (final record in students)
+                    record.activityId: record.activityName
+                }.entries.map((entry) => DropdownMenuItem<int?>(
+                    value: entry.key, child: Text(entry.value))),
+              ],
+              onChanged: (value) =>
+                  setState(() => _calendarActivityFilter = value),
+            ),
+            if (_calendarSearch.isNotEmpty ||
+                _calendarStatusFilter != null ||
+                _calendarApprovalFilter != null ||
+                _calendarActivityFilter != null)
+              TextButton(
+                onPressed: () => setState(() {
+                  _calendarSearch = '';
+                  _calendarStatusFilter = null;
+                  _calendarApprovalFilter = null;
+                  _calendarActivityFilter = null;
+                }),
+                child: const Text('Clear filters'),
+              ),
+          ],
+        ),
+        if (students.isEmpty)
+          const Text('No student attendance marked on this date.',
+              style: TextStyle(fontSize: 12, color: AppColors.textMuted))
+        else if (visibleStudents.isEmpty)
+          const Text('No student attendance matches these filters.',
+              style: TextStyle(fontSize: 12, color: AppColors.textMuted))
+        else
+          ...visibleStudents.map((record) => Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  border:
+                      Border.all(color: AppColors.textMuted.withOpacity(0.2)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(record.studentName,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Wrap(
+                            alignment: WrapAlignment.end,
+                            spacing: 4,
+                            children: [
+                              Chip(
+                                label: Text(record.status,
+                                    style: const TextStyle(
+                                        fontSize: 10, color: Colors.white)),
+                                backgroundColor:
+                                    _calendarStatusColor(record.status),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              Chip(
+                                label: Text(
+                                    record.approvalStatus == 'PENDING'
+                                        ? 'Awaiting Admin'
+                                        : record.approvalStatus,
+                                    style: const TextStyle(
+                                        fontSize: 10, color: Colors.white)),
+                                backgroundColor: _calendarApprovalColor(
+                                    record.approvalStatus),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    Text(record.activityName,
+                        style: const TextStyle(
+                            color: AppColors.textMuted, fontSize: 12)),
+                    if (record.hasSelfie) ...[
+                      const SizedBox(height: 6),
+                      OutlinedButton(
+                          onPressed: () => _viewSelfie(record),
+                          child: const Text('View Photo')),
+                    ],
+                  ],
+                ),
+              )),
+      ],
+    );
   }
 
   Future<void> _openManualEntry() async {
@@ -673,13 +1160,18 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                         onPressed: () async {
                           final picked = await showDatePicker(
                               context: context,
-                              initialDate: DateTime.now(),
+                              initialDate:
+                                  _calendarSelectedDate ?? DateTime.now(),
                               firstDate: DateTime(2000),
                               lastDate: DateTime(2100));
                           if (picked != null)
-                            _exportReport('classes', date: picked);
+                            _exportReport('classes_detail', date: picked);
                         },
                         child: const Text('Choose Day Classes PDF')),
+                    OutlinedButton(
+                        onPressed: () => _exportReport('students_summary',
+                            date: _calendarMonth, includeDay: false),
+                        child: const Text('Monthly Attendance & Classes PDF')),
                     OutlinedButton(
                         onPressed: () => _exportReport('fees_paid'),
                         child: const Text('Fees Paid PDF')),
@@ -687,6 +1179,22 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                         onPressed: () => _exportReport('fees_pending'),
                         child: const Text('Fees Pending PDF')),
                   ]),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                    child: Text('Attendance Calendar',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 18)),
+                  ),
+                  Card(
+                    child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: _buildAttendanceCalendar()),
+                  ),
+                  Card(
+                    child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: _buildCalendarDetail()),
+                  ),
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 4, horizontal: 4),
                     child: Text('Coaches Missing Attendance Today',

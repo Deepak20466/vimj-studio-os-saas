@@ -46,6 +46,11 @@ class _LoginScreenState extends State<LoginScreen> {
           _loadingMessage = 'Waking up the service can take a little while.');
     });
     try {
+      // Reuse the background wake-up request started when this shared login
+      // page opened, or refresh it if the user left the page idle. Keep it
+      // parallel so the bounded login request is never extended by another
+      // timeout.
+      unawaited(ApiClient.instance.warmUp());
       final session =
           await AuthApi.login(_emailCtrl.text.trim(), _passwordCtrl.text);
       if (!mounted) return;
@@ -196,8 +201,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           labelText: 'Password',
                           labelStyle:
                               const TextStyle(color: AppColors.textMuted),
-                          floatingLabelStyle: const TextStyle(
-                              color: AppColors.brandOrangeDark),
+                          floatingLabelStyle:
+                              const TextStyle(color: AppColors.brandOrangeDark),
                           filled: true,
                           fillColor: Colors.white,
                           hintStyle:

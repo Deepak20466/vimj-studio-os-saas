@@ -22,6 +22,8 @@ class ApiClient {
   static final ApiClient instance = ApiClient._();
 
   http.Client _http = http.Client();
+  Future<void>? _warmUpFuture;
+  DateTime? _lastWarmUpCompletedAt;
   // Shared by every concurrent caller that hits a 401 at the same time (e.g. a screen
   // that fires several parallel GETs via Future.wait right as the access token expires).
   // Without sharing this future, only the first caller would actually refresh — every
@@ -36,6 +38,8 @@ class ApiClient {
     _http.close();
     _http = client;
     _refreshFuture = null;
+    _warmUpFuture = null;
+    _lastWarmUpCompletedAt = null;
   }
 
   Uri _uri(String path, [Map<String, dynamic>? query]) {
@@ -56,7 +60,26 @@ class ApiClient {
 
   /// Best-effort, non-authenticated ping used by the login screen to wake the
   /// production host while the user is entering credentials.
-  Future<void> warmUp() async {
+  Future<void> warmUp() {
+    final pending = _warmUpFuture;
+    if (pending != null) return pending;
+    final lastCompletedAt = _lastWarmUpCompletedAt;
+    if (lastCompletedAt != null &&
+        DateTime.now().difference(lastCompletedAt) <
+            const Duration(minutes: 5)) {
+      return Future.value();
+    }
+
+    late final Future<void> tracked;
+    tracked = _performWarmUp().whenComplete(() {
+      _lastWarmUpCompletedAt = DateTime.now();
+      if (identical(_warmUpFuture, tracked)) _warmUpFuture = null;
+    });
+    _warmUpFuture = tracked;
+    return tracked;
+  }
+
+  Future<void> _performWarmUp() async {
     try {
       await _http.get(_uri('/health')).timeout(_loginTimeout);
     } catch (_) {

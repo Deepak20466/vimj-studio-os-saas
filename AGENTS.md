@@ -14,6 +14,7 @@ This repository implements a production-ready Attendance Management System compr
 - **[CLAUDE.md](file:///c:/Users/K%20Deepak/Downloads/attendance-management-master/attendance-management-master/CLAUDE.md)**: Architectural specs, database schema, RBAC guidelines, and history of system revisions.
 - **[README.md](file:///c:/Users/K%20Deepak/Downloads/attendance-management-master/attendance-management-master/README.md)**: Project overview, setup instructions, quick start, and structural details.
 - **[REQUESTED_CHANGES.md](file:///c:/Users/K%20Deepak/Downloads/attendance-management-master/attendance-management-master/REQUESTED_CHANGES.md)**: Summary of recent feature updates, backend migrations, Flutter mobile app implementations, and production verification logs.
+- `READ.md` is not present in this repository; `README.md` was read for the project overview.
 
 ---
 
@@ -200,3 +201,23 @@ following additional updates:
   SHA-256: arm64-v8a `d00a95bf8d426df178b593cb41430784ecabcb8a13ed2fe3a4d2b37e79bad8f2`,
   armeabi-v7a `9525c7cb2e48275fd1892294532f10984d451dc81cf9d0fe1c1156ac9dc7a665`,
   x86_64 `4fd475cded5ae7a13431e8eeb12a5135f7f3d6cf935bcb89ed5e955916a7bcae`.
+
+## Admin Attendance Calendar and Login Warm-Up (2026-10-07)
+
+- Admin mobile Attendance now includes a month calendar and selected-day Coach and
+  Student Attendance details, with search, status, approval, and activity filters.
+  Monthly Attendance & Classes PDF exports use the selected calendar month.
+- Admin's Choose Day Classes PDF now requests `classes_detail`, which includes
+  scheduled time, activity, student, attendance status, approval status, and a
+  total row. The Overall Revenue & Attendance Reports, Fees Paid PDF, and Fees
+  Pending PDF controls retain their existing behavior.
+- The shared mobile login page (Admin and Coach) reuses a single background
+  `/health` request while credentials are entered and refreshes it if it is stale.
+  Login remains parallel and keeps its existing 75-second request timeout.
+  Render's free-tier cold start can still delay the first request after inactivity.
+- No backend or database changes are required. Android release target: `1.26.9+45`,
+  tag `mobile-v1.26.9`; publish split-ABI APKs through
+  `.github/workflows/release-mobile.yml` to use the persistent Actions signing key.
+- Verification: Flutter analysis completed with 0 errors/warnings (174 informational
+  lints), and the local split-ABI release build succeeded for armeabi-v7a, arm64-v8a,
+  and x86_64.
