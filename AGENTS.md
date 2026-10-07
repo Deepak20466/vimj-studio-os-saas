@@ -194,3 +194,9 @@ following additional updates:
 - Android package target: 1.26.8+44; release tag: `mobile-v1.26.8`. Build and publish the
   split-ABI APKs through `.github/workflows/release-mobile.yml` so they use the persistent
   GitHub Actions signing key.
+- Release verification: GitHub Actions run `37549605844` completed successfully on
+  2026-10-07 and published all three signed APKs at
+  https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.26.8.
+  SHA-256: arm64-v8a `d00a95bf8d426df178b593cb41430784ecabcb8a13ed2fe3a4d2b37e79bad8f2`,
+  armeabi-v7a `9525c7cb2e48275fd1892294532f10984d451dc81cf9d0fe1c1156ac9dc7a665`,
+  x86_64 `4fd475cded5ae7a13431e8eeb12a5135f7f3d6cf935bcb89ed5e955916a7bcae`.
