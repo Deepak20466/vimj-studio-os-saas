@@ -352,3 +352,13 @@ following additional updates:
   analysis exited successfully with 0 errors/warnings and 174 informational
   lints; local split-ABI release compilation succeeded for armeabi-v7a,
   arm64-v8a, and x86_64.
+- Published from commit `cfdb0fd82486278bda6cbd36601754beebbfcb3d` by GitHub
+  Actions run `37655785076`:
+  https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.26.14
+- Published APK SHA-256: arm64-v8a
+  `2688b2804f91ab900f6470b0b20ee3e9aaa2f517369191122807c196848f14e4`,
+  armeabi-v7a `cdcaa52276da39717ddb7ff588df2d70db19adeb8365479d6aacb37fea0c7074`,
+  x86_64 `9b72c479bcbad69339281184da42c3dc6b54047ef7e3c07d2366c49b8fcb9262`.
+  All assets match GitHub's published digests and pass `apksigner verify`; all
+  use signing certificate SHA-256
+  `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
