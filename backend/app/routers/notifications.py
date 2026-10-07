@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -11,12 +11,18 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 
 @router.get("", response_model=NotificationListResponse)
-def list_notifications(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def list_notifications(
+    limit: int = Query(default=50, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     items = (
         db.query(Notification)
         .filter(Notification.user_id == current_user.id)
-        .order_by(Notification.created_at.desc())
-        .limit(50)
+        .order_by(Notification.created_at.desc(), Notification.id.desc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     unread_count = (

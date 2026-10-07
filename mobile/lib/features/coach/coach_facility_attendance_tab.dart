@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -10,6 +11,8 @@ import '../../core/search_utils.dart';
 import '../shared/notification_bell_action.dart';
 
 String _isoDate(DateTime d) => DateFormat('yyyy-MM-dd').format(d);
+
+const _coachAttendancePageSize = 500;
 
 class CoachFacilityAttendanceTab extends StatefulWidget {
   const CoachFacilityAttendanceTab({super.key});
@@ -31,6 +34,12 @@ class _CoachFacilityAttendanceTabState
   List<AdminAttendanceRecord> _records = [];
   bool _recordsLoading = true;
   String _attendanceSearch = '';
+  bool _searchAllDates = false;
+  List<AdminAttendanceRecord> _allDateSearchResults = [];
+  bool _allDateSearchLoading = false;
+  bool _allDateSearchHasMore = false;
+  Timer? _allDateSearchDebounce;
+  int _allDateSearchRequestId = 0;
   bool _showStudentAttendanceRecords = true;
   String? _attendanceStatusFilter;
   String? _approvalFilter;
@@ -52,6 +61,120 @@ class _CoachFacilityAttendanceTabState
     _coachId = session?.userId;
     _loadMyAttendance();
     _loadMonthRecords();
+  }
+
+  @override
+  void dispose() {
+    _allDateSearchDebounce?.cancel();
+    super.dispose();
+  }
+
+  void _onAttendanceSearchChanged(String value) {
+    setState(() => _attendanceSearch = value);
+    _allDateSearchDebounce?.cancel();
+    if (_searchAllDates) {
+      _allDateSearchDebounce = Timer(
+        const Duration(milliseconds: 300),
+        _searchAllAttendanceDates,
+      );
+    }
+  }
+
+  void _setSearchAllDates(bool value) {
+    if (value == _searchAllDates) return;
+    _allDateSearchDebounce?.cancel();
+    setState(() {
+      _searchAllDates = value;
+      _allDateSearchRequestId++;
+      _allDateSearchResults = [];
+      _allDateSearchHasMore = false;
+      _allDateSearchLoading = false;
+    });
+    if (value && _attendanceSearch.trim().isNotEmpty) {
+      _searchAllAttendanceDates();
+    }
+  }
+
+  Map<String, dynamic> _allDateSearchQuery({required int offset}) => {
+        'search': _attendanceSearch.trim(),
+        'limit': _coachAttendancePageSize,
+        'offset': offset,
+        if (_attendanceStatusFilter != null)
+          'status_filter': _attendanceStatusFilter,
+        if (_approvalFilter != null) 'approval_status': _approvalFilter,
+        if (_activityFilter != null) 'activity_id': _activityFilter,
+      };
+
+  Future<void> _searchAllAttendanceDates() async {
+    if (!mounted) return;
+    _allDateSearchDebounce?.cancel();
+    final term = _attendanceSearch.trim();
+    final requestId = ++_allDateSearchRequestId;
+    if (term.isEmpty || !_searchAllDates) {
+      if (mounted) {
+        setState(() {
+          _allDateSearchResults = [];
+          _allDateSearchHasMore = false;
+          _allDateSearchLoading = false;
+        });
+      }
+      return;
+    }
+    setState(() {
+      _allDateSearchLoading = true;
+      _allDateSearchHasMore = false;
+      _allDateSearchResults = [];
+    });
+    try {
+      final data = await ApiClient.instance.get('/attendance/students',
+          query: _allDateSearchQuery(offset: 0)) as List;
+      if (!mounted || requestId != _allDateSearchRequestId) return;
+      setState(() {
+        _allDateSearchResults = data
+            .map((e) =>
+                AdminAttendanceRecord.fromJson(e as Map<String, dynamic>))
+            .toList();
+        _allDateSearchHasMore = data.length == _coachAttendancePageSize;
+      });
+    } on ApiException catch (e) {
+      if (mounted && requestId == _allDateSearchRequestId) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } finally {
+      if (mounted && requestId == _allDateSearchRequestId) {
+        setState(() => _allDateSearchLoading = false);
+      }
+    }
+  }
+
+  Future<void> _loadMoreAllDateSearchResults() async {
+    if (!_allDateSearchHasMore || _allDateSearchLoading) return;
+    final requestId = _allDateSearchRequestId;
+    setState(() => _allDateSearchLoading = true);
+    try {
+      final data = await ApiClient.instance.get('/attendance/students',
+              query: _allDateSearchQuery(offset: _allDateSearchResults.length))
+          as List;
+      if (!mounted || requestId != _allDateSearchRequestId) return;
+      final knownIds = _allDateSearchResults.map((record) => record.id).toSet();
+      final next = data
+          .map((e) => AdminAttendanceRecord.fromJson(e as Map<String, dynamic>))
+          .where((record) => knownIds.add(record.id));
+      setState(() {
+        _allDateSearchResults.addAll(next);
+        _allDateSearchHasMore = data.length == _coachAttendancePageSize;
+      });
+    } on ApiException catch (e) {
+      if (mounted && requestId == _allDateSearchRequestId) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } finally {
+      if (mounted && requestId == _allDateSearchRequestId) {
+        setState(() => _allDateSearchLoading = false);
+      }
+    }
   }
 
   Future<void> _loadMyAttendance() async {
@@ -332,14 +455,18 @@ class _CoachFacilityAttendanceTabState
     bool includeResults = true,
   }) {
     final key = _selectedDate;
-    if (key == null) {
+    if (key == null && !_searchAllDates) {
       return const Text(
         'Click a day on the calendar above to view its attendance.',
         style: TextStyle(fontSize: 12, color: AppColors.textMuted),
       );
     }
-    final facility = _facilityByDate[key];
-    final students = _studentByDate[key] ?? const <AdminAttendanceRecord>[];
+    final facility = key == null ? null : _facilityByDate[key];
+    final students = _searchAllDates
+        ? _allDateSearchResults
+        : (key == null
+            ? const <AdminAttendanceRecord>[]
+            : _studentByDate[key] ?? const <AdminAttendanceRecord>[]);
     final visibleStudents = students
         .where((r) =>
             matchesSearchQuery(
@@ -363,39 +490,53 @@ class _CoachFacilityAttendanceTabState
             (_approvalFilter == null || _approvalFilter == r.approvalStatus) &&
             (_activityFilter == null || r.activityId == _activityFilter))
         .toList();
+    final activityNames = <int, String>{
+      for (final record in [..._records, ..._allDateSearchResults])
+        record.activityId: record.activityName,
+    };
+    if (_activityFilter != null) {
+      activityNames.putIfAbsent(
+          _activityFilter!, () => 'Activity $_activityFilter');
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (includeHeader) ...[
-          Text(DateFormat('EEEE, MMM d, yyyy').format(DateTime.parse(key)),
+          Text(
+              _searchAllDates
+                  ? 'Attendance across all dates'
+                  : DateFormat('EEEE, MMM d, yyyy')
+                      .format(DateTime.parse(key!)),
               style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 14),
-          Text('My Facility Attendance',
-              style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 6),
-          if (facility == null)
-            const Text('No facility attendance marked on this date.',
-                style: TextStyle(fontSize: 12, color: AppColors.textMuted))
-          else
-            Wrap(
-              spacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Chip(
-                  label: Text(facility['status'] as String,
-                      style:
-                          const TextStyle(fontSize: 10, color: Colors.white)),
-                  backgroundColor: _statusColor(facility['status'] as String),
-                  visualDensity: VisualDensity.compact,
-                ),
-                Text(
-                    'Marked at ${_fmtTime(facility['entry_time'] as String?)} — locked',
-                    style: const TextStyle(
-                        fontSize: 12, color: AppColors.textMuted)),
-              ],
-            ),
-          const SizedBox(height: 18),
+          if (!_searchAllDates) ...[
+            const SizedBox(height: 14),
+            Text('My Facility Attendance',
+                style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 6),
+            if (facility == null)
+              const Text('No facility attendance marked on this date.',
+                  style: TextStyle(fontSize: 12, color: AppColors.textMuted))
+            else
+              Wrap(
+                spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Chip(
+                    label: Text(facility['status'] as String,
+                        style:
+                            const TextStyle(fontSize: 10, color: Colors.white)),
+                    backgroundColor: _statusColor(facility['status'] as String),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  Text(
+                      'Marked at ${_fmtTime(facility['entry_time'] as String?)} — locked',
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.textMuted)),
+                ],
+              ),
+            const SizedBox(height: 18),
+          ],
           Row(
             children: [
               Expanded(
@@ -444,7 +585,10 @@ class _CoachFacilityAttendanceTabState
                   DropdownMenuItem<String?>(
                       value: 'NOT_CONFIRM', child: Text('Not Confirm')),
                 ],
-                onChanged: (v) => setState(() => _attendanceStatusFilter = v),
+                onChanged: (v) {
+                  setState(() => _attendanceStatusFilter = v);
+                  if (_searchAllDates) _searchAllAttendanceDates();
+                },
               ),
               DropdownButton<String?>(
                 value: _approvalFilter,
@@ -459,7 +603,10 @@ class _CoachFacilityAttendanceTabState
                   DropdownMenuItem<String?>(
                       value: 'REJECTED', child: Text('Rejected')),
                 ],
-                onChanged: (v) => setState(() => _approvalFilter = v),
+                onChanged: (v) {
+                  setState(() => _approvalFilter = v);
+                  if (_searchAllDates) _searchAllAttendanceDates();
+                },
               ),
               DropdownButton<int?>(
                 value: _activityFilter,
@@ -467,32 +614,49 @@ class _CoachFacilityAttendanceTabState
                 items: [
                   const DropdownMenuItem<int?>(
                       value: null, child: Text('All activities')),
-                  ...{
-                    for (final record in students)
-                      record.activityId: record.activityName,
-                  }.entries.map((entry) => DropdownMenuItem<int?>(
-                        value: entry.key,
-                        child: Text(entry.value),
-                      )),
+                  ...activityNames.entries
+                      .map((entry) => DropdownMenuItem<int?>(
+                            value: entry.key,
+                            child: Text(entry.value),
+                          )),
                 ],
-                onChanged: (v) => setState(() => _activityFilter = v),
+                onChanged: (v) {
+                  setState(() => _activityFilter = v);
+                  if (_searchAllDates) _searchAllAttendanceDates();
+                },
               ),
               if (_attendanceSearch.isNotEmpty ||
                   _attendanceStatusFilter != null ||
                   _approvalFilter != null ||
                   _activityFilter != null)
                 TextButton(
-                  onPressed: () => setState(() {
-                    _attendanceSearch = '';
-                    _attendanceStatusFilter = null;
-                    _approvalFilter = null;
-                    _activityFilter = null;
-                  }),
+                  onPressed: () {
+                    setState(() {
+                      _attendanceSearch = '';
+                      _attendanceStatusFilter = null;
+                      _approvalFilter = null;
+                      _activityFilter = null;
+                    });
+                    if (_searchAllDates) _searchAllAttendanceDates();
+                  },
                   child: const Text('Clear filters'),
                 ),
             ],
           ),
-          if (students.isEmpty)
+          if (_searchAllDates && _attendanceSearch.trim().isEmpty)
+            const Text(
+                'Enter a search term to search attendance across all dates.',
+                style: TextStyle(fontSize: 12, color: AppColors.textMuted))
+          else if (_allDateSearchLoading && _allDateSearchResults.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (students.isEmpty && _searchAllDates)
+            const Text(
+                'No attendance records match this search across all dates.',
+                style: TextStyle(fontSize: 12, color: AppColors.textMuted))
+          else if (students.isEmpty)
             const Text('No student attendance marked on this date.',
                 style: TextStyle(fontSize: 12, color: AppColors.textMuted))
           else if (visibleStudents.isEmpty)
@@ -547,6 +711,10 @@ class _CoachFacilityAttendanceTabState
                       Text(r.activityName,
                           style: const TextStyle(
                               color: AppColors.textMuted, fontSize: 12)),
+                      if (_searchAllDates)
+                        Text(r.classDate,
+                            style: const TextStyle(
+                                color: AppColors.textMuted, fontSize: 12)),
                       if (r.hasSelfie) ...[
                         const SizedBox(height: 6),
                         OutlinedButton(
@@ -556,43 +724,77 @@ class _CoachFacilityAttendanceTabState
                     ],
                   ),
                 )),
+          if (_searchAllDates && _allDateSearchHasMore)
+            Center(
+              child: OutlinedButton.icon(
+                onPressed: _allDateSearchLoading
+                    ? null
+                    : _loadMoreAllDateSearchResults,
+                icon: _allDateSearchLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.expand_more),
+                label: Text(_allDateSearchLoading
+                    ? 'Loading more matches…'
+                    : 'Load more matches'),
+              ),
+            ),
         ],
       ],
     );
   }
 
   Widget _buildStudentAttendanceToolbar() {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: TextField(
-            decoration: InputDecoration(
-              labelText: 'Search attendance',
-              hintText: 'Student, activity, or status',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: _attendanceSearch.isEmpty
-                  ? null
-                  : IconButton(
-                      icon: const Icon(Icons.clear),
-                      tooltip: 'Clear search',
-                      onPressed: () => setState(() => _attendanceSearch = ''),
-                    ),
-              border: const OutlineInputBorder(),
-              isDense: true,
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                decoration: InputDecoration(
+                  labelText: 'Search attendance',
+                  hintText: _searchAllDates
+                      ? 'Search all attendance dates'
+                      : 'Student, activity, or status',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _attendanceSearch.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.clear),
+                          tooltip: 'Clear search',
+                          onPressed: () => _onAttendanceSearchChanged(''),
+                        ),
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onChanged: _onAttendanceSearchChanged,
+              ),
             ),
-            onChanged: (value) => setState(() => _attendanceSearch = value),
-          ),
+            const SizedBox(width: 8),
+            Tooltip(
+              message: 'Hide student attendance records',
+              child: TextButton.icon(
+                key: const ValueKey('toggle-coach-student-attendance'),
+                onPressed: () =>
+                    setState(() => _showStudentAttendanceRecords = false),
+                icon: const Icon(Icons.visibility_off_outlined),
+                label: const Text('Hide'),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 8),
-        Tooltip(
-          message: 'Hide student attendance records',
-          child: TextButton.icon(
-            key: const ValueKey('toggle-coach-student-attendance'),
-            onPressed: () =>
-                setState(() => _showStudentAttendanceRecords = false),
-            icon: const Icon(Icons.visibility_off_outlined),
-            label: const Text('Hide'),
-          ),
+        const SizedBox(height: 4),
+        ToggleButtons(
+          key: const ValueKey('coach-attendance-search-scope'),
+          isSelected: [!_searchAllDates, _searchAllDates],
+          onPressed: (index) => _setSearchAllDates(index == 1),
+          constraints: const BoxConstraints(minHeight: 30, minWidth: 112),
+          borderRadius: BorderRadius.circular(8),
+          children: const [Text('Selected day'), Text('All dates')],
         ),
       ],
     );
@@ -641,7 +843,7 @@ class _CoachFacilityAttendanceTabState
                 ]),
               ),
             ),
-            if (_selectedDate == null)
+            if (_selectedDate == null && !_searchAllDates)
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 sliver: SliverToBoxAdapter(
@@ -726,10 +928,10 @@ class _CoachAttendanceSearchHeaderDelegate
   final Widget child;
 
   @override
-  double get minExtent => 68;
+  double get minExtent => 120;
 
   @override
-  double get maxExtent => 68;
+  double get maxExtent => 120;
 
   @override
   Widget build(

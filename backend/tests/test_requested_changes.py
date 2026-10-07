@@ -263,7 +263,57 @@ class RequestedChanges(unittest.TestCase):
             self.assertEqual(len(second_page.json()), 1)
             self.assertNotEqual(first_page.json()[0]['id'], second_page.json()[0]['id'])
 
-        too_many = self.client.get('/attendance/students', params={'limit': 501})
+        large_page = self.client.get('/attendance/students', params={'limit': 1000})
+        self.assertEqual(large_page.status_code, 200, large_page.text)
+        too_many = self.client.get('/attendance/students', params={'limit': 1001})
         self.assertEqual(too_many.status_code, 422)
+
+    def test_attendance_search_spans_history_and_applies_coach_status(self):
+        dance_class = ClassSession(
+            activity_id=self.dance.id,
+            coach_id=self.coach.id,
+            date=date(2026, 9, 11),
+            start_time=time(9),
+            end_time=time(10),
+        )
+        self.db.add(dance_class)
+        self.db.flush()
+        self.db.add_all([
+            StudentAttendance(
+                student_id=self.s1.id,
+                class_id=self.cls.id,
+                coach_id=self.coach.id,
+                status=AttendanceStatus.PRESENT,
+            ),
+            StudentAttendance(
+                student_id=self.s2.id,
+                class_id=dance_class.id,
+                coach_id=self.coach.id,
+                status=AttendanceStatus.ABSENT,
+            ),
+            CoachAttendance(
+                coach_id=self.coach.id,
+                date=date(2026, 9, 10),
+                status=CoachAttendanceStatus.ABSENT,
+            ),
+        ])
+        self.db.commit()
+
+        student_search = self.client.get(
+            '/attendance/students', params={'search': 'yoga_student'}
+        )
+        self.assertEqual(student_search.status_code, 200, student_search.text)
+        self.assertEqual(
+            [row['student_name'] for row in student_search.json()],
+            ['Yoga Student'],
+        )
+
+        coach_search = self.client.get(
+            '/attendance/coaches',
+            params={'search': 'coach', 'status_filter': 'ABSENT'},
+        )
+        self.assertEqual(coach_search.status_code, 200, coach_search.text)
+        self.assertEqual(len(coach_search.json()), 1)
+        self.assertEqual(coach_search.json()[0]['status'], 'ABSENT')
 
 if __name__ == '__main__': unittest.main()

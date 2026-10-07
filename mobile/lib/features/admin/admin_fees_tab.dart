@@ -47,9 +47,11 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
     if (showInitialLoader) setState(() => _loading = true);
     try {
       final results = await Future.wait([
-        ApiClient.instance.get(_unpaidOnly ? '/fees/unpaid' : '/fees'),
+        _unpaidOnly
+            ? ApiClient.instance.get('/fees/unpaid')
+            : ApiClient.instance.getAllPages('/fees'),
         ApiClient.instance.get('/receipts/pending'),
-        ApiClient.instance.get('/receipts'),
+        ApiClient.instance.getAllPages('/receipts'),
         ApiClient.instance.get('/fee-reminders/pending'),
         ApiClient.instance.get('/students'),
       ]);

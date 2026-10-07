@@ -136,3 +136,28 @@ Final release checks (2026-10-02):
   All match GitHub's asset digests and pass `apksigner verify`; all use the
   persistent signing certificate SHA-256
   `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
+
+## 2026-10-08 Full Search and Faster Attendance History
+
+- Admin Student Attendance and Coach Attendance now load the newest 500 records
+  first and provide a Load Older action to page through the rest. This keeps a
+  large history from delaying the initial list while preserving full-history
+  access. Search and active server-supported filters match records across the
+  full history; coach access remains scoped to the signed-in coach.
+- Coach Attendance search keeps the selected-day mode and adds an All dates
+  mode. All-dates search reaches the coach's full student-attendance history,
+  shows each result date, and loads large match sets in pages on demand.
+- Admin mobile Fees, Receipts, Leave, Session Photos, and Notifications now
+  fetch all pages from their paginated APIs, removing the previous 500-record
+  cutoff from those searchable sections. Page sizes are capped at 1,000 rows.
+- Search requests are debounced and use normalized case-insensitive server-side
+  matching, while retaining status, activity, approval, and date filters. No
+  database migration is required.
+- Release target: mobile version `1.26.19+55`, tag `mobile-v1.26.19`, through
+  `.github/workflows/release-mobile.yml` using the persistent signing key.
+  Never commit or share the signing key.
+- Verification: all 12 backend regression tests and all 27 Flutter tests passed.
+  Flutter analysis completed with no errors or warnings (192 informational
+  notices); local split-ABI Android release compilation passed for
+  armeabi-v7a, arm64-v8a, and x86_64. GitHub Actions will sign the published
+  APKs with the persistent release key.

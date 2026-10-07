@@ -36,9 +36,9 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final data = await ApiClient.instance.get('/notifications')
-          as Map<String, dynamic>;
-      _items = (data['items'] as List)
+      final data = await ApiClient.instance
+          .getAllPages('/notifications', itemsKey: 'items');
+      _items = data
           .map((e) => AppNotification.fromJson(e as Map<String, dynamic>))
           .toList();
     } on ApiException catch (e) {

@@ -249,7 +249,7 @@ class _SessionPhotoGalleryState extends State<_SessionPhotoGallery> {
     });
     try {
       final data =
-          await ApiClient.instance.get('/activities/session-photos') as List;
+          await ApiClient.instance.getAllPages('/activities/session-photos');
       _photos = data.cast<Map<String, dynamic>>();
     } on ApiException catch (e) {
       _error = e.message;

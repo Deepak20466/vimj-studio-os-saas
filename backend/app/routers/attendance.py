@@ -1,8 +1,10 @@
 from datetime import date as date_type, datetime
+import re
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy.orm import Session
+from sqlalchemy import String, cast, func, or_
+from sqlalchemy.orm import Session, aliased
 
 from app.database import get_db
 from app.models.user import User, UserRole
@@ -38,6 +40,19 @@ from app.services.audit import log_action
 from app.services.notifications import notify_and_push
 
 router = APIRouter(prefix="/attendance", tags=["attendance"])
+
+
+def _search_terms(value: Optional[str]) -> List[str]:
+    if not value:
+        return []
+    return [term for term in re.sub(r"[_/\\-]+", " ", value.lower()).split() if term]
+
+
+def _normalized_search_column(column):
+    result = func.lower(cast(column, String))
+    for separator in ("_", "/", "\\", "-"):
+        result = func.replace(result, separator, " ")
+    return result
 
 
 @router.get("/list-visibility", response_model=AdminAttendanceListVisibilityOut)
@@ -227,7 +242,8 @@ def list_student_attendance(
     approval_status: Optional[AttendanceApprovalStatus] = None,
     date_from: Optional[date_type] = None,
     date_to: Optional[date_type] = None,
-    limit: int = Query(default=500, ge=1, le=500),
+    search: Optional[str] = None,
+    limit: int = Query(default=500, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_coach),
@@ -254,6 +270,37 @@ def list_student_attendance(
         query = query.filter(ClassSession.date >= date_from)
     if date_to:
         query = query.filter(ClassSession.date <= date_to)
+
+    search_terms = _search_terms(search)
+    if search_terms:
+        student_user = aliased(User)
+        coach_user = aliased(User)
+        query = (
+            query.join(student_user, student_user.id == StudentAttendance.student_id)
+            .outerjoin(coach_user, coach_user.id == StudentAttendance.coach_id)
+            .join(Activity, Activity.id == ClassSession.activity_id)
+        )
+        searchable_columns = [
+            student_user.name,
+            Activity.name,
+            coach_user.name,
+            ClassSession.date,
+            StudentAttendance.timestamp,
+            StudentAttendance.status,
+            StudentAttendance.approval_status,
+            StudentAttendance.id,
+            StudentAttendance.student_id,
+            StudentAttendance.class_id,
+            ClassSession.activity_id,
+            StudentAttendance.coach_id,
+        ]
+        normalized_columns = [
+            _normalized_search_column(column) for column in searchable_columns
+        ]
+        for term in search_terms:
+            query = query.filter(
+                or_(*(column.ilike(f"%{term}%") for column in normalized_columns))
+            )
 
     records = (
         query.order_by(
@@ -392,7 +439,9 @@ def list_coach_attendance(
     coach_id: Optional[int] = None,
     date_from: Optional[date_type] = None,
     date_to: Optional[date_type] = None,
-    limit: int = Query(default=500, ge=1, le=500),
+    status_filter: Optional[CoachAttendanceStatus] = None,
+    search: Optional[str] = None,
+    limit: int = Query(default=500, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
@@ -405,6 +454,29 @@ def list_coach_attendance(
         query = query.filter(CoachAttendance.date >= date_from)
     if date_to:
         query = query.filter(CoachAttendance.date <= date_to)
+    if status_filter:
+        query = query.filter(CoachAttendance.status == status_filter)
+
+    search_terms = _search_terms(search)
+    if search_terms:
+        coach_user = aliased(User)
+        query = query.join(coach_user, coach_user.id == CoachAttendance.coach_id)
+        normalized_columns = [
+            _normalized_search_column(column)
+            for column in (
+                coach_user.name,
+                CoachAttendance.date,
+                CoachAttendance.entry_time,
+                CoachAttendance.exit_time,
+                CoachAttendance.status,
+                CoachAttendance.id,
+                CoachAttendance.coach_id,
+            )
+        ]
+        for term in search_terms:
+            query = query.filter(
+                or_(*(column.ilike(f"%{term}%") for column in normalized_columns))
+            )
 
     records = (
         query.order_by(CoachAttendance.date.desc(), CoachAttendance.id.desc())

@@ -305,33 +305,38 @@ class ApiClient {
           {Map<String, dynamic>? query, bool auth = true}) =>
       _request('GET', path, query: query, auth: auth);
 
-  /// Reads every row from a paginated attendance endpoint. The API caps each
-  /// response at 500 rows, so callers can search the complete filtered result
-  /// set without forcing the server to build one unbounded response.
+  /// Reads every row from a paginated list endpoint. The API caps each
+  /// response at 1,000 rows to keep individual responses manageable.
   Future<List<dynamic>> getAllPages(String path,
-      {Map<String, dynamic>? query, int pageSize = 500}) async {
-    if (pageSize < 1 || pageSize > 500) {
+      {Map<String, dynamic>? query,
+      int pageSize = 1000,
+      String? itemsKey}) async {
+    if (pageSize < 1 || pageSize > 1000) {
       throw ArgumentError.value(
-          pageSize, 'pageSize', 'must be between 1 and 500');
+          pageSize, 'pageSize', 'must be between 1 and 1,000');
     }
 
     final rows = <dynamic>[];
     var offset = 0;
     String? previousPageSignature;
     while (true) {
-      final page = await get(path, query: {
+      final response = await get(path, query: {
         ...?query,
         'limit': pageSize,
         'offset': offset,
       });
+      final page = itemsKey == null
+          ? response
+          : response is Map<String, dynamic>
+              ? response[itemsKey]
+              : null;
       if (page is! List) {
-        throw ApiException(
-            0, 'The server returned an invalid attendance list.');
+        throw ApiException(0, 'The server returned an invalid list response.');
       }
       final pageSignature = jsonEncode(page);
       if (offset > 0 && pageSignature == previousPageSignature) {
         throw ApiException(
-            0, 'Attendance paging is unavailable. Please try again shortly.');
+            0, 'List paging is unavailable. Please try again shortly.');
       }
       previousPageSignature = pageSignature;
       rows.addAll(page);

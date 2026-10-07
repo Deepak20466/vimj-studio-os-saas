@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -104,6 +104,8 @@ def pending_leaves(db: Session = Depends(get_db), _: User = Depends(require_admi
 def list_leaves(
     status_filter: Optional[LeaveStatus] = None,
     coach_id: Optional[int] = None,
+    limit: int = Query(default=500, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
@@ -112,7 +114,12 @@ def list_leaves(
         query = query.filter(CoachLeave.status == status_filter)
     if coach_id:
         query = query.filter(CoachLeave.coach_id == coach_id)
-    records = query.order_by(CoachLeave.created_at.desc()).limit(500).all()
+    records = (
+        query.order_by(CoachLeave.created_at.desc(), CoachLeave.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
     return _to_admin_out(db, records)
 
 

@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from datetime import date, datetime
@@ -170,7 +170,12 @@ def my_classes(
 
 
 @router.get("/session-photos")
-def session_photos(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def session_photos(
+    limit: int = Query(default=500, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Admins see all session photos; coaches see only their own uploads."""
     if current_user.role not in (UserRole.ADMIN, UserRole.COACH):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to view session photos")
@@ -190,7 +195,16 @@ def session_photos(db: Session = Depends(get_db), current_user: User = Depends(g
     )
     if current_user.role == UserRole.COACH:
         query = query.filter(ClassSession.coach_id == current_user.id)
-    rows = query.order_by(ClassSession.date.desc(), ClassSession.start_time.desc()).limit(500).all()
+    rows = (
+        query.order_by(
+            ClassSession.date.desc(),
+            ClassSession.start_time.desc(),
+            ClassSession.id.desc(),
+        )
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
     return [
         {
             "class_id": class_id,

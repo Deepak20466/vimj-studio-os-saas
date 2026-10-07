@@ -98,7 +98,7 @@ class _AdminLeaveTabState extends State<AdminLeaveTab> {
     try {
       final query = <String, dynamic>{};
       if (_statusFilter != null) query['status_filter'] = _statusFilter;
-      final data = await ApiClient.instance.get('/leave', query: query) as List;
+      final data = await ApiClient.instance.getAllPages('/leave', query: query);
       _history = data
           .map((e) => AdminLeaveRequest.fromJson(e as Map<String, dynamic>))
           .toList();

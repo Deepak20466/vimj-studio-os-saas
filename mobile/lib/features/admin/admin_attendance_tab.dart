@@ -23,6 +23,7 @@ const _studentSectionEndKey = ValueKey<String>('student-section-end');
 const _coachSectionStartKey = ValueKey<String>('coach-section-start');
 const _coachSearchToolbarKey = ValueKey<String>('coach-search-toolbar');
 const _coachSectionEndKey = ValueKey<String>('coach-section-end');
+const _attendancePageSize = 500;
 
 class AdminAttendanceTab extends StatefulWidget {
   const AdminAttendanceTab({super.key});
@@ -34,6 +35,8 @@ class AdminAttendanceTab extends StatefulWidget {
 class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
   bool _loading = true;
   bool _recordsLoading = true;
+  bool _recordsHasMore = false;
+  bool _loadingMoreRecords = false;
   bool _showAllAttendanceRecords = true;
   bool _studentVisibilityChanged = false;
   final _attendanceVisibilityStore = AdminAttendanceVisibilityStore();
@@ -54,6 +57,10 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
   int? _removingId;
   int? _approvalBusyId;
   bool _approvingAll = false;
+  Timer? _studentAttendanceSearchDebounce;
+  Timer? _coachAttendanceSearchDebounce;
+  int _studentRecordsRequestId = 0;
+  int _coachRecordsRequestId = 0;
 
   DateTime _calendarMonth =
       DateTime(DateTime.now().year, DateTime.now().month, 1);
@@ -129,6 +136,8 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
 
   // --- Coach attendance (separate CRUD) ---
   bool _coachRecordsLoading = true;
+  bool _coachRecordsHasMore = false;
+  bool _loadingMoreCoachRecords = false;
   bool _showCoachAttendanceRecords = true;
   bool _coachVisibilityChanged = false;
   List<Map<String, dynamic>> _coachRecords = [];
@@ -207,6 +216,31 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
     _loadRecords();
     _loadCoachRecords();
     _loadCalendarData();
+  }
+
+  @override
+  void dispose() {
+    _studentAttendanceSearchDebounce?.cancel();
+    _coachAttendanceSearchDebounce?.cancel();
+    super.dispose();
+  }
+
+  void _onStudentAttendanceSearchChanged(String value) {
+    setState(() => _attendanceSearch = value);
+    _studentAttendanceSearchDebounce?.cancel();
+    _studentAttendanceSearchDebounce = Timer(
+      const Duration(milliseconds: 300),
+      _loadRecords,
+    );
+  }
+
+  void _onCoachAttendanceSearchChanged(String value) {
+    setState(() => _coachSearch = value);
+    _coachAttendanceSearchDebounce?.cancel();
+    _coachAttendanceSearchDebounce = Timer(
+      const Duration(milliseconds: 300),
+      _loadCoachRecords,
+    );
   }
 
   Future<void> _loadAttendanceListVisibility() async {
@@ -301,27 +335,76 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
   }
 
   Future<void> _loadRecords() async {
-    setState(() => _recordsLoading = true);
+    _studentAttendanceSearchDebounce?.cancel();
+    final requestId = ++_studentRecordsRequestId;
+    setState(() {
+      _recordsLoading = true;
+      _loadingMoreRecords = false;
+    });
     try {
-      final query = <String, dynamic>{};
-      if (_filterActivityId != null) query['activity_id'] = _filterActivityId;
-      if (_filterStatus != null) query['status_filter'] = _filterStatus;
-      if (_filterDateFrom != null)
-        query['date_from'] =
-            _filterDateFrom!.toIso8601String().substring(0, 10);
-      if (_filterDateTo != null)
-        query['date_to'] = _filterDateTo!.toIso8601String().substring(0, 10);
-      final data = await ApiClient.instance
-          .getAllPages('/attendance/students', query: query);
+      final data = await ApiClient.instance.get('/attendance/students',
+          query: _studentRecordsQuery(offset: 0)) as List;
+      if (!mounted || requestId != _studentRecordsRequestId) return;
       _records = data
           .map((e) => AdminAttendanceRecord.fromJson(e as Map<String, dynamic>))
           .toList();
+      _recordsHasMore = data.length == _attendancePageSize;
     } on ApiException catch (e) {
-      if (mounted)
+      if (mounted && requestId == _studentRecordsRequestId)
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
-      if (mounted) setState(() => _recordsLoading = false);
+      if (mounted && requestId == _studentRecordsRequestId) {
+        setState(() => _recordsLoading = false);
+      }
+    }
+  }
+
+  Map<String, dynamic> _studentRecordsQuery({required int offset}) {
+    final query = <String, dynamic>{
+      'limit': _attendancePageSize,
+      'offset': offset,
+    };
+    if (_filterActivityId != null) query['activity_id'] = _filterActivityId;
+    if (_filterStatus != null) query['status_filter'] = _filterStatus;
+    if (_approvalFilter != null) query['approval_status'] = _approvalFilter;
+    if (_attendanceSearch.trim().isNotEmpty) {
+      query['search'] = _attendanceSearch.trim();
+    }
+    if (_filterDateFrom != null) {
+      query['date_from'] = _filterDateFrom!.toIso8601String().substring(0, 10);
+    }
+    if (_filterDateTo != null) {
+      query['date_to'] = _filterDateTo!.toIso8601String().substring(0, 10);
+    }
+    return query;
+  }
+
+  Future<void> _loadMoreRecords() async {
+    if (_loadingMoreRecords || !_recordsHasMore) return;
+    final requestId = _studentRecordsRequestId;
+    setState(() => _loadingMoreRecords = true);
+    try {
+      final data = await ApiClient.instance.get('/attendance/students',
+          query: _studentRecordsQuery(offset: _records.length)) as List;
+      if (!mounted || requestId != _studentRecordsRequestId) return;
+      final knownIds = _records.map((record) => record.id).toSet();
+      final next = data
+          .map((e) => AdminAttendanceRecord.fromJson(e as Map<String, dynamic>))
+          .where((record) => knownIds.add(record.id));
+      setState(() {
+        _records.addAll(next);
+        _recordsHasMore = data.length == _attendancePageSize;
+      });
+    } on ApiException catch (e) {
+      if (mounted && requestId == _studentRecordsRequestId) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } finally {
+      if (mounted && requestId == _studentRecordsRequestId) {
+        setState(() => _loadingMoreRecords = false);
+      }
     }
   }
 
@@ -800,25 +883,74 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
   }
 
   Future<void> _loadCoachRecords() async {
-    setState(() => _coachRecordsLoading = true);
+    _coachAttendanceSearchDebounce?.cancel();
+    final requestId = ++_coachRecordsRequestId;
+    setState(() {
+      _coachRecordsLoading = true;
+      _loadingMoreCoachRecords = false;
+    });
     try {
-      final query = <String, dynamic>{};
-      if (_coachFilterId != null) query['coach_id'] = _coachFilterId;
-      if (_coachFilterDateFrom != null)
-        query['date_from'] =
-            _coachFilterDateFrom!.toIso8601String().substring(0, 10);
-      if (_coachFilterDateTo != null)
-        query['date_to'] =
-            _coachFilterDateTo!.toIso8601String().substring(0, 10);
-      final data = await ApiClient.instance
-          .getAllPages('/attendance/coaches', query: query);
+      final data = await ApiClient.instance.get('/attendance/coaches',
+          query: _coachRecordsQuery(offset: 0)) as List;
+      if (!mounted || requestId != _coachRecordsRequestId) return;
       _coachRecords = data.cast<Map<String, dynamic>>();
+      _coachRecordsHasMore = data.length == _attendancePageSize;
     } on ApiException catch (e) {
-      if (mounted)
+      if (mounted && requestId == _coachRecordsRequestId)
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
-      if (mounted) setState(() => _coachRecordsLoading = false);
+      if (mounted && requestId == _coachRecordsRequestId) {
+        setState(() => _coachRecordsLoading = false);
+      }
+    }
+  }
+
+  Map<String, dynamic> _coachRecordsQuery({required int offset}) {
+    final query = <String, dynamic>{
+      'limit': _attendancePageSize,
+      'offset': offset,
+    };
+    if (_coachFilterId != null) query['coach_id'] = _coachFilterId;
+    if (_coachStatusFilter != null) {
+      query['status_filter'] = _coachStatusFilter;
+    }
+    if (_coachSearch.trim().isNotEmpty) query['search'] = _coachSearch.trim();
+    if (_coachFilterDateFrom != null) {
+      query['date_from'] =
+          _coachFilterDateFrom!.toIso8601String().substring(0, 10);
+    }
+    if (_coachFilterDateTo != null) {
+      query['date_to'] = _coachFilterDateTo!.toIso8601String().substring(0, 10);
+    }
+    return query;
+  }
+
+  Future<void> _loadMoreCoachRecords() async {
+    if (_loadingMoreCoachRecords || !_coachRecordsHasMore) return;
+    final requestId = _coachRecordsRequestId;
+    setState(() => _loadingMoreCoachRecords = true);
+    try {
+      final data = await ApiClient.instance.get('/attendance/coaches',
+          query: _coachRecordsQuery(offset: _coachRecords.length)) as List;
+      if (!mounted || requestId != _coachRecordsRequestId) return;
+      final knownIds = _coachRecords.map((record) => record['id']).toSet();
+      final next = data
+          .cast<Map<String, dynamic>>()
+          .where((record) => knownIds.add(record['id']));
+      setState(() {
+        _coachRecords.addAll(next);
+        _coachRecordsHasMore = data.length == _attendancePageSize;
+      });
+    } on ApiException catch (e) {
+      if (mounted && requestId == _coachRecordsRequestId) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } finally {
+      if (mounted && requestId == _coachRecordsRequestId) {
+        setState(() => _loadingMoreCoachRecords = false);
+      }
     }
   }
 
@@ -1413,14 +1545,13 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                                   : IconButton(
                                       icon: const Icon(Icons.clear),
                                       tooltip: 'Clear search',
-                                      onPressed: () => setState(
-                                          () => _attendanceSearch = ''),
+                                      onPressed: () =>
+                                          _onStudentAttendanceSearchChanged(''),
                                     ),
                               border: const OutlineInputBorder(),
                               isDense: true,
                             ),
-                            onChanged: (value) =>
-                                setState(() => _attendanceSearch = value),
+                            onChanged: _onStudentAttendanceSearchChanged,
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -1452,7 +1583,10 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                           DropdownMenuItem<String?>(
                               value: 'REJECTED', child: Text('Rejected'))
                         ],
-                        onChanged: (v) => setState(() => _approvalFilter = v)),
+                        onChanged: (v) {
+                          setState(() => _approvalFilter = v);
+                          _loadRecords();
+                        }),
                     if (_attendanceSearch.isNotEmpty ||
                         _filterActivityId != null ||
                         _filterStatus != null ||
@@ -1547,8 +1681,10 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                             DropdownMenuItem<String?>(
                                 value: 'REJECTED', child: Text('Rejected'))
                           ],
-                          onChanged: (v) =>
-                              setState(() => _approvalFilter = v)),
+                          onChanged: (v) {
+                            setState(() => _approvalFilter = v);
+                            _loadRecords();
+                          }),
                       DropdownButton<String?>(
                           value: _coachStatusFilter,
                           hint: const Text('All statuses'),
@@ -1565,8 +1701,10 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                                 value: 'NOT_CONFIRM',
                                 child: Text('Not Confirm'))
                           ],
-                          onChanged: (v) =>
-                              setState(() => _coachStatusFilter = v)),
+                          onChanged: (v) {
+                            setState(() => _coachStatusFilter = v);
+                            _loadCoachRecords();
+                          }),
                       if (_coachSearch.isNotEmpty ||
                           _coachStatusFilter != null ||
                           _coachFilterId != null ||
@@ -1754,6 +1892,24 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                             ),
                           ),
                         )),
+                  if (_recordsHasMore)
+                    Center(
+                      child: OutlinedButton.icon(
+                        onPressed:
+                            _loadingMoreRecords ? null : _loadMoreRecords,
+                        icon: _loadingMoreRecords
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.expand_more),
+                        label: Text(_loadingMoreRecords
+                            ? 'Loading older records…'
+                            : 'Load older student records'),
+                      ),
+                    ),
                 ],
                 KeyedSubtree(
                     key: _studentSectionEndKey, child: const SizedBox.shrink()),
@@ -1814,15 +1970,14 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                                   ? null
                                   : IconButton(
                                       onPressed: () =>
-                                          setState(() => _coachSearch = ''),
+                                          _onCoachAttendanceSearchChanged(''),
                                       tooltip: 'Clear search',
                                       icon: const Icon(Icons.clear),
                                     ),
                               border: const OutlineInputBorder(),
                               isDense: true,
                             ),
-                            onChanged: (value) =>
-                                setState(() => _coachSearch = value),
+                            onChanged: _onCoachAttendanceSearchChanged,
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -1944,6 +2099,25 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                         ),
                       );
                     }),
+                  if (_coachRecordsHasMore)
+                    Center(
+                      child: OutlinedButton.icon(
+                        onPressed: _loadingMoreCoachRecords
+                            ? null
+                            : _loadMoreCoachRecords,
+                        icon: _loadingMoreCoachRecords
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.expand_more),
+                        label: Text(_loadingMoreCoachRecords
+                            ? 'Loading older records…'
+                            : 'Load older coach records'),
+                      ),
+                    ),
                 ],
                 KeyedSubtree(
                     key: _coachSectionEndKey, child: const SizedBox.shrink()),

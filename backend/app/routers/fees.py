@@ -3,7 +3,7 @@ from datetime import date
 from decimal import Decimal
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -65,6 +65,8 @@ def list_fees(
     status_filter: Optional[FeeStatus] = None,
     month: Optional[int] = None,
     year: Optional[int] = None,
+    limit: int = Query(default=500, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
@@ -78,7 +80,12 @@ def list_fees(
     if year:
         query = query.filter(StudentFee.year == year)
 
-    fees = query.order_by(StudentFee.year.desc(), StudentFee.month.desc()).limit(500).all()
+    fees = (
+        query.order_by(StudentFee.year.desc(), StudentFee.month.desc(), StudentFee.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
     students = {u.id: u.name for u in db.query(User).filter(User.id.in_([f.student_id for f in fees])).all()}
     return [
         FeeAdminOut(

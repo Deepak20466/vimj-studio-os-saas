@@ -14,6 +14,7 @@ import 'package:vimj_attendance/features/shared/session_photo_gallery.dart';
 
 class _SearchApi {
   final String today = DateTime.now().toIso8601String().substring(0, 10);
+  final attendanceSearchRequests = <Uri>[];
 
   void install() {
     ApiClient.instance.setClientForTesting(MockClient(_respond));
@@ -40,7 +41,18 @@ class _SearchApi {
           }
         ];
       case '/attendance/students':
-        body = [_attendanceRecord()];
+        if (request.url.queryParameters.containsKey('search')) {
+          attendanceSearchRequests.add(request.url);
+          body = [
+            {
+              ..._attendanceRecord(),
+              'class_date': '2024-02-03',
+              'timestamp': '2024-02-03T09:30:00',
+            }
+          ];
+        } else {
+          body = [_attendanceRecord()];
+        }
       case '/activities/session-photos':
         body = [
           {
@@ -251,6 +263,44 @@ void main() {
     await _enterSearch(tester, 'maya ballet');
     expect(find.text('No student attendance matches this search.'),
         findsOneWidget);
+  });
+
+  testWidgets('Coach attendance search can span all dates', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final api = _SearchApi();
+    api.install();
+    await AuthStorage.save(AuthSession(
+      userId: 7,
+      name: 'Coach One',
+      role: 'COACH',
+      accessToken: 'test-access-token',
+      refreshToken: 'test-refresh-token',
+    ));
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: const Scaffold(body: CoachFacilityAttendanceTab()),
+    ));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('All dates'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('All dates'));
+    await tester.pumpAndSettle();
+    await _enterSearch(tester, 'maya');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    expect(api.attendanceSearchRequests, hasLength(1));
+    expect(
+        api.attendanceSearchRequests.single.queryParameters['search'], 'maya');
+    expect(api.attendanceSearchRequests.single.queryParameters,
+        isNot(contains('date_from')));
+    expect(api.attendanceSearchRequests.single.queryParameters,
+        isNot(contains('date_to')));
+    expect(find.text('2024-02-03'), findsOneWidget);
   });
 
   testWidgets('Session photo gallery matches multiple search terms',

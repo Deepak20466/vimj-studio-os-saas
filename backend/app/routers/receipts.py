@@ -3,7 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -98,8 +98,19 @@ def pending_receipts(db: Session = Depends(get_db), _: User = Depends(require_ad
 
 
 @router.get("", response_model=List[FeeReceiptAdminOut])
-def list_receipts(db: Session = Depends(get_db), _: User = Depends(require_admin)):
-    receipts = db.query(FeeReceipt).order_by(FeeReceipt.created_at.desc()).limit(500).all()
+def list_receipts(
+    limit: int = Query(default=500, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    receipts = (
+        db.query(FeeReceipt)
+        .order_by(FeeReceipt.created_at.desc(), FeeReceipt.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
     return _to_admin_out(db, receipts)
 
 
