@@ -280,3 +280,14 @@ following additional updates:
   `apksigner verify`. Their signing certificate SHA-256
   (`7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`) matches
   the arm64 APK from `mobile-v1.26.10`.
+
+## 2026-10-07 Admin Attendance Search Test Follow-up
+
+- The Admin Attendance search widget test selects the selected-day field by
+  its unique hint text because both selected-day and all-record search fields
+  share the same label. Its no-match assertion now matches the selected-day
+  empty-state message.
+- Verification: all 15 Flutter tests pass, including all three search UI tests.
+- Release target: mobile version `1.26.12+48`, tag `mobile-v1.26.12`, built and
+  published through `.github/workflows/release-mobile.yml` using the existing
+  persistent signing key. Never commit or share the key.
