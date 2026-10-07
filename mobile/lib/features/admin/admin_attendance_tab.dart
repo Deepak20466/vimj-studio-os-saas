@@ -22,6 +22,7 @@ class AdminAttendanceTab extends StatefulWidget {
 class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
   bool _loading = true;
   bool _recordsLoading = true;
+  bool _showAllAttendanceRecords = true;
   List<DailyMissingRow> _missing = [];
   List<AdminAttendanceRecord> _records = [];
   List<Activity> _activities = [];
@@ -111,6 +112,7 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
 
   // --- Coach attendance (separate CRUD) ---
   bool _coachRecordsLoading = true;
+  bool _showCoachAttendanceRecords = true;
   List<Map<String, dynamic>> _coachRecords = [];
   int? _coachFilterId;
   String _coachSearch = '';
@@ -1264,135 +1266,59 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                         style: TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 18)),
                   ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                    child: Text('All Attendance Records',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 16)),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    decoration: InputDecoration(
-                      labelText: 'Search attendance',
-                      hintText: 'Student, activity, coach, date, or status',
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: _attendanceSearch.isEmpty
-                          ? null
-                          : IconButton(
-                              icon: const Icon(Icons.clear),
-                              tooltip: 'Clear search',
-                              onPressed: () =>
-                                  setState(() => _attendanceSearch = ''),
-                            ),
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                    onChanged: (value) =>
-                        setState(() => _attendanceSearch = value),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(spacing: 8, runSpacing: 8, children: [
-                    DropdownButton<String?>(
-                        value: _approvalFilter,
-                        hint: const Text('All review states'),
-                        items: const [
-                          DropdownMenuItem<String?>(
-                              value: null, child: Text('All review states')),
-                          DropdownMenuItem<String?>(
-                              value: 'PENDING', child: Text('Pending')),
-                          DropdownMenuItem<String?>(
-                              value: 'APPROVED', child: Text('Approved')),
-                          DropdownMenuItem<String?>(
-                              value: 'REJECTED', child: Text('Rejected'))
-                        ],
-                        onChanged: (v) => setState(() => _approvalFilter = v)),
-                    if (_attendanceSearch.isNotEmpty ||
-                        _filterActivityId != null ||
-                        _filterStatus != null ||
-                        _approvalFilter != null ||
-                        _filterDateFrom != null ||
-                        _filterDateTo != null)
-                      TextButton(
-                          onPressed: () => setState(() {
-                                _attendanceSearch = '';
-                                _filterActivityId = null;
-                                _filterStatus = null;
-                                _approvalFilter = null;
-                                _filterDateFrom = null;
-                                _filterDateTo = null;
-                              }),
-                          child: const Text('Clear filters'))
-                  ]),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      if (_visibleRecords
-                          .any((r) => r.approvalStatus == 'PENDING'))
-                        ElevatedButton.icon(
-                          onPressed: _approvingAll || _recordsLoading
-                              ? null
-                              : _approveAllPending,
-                          icon: _approvingAll
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2))
-                              : const Icon(Icons.done_all),
-                          label: Text(_approvingAll
-                              ? 'Approving…'
-                              : 'Approve filtered pending (${_visibleRecords.where((r) => r.approvalStatus == 'PENDING').length})'),
+                  Padding(
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                    child: Row(
+                      children: [
+                        const Expanded(
+                          child: Text('All Attendance Records',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 16)),
                         ),
-                      DropdownButton<int?>(
-                        value: _filterActivityId,
-                        hint: const Text('All activities'),
-                        items: [
-                          const DropdownMenuItem<int?>(
-                              value: null, child: Text('All activities')),
-                          ..._activities.map((a) => DropdownMenuItem<int?>(
-                              value: a.id, child: Text(a.name))),
-                        ],
-                        onChanged: (v) {
-                          setState(() => _filterActivityId = v);
-                          _loadRecords();
-                        },
+                        TextButton.icon(
+                          key: const ValueKey('toggle-all-student-attendance'),
+                          onPressed: () => setState(() =>
+                              _showAllAttendanceRecords =
+                                  !_showAllAttendanceRecords),
+                          icon: Icon(_showAllAttendanceRecords
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined),
+                          label:
+                              Text(_showAllAttendanceRecords ? 'Hide' : 'Show'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_showAllAttendanceRecords) ...[
+                    const SizedBox(height: 8),
+                    TextField(
+                      decoration: InputDecoration(
+                        labelText: 'Search attendance',
+                        hintText: 'Student, activity, coach, date, or status',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: _attendanceSearch.isEmpty
+                            ? null
+                            : IconButton(
+                                icon: const Icon(Icons.clear),
+                                tooltip: 'Clear search',
+                                onPressed: () =>
+                                    setState(() => _attendanceSearch = ''),
+                              ),
+                        border: const OutlineInputBorder(),
+                        isDense: true,
                       ),
-                      DropdownButton<String?>(
-                        value: _filterStatus,
-                        hint: const Text('All statuses'),
-                        items: const [
-                          DropdownMenuItem<String?>(
-                              value: null, child: Text('All statuses')),
-                          DropdownMenuItem<String?>(
-                              value: 'PRESENT', child: Text('Present')),
-                          DropdownMenuItem<String?>(
-                              value: 'ABSENT', child: Text('Absent')),
-                          DropdownMenuItem<String?>(
-                              value: 'LEAVE', child: Text('Leave')),
-                          DropdownMenuItem<String?>(
-                              value: 'NOT_CONFIRM', child: Text('Not Confirm')),
-                        ],
-                        onChanged: (v) {
-                          setState(() => _filterStatus = v);
-                          _loadRecords();
-                        },
-                      ),
-                      OutlinedButton(
-                        onPressed: () => _pickFilterDate(true),
-                        child: Text(_filterDateFrom == null
-                            ? 'From date'
-                            : _filterDateFrom!
-                                .toIso8601String()
-                                .substring(0, 10)),
-                      ),
+                      onChanged: (value) =>
+                          setState(() => _attendanceSearch = value),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 8, runSpacing: 8, children: [
                       DropdownButton<String?>(
                           value: _approvalFilter,
-                          hint: const Text('All reviews'),
+                          hint: const Text('All review states'),
                           items: const [
                             DropdownMenuItem<String?>(
-                                value: null, child: Text('All reviews')),
+                                value: null, child: Text('All review states')),
                             DropdownMenuItem<String?>(
                                 value: 'PENDING', child: Text('Pending')),
                             DropdownMenuItem<String?>(
@@ -1402,22 +1328,61 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                           ],
                           onChanged: (v) =>
                               setState(() => _approvalFilter = v)),
-                      SizedBox(
-                          width: 220,
-                          child: TextField(
-                              decoration: InputDecoration(
-                                  labelText: 'Search coach or date',
-                                  prefixIcon: const Icon(Icons.search),
-                                  suffixIcon: _coachSearch.isEmpty
-                                      ? null
-                                      : IconButton(
-                                          onPressed: () =>
-                                              setState(() => _coachSearch = ''),
-                                          icon: const Icon(Icons.clear))),
-                              onChanged: (v) =>
-                                  setState(() => _coachSearch = v))),
-                      DropdownButton<String?>(
-                          value: _coachStatusFilter,
+                      if (_attendanceSearch.isNotEmpty ||
+                          _filterActivityId != null ||
+                          _filterStatus != null ||
+                          _approvalFilter != null ||
+                          _filterDateFrom != null ||
+                          _filterDateTo != null)
+                        TextButton(
+                            onPressed: () => setState(() {
+                                  _attendanceSearch = '';
+                                  _filterActivityId = null;
+                                  _filterStatus = null;
+                                  _approvalFilter = null;
+                                  _filterDateFrom = null;
+                                  _filterDateTo = null;
+                                }),
+                            child: const Text('Clear filters'))
+                    ]),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        if (_visibleRecords
+                            .any((r) => r.approvalStatus == 'PENDING'))
+                          ElevatedButton.icon(
+                            onPressed: _approvingAll || _recordsLoading
+                                ? null
+                                : _approveAllPending,
+                            icon: _approvingAll
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2))
+                                : const Icon(Icons.done_all),
+                            label: Text(_approvingAll
+                                ? 'Approving…'
+                                : 'Approve filtered pending (${_visibleRecords.where((r) => r.approvalStatus == 'PENDING').length})'),
+                          ),
+                        DropdownButton<int?>(
+                          value: _filterActivityId,
+                          hint: const Text('All activities'),
+                          items: [
+                            const DropdownMenuItem<int?>(
+                                value: null, child: Text('All activities')),
+                            ..._activities.map((a) => DropdownMenuItem<int?>(
+                                value: a.id, child: Text(a.name))),
+                          ],
+                          onChanged: (v) {
+                            setState(() => _filterActivityId = v);
+                            _loadRecords();
+                          },
+                        ),
+                        DropdownButton<String?>(
+                          value: _filterStatus,
                           hint: const Text('All statuses'),
                           items: const [
                             DropdownMenuItem<String?>(
@@ -1430,140 +1395,245 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                                 value: 'LEAVE', child: Text('Leave')),
                             DropdownMenuItem<String?>(
                                 value: 'NOT_CONFIRM',
-                                child: Text('Not Confirm'))
+                                child: Text('Not Confirm')),
                           ],
-                          onChanged: (v) =>
-                              setState(() => _coachStatusFilter = v)),
-                      if (_coachSearch.isNotEmpty ||
-                          _coachStatusFilter != null ||
-                          _coachFilterId != null ||
-                          _coachFilterDateFrom != null ||
-                          _coachFilterDateTo != null)
-                        TextButton(
-                            onPressed: () {
-                              setState(() {
-                                _coachSearch = '';
-                                _coachStatusFilter = null;
-                                _coachFilterId = null;
-                                _coachFilterDateFrom = null;
-                                _coachFilterDateTo = null;
-                              });
-                              _loadCoachRecords();
-                            },
-                            child: const Text('Clear filters')),
-                      OutlinedButton(
-                        onPressed: () => _pickFilterDate(false),
-                        child: Text(_filterDateTo == null
-                            ? 'To date'
-                            : _filterDateTo!
-                                .toIso8601String()
-                                .substring(0, 10)),
-                      ),
-                      if (_attendanceSearch.isNotEmpty ||
-                          _filterActivityId != null ||
-                          _filterStatus != null ||
-                          _approvalFilter != null ||
-                          _filterDateFrom != null ||
-                          _filterDateTo != null)
-                        TextButton(
-                            onPressed: () {
-                              setState(() {
-                                _attendanceSearch = '';
-                                _filterActivityId = null;
-                                _filterStatus = null;
-                                _approvalFilter = null;
-                                _filterDateFrom = null;
-                                _filterDateTo = null;
-                              });
-                              _loadRecords();
-                            },
-                            child: const Text('Clear filters')),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  if (_recordsLoading && _records.isEmpty)
-                    const Padding(
-                        padding: EdgeInsets.all(20),
-                        child: Center(child: CircularProgressIndicator())),
-                  if (_recordsLoading && _records.isNotEmpty)
-                    const LinearProgressIndicator(),
-                  if (!_recordsLoading && _records.isEmpty)
-                    const Padding(
-                        padding: EdgeInsets.all(20),
-                        child: Center(
-                            child: Text('No attendance records found.'))),
-                  if (!_recordsLoading &&
-                      _records.isNotEmpty &&
-                      _visibleRecords.isEmpty)
-                    const Padding(
-                        padding: EdgeInsets.all(20),
-                        child: Center(child: Text('No results found.'))),
-                  if (_visibleRecords.isNotEmpty)
-                    ..._visibleRecords.map((r) => Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 8, horizontal: 12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Expanded(
-                                        child: Text(r.studentName,
-                                            style: const TextStyle(
-                                                fontWeight: FontWeight.bold))),
-                                    Wrap(
-                                      spacing: 4,
-                                      children: [
-                                        Chip(
-                                          label: Text(r.status,
+                          onChanged: (v) {
+                            setState(() => _filterStatus = v);
+                            _loadRecords();
+                          },
+                        ),
+                        OutlinedButton(
+                          onPressed: () => _pickFilterDate(true),
+                          child: Text(_filterDateFrom == null
+                              ? 'From date'
+                              : _filterDateFrom!
+                                  .toIso8601String()
+                                  .substring(0, 10)),
+                        ),
+                        DropdownButton<String?>(
+                            value: _approvalFilter,
+                            hint: const Text('All reviews'),
+                            items: const [
+                              DropdownMenuItem<String?>(
+                                  value: null, child: Text('All reviews')),
+                              DropdownMenuItem<String?>(
+                                  value: 'PENDING', child: Text('Pending')),
+                              DropdownMenuItem<String?>(
+                                  value: 'APPROVED', child: Text('Approved')),
+                              DropdownMenuItem<String?>(
+                                  value: 'REJECTED', child: Text('Rejected'))
+                            ],
+                            onChanged: (v) =>
+                                setState(() => _approvalFilter = v)),
+                        SizedBox(
+                            width: 220,
+                            child: TextField(
+                                decoration: InputDecoration(
+                                    labelText: 'Search coach or date',
+                                    prefixIcon: const Icon(Icons.search),
+                                    suffixIcon: _coachSearch.isEmpty
+                                        ? null
+                                        : IconButton(
+                                            onPressed: () => setState(
+                                                () => _coachSearch = ''),
+                                            icon: const Icon(Icons.clear))),
+                                onChanged: (v) =>
+                                    setState(() => _coachSearch = v))),
+                        DropdownButton<String?>(
+                            value: _coachStatusFilter,
+                            hint: const Text('All statuses'),
+                            items: const [
+                              DropdownMenuItem<String?>(
+                                  value: null, child: Text('All statuses')),
+                              DropdownMenuItem<String?>(
+                                  value: 'PRESENT', child: Text('Present')),
+                              DropdownMenuItem<String?>(
+                                  value: 'ABSENT', child: Text('Absent')),
+                              DropdownMenuItem<String?>(
+                                  value: 'LEAVE', child: Text('Leave')),
+                              DropdownMenuItem<String?>(
+                                  value: 'NOT_CONFIRM',
+                                  child: Text('Not Confirm'))
+                            ],
+                            onChanged: (v) =>
+                                setState(() => _coachStatusFilter = v)),
+                        if (_coachSearch.isNotEmpty ||
+                            _coachStatusFilter != null ||
+                            _coachFilterId != null ||
+                            _coachFilterDateFrom != null ||
+                            _coachFilterDateTo != null)
+                          TextButton(
+                              onPressed: () {
+                                setState(() {
+                                  _coachSearch = '';
+                                  _coachStatusFilter = null;
+                                  _coachFilterId = null;
+                                  _coachFilterDateFrom = null;
+                                  _coachFilterDateTo = null;
+                                });
+                                _loadCoachRecords();
+                              },
+                              child: const Text('Clear filters')),
+                        OutlinedButton(
+                          onPressed: () => _pickFilterDate(false),
+                          child: Text(_filterDateTo == null
+                              ? 'To date'
+                              : _filterDateTo!
+                                  .toIso8601String()
+                                  .substring(0, 10)),
+                        ),
+                        if (_attendanceSearch.isNotEmpty ||
+                            _filterActivityId != null ||
+                            _filterStatus != null ||
+                            _approvalFilter != null ||
+                            _filterDateFrom != null ||
+                            _filterDateTo != null)
+                          TextButton(
+                              onPressed: () {
+                                setState(() {
+                                  _attendanceSearch = '';
+                                  _filterActivityId = null;
+                                  _filterStatus = null;
+                                  _approvalFilter = null;
+                                  _filterDateFrom = null;
+                                  _filterDateTo = null;
+                                });
+                                _loadRecords();
+                              },
+                              child: const Text('Clear filters')),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (_recordsLoading && _records.isEmpty)
+                      const Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Center(child: CircularProgressIndicator())),
+                    if (_recordsLoading && _records.isNotEmpty)
+                      const LinearProgressIndicator(),
+                    if (!_recordsLoading && _records.isEmpty)
+                      const Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Center(
+                              child: Text('No attendance records found.'))),
+                    if (!_recordsLoading &&
+                        _records.isNotEmpty &&
+                        _visibleRecords.isEmpty)
+                      const Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Center(child: Text('No results found.'))),
+                    if (_visibleRecords.isNotEmpty)
+                      ..._visibleRecords.map((r) => Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 8, horizontal: 12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                          child: Text(r.studentName,
                                               style: const TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.white)),
-                                          backgroundColor: r.status == 'PRESENT'
-                                              ? AppColors.success
-                                              : r.status == 'ABSENT'
-                                                  ? AppColors.danger
-                                                  : AppColors.warning,
-                                          visualDensity: VisualDensity.compact,
-                                        ),
-                                        Chip(
-                                          label: Text(r.approvalStatus,
-                                              style: const TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.white)),
-                                          backgroundColor:
-                                              _approvalColor(r.approvalStatus),
-                                          visualDensity: VisualDensity.compact,
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '${r.classDate} · ${r.activityName} · ${r.coachName ?? "-"} · ${r.markedManually ? "Manual" : "Coach"}',
-                                  style: const TextStyle(
-                                      color: AppColors.textMuted, fontSize: 12),
-                                ),
-                                const SizedBox(height: 8),
-                                Wrap(
-                                  spacing: 4,
-                                  runSpacing: 4,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    if (r.hasSelfie)
+                                                  fontWeight:
+                                                      FontWeight.bold))),
+                                      Wrap(
+                                        spacing: 4,
+                                        children: [
+                                          Chip(
+                                            label: Text(r.status,
+                                                style: const TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.white)),
+                                            backgroundColor:
+                                                r.status == 'PRESENT'
+                                                    ? AppColors.success
+                                                    : r.status == 'ABSENT'
+                                                        ? AppColors.danger
+                                                        : AppColors.warning,
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                          ),
+                                          Chip(
+                                            label: Text(r.approvalStatus,
+                                                style: const TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.white)),
+                                            backgroundColor: _approvalColor(
+                                                r.approvalStatus),
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${r.classDate} · ${r.activityName} · ${r.coachName ?? "-"} · ${r.markedManually ? "Manual" : "Coach"}',
+                                    style: const TextStyle(
+                                        color: AppColors.textMuted,
+                                        fontSize: 12),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 4,
+                                    runSpacing: 4,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    children: [
+                                      if (r.hasSelfie)
+                                        IconButton(
+                                            icon: const Icon(
+                                                Icons.photo_camera_outlined,
+                                                size: 20),
+                                            tooltip: 'View Selfie',
+                                            onPressed: () => _viewSelfie(r)),
+                                      if (r.approvalStatus == 'PENDING')
+                                        _approvalBusyId == r.id
+                                            ? const Padding(
+                                                padding: EdgeInsets.all(10),
+                                                child: SizedBox(
+                                                    height: 16,
+                                                    width: 16,
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                            strokeWidth: 2)))
+                                            : Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  IconButton(
+                                                    icon: const Icon(
+                                                        Icons
+                                                            .check_circle_outline,
+                                                        size: 20,
+                                                        color:
+                                                            AppColors.success),
+                                                    tooltip: 'Approve',
+                                                    onPressed: () =>
+                                                        _decideApproval(
+                                                            r, true),
+                                                  ),
+                                                  IconButton(
+                                                    icon: const Icon(
+                                                        Icons.cancel_outlined,
+                                                        size: 20,
+                                                        color:
+                                                            AppColors.danger),
+                                                    tooltip: 'Reject',
+                                                    onPressed: () =>
+                                                        _decideApproval(
+                                                            r, false),
+                                                  ),
+                                                ],
+                                              ),
                                       IconButton(
-                                          icon: const Icon(
-                                              Icons.photo_camera_outlined,
+                                          icon: const Icon(Icons.edit_outlined,
                                               size: 20),
-                                          tooltip: 'View Selfie',
-                                          onPressed: () => _viewSelfie(r)),
-                                    if (r.approvalStatus == 'PENDING')
-                                      _approvalBusyId == r.id
+                                          onPressed: () => _openEditRecord(r)),
+                                      _removingId == r.id
                                           ? const Padding(
                                               padding: EdgeInsets.all(10),
                                               child: SizedBox(
@@ -1572,55 +1642,20 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                                                   child:
                                                       CircularProgressIndicator(
                                                           strokeWidth: 2)))
-                                          : Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                IconButton(
-                                                  icon: const Icon(
-                                                      Icons
-                                                          .check_circle_outline,
-                                                      size: 20,
-                                                      color: AppColors.success),
-                                                  tooltip: 'Approve',
-                                                  onPressed: () =>
-                                                      _decideApproval(r, true),
-                                                ),
-                                                IconButton(
-                                                  icon: const Icon(
-                                                      Icons.cancel_outlined,
-                                                      size: 20,
-                                                      color: AppColors.danger),
-                                                  tooltip: 'Reject',
-                                                  onPressed: () =>
-                                                      _decideApproval(r, false),
-                                                ),
-                                              ],
-                                            ),
-                                    IconButton(
-                                        icon: const Icon(Icons.edit_outlined,
-                                            size: 20),
-                                        onPressed: () => _openEditRecord(r)),
-                                    _removingId == r.id
-                                        ? const Padding(
-                                            padding: EdgeInsets.all(10),
-                                            child: SizedBox(
-                                                height: 16,
-                                                width: 16,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                        strokeWidth: 2)))
-                                        : IconButton(
-                                            icon: const Icon(
-                                                Icons.delete_outline,
-                                                size: 20,
-                                                color: AppColors.danger),
-                                            onPressed: () => _removeRecord(r)),
-                                  ],
-                                ),
-                              ],
+                                          : IconButton(
+                                              icon: const Icon(
+                                                  Icons.delete_outline,
+                                                  size: 20,
+                                                  color: AppColors.danger),
+                                              onPressed: () =>
+                                                  _removeRecord(r)),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        )),
+                          )),
+                  ],
                   const SizedBox(height: 24),
                   Wrap(
                     spacing: 12,
@@ -1629,6 +1664,7 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                     alignment: WrapAlignment.spaceBetween,
                     children: [
                       const Text('Coach Attendance',
+                          key: ValueKey('coach-attendance-section'),
                           style: TextStyle(
                               fontWeight: FontWeight.bold, fontSize: 18)),
                       ElevatedButton.icon(
@@ -1636,115 +1672,128 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                         icon: const Icon(Icons.add, size: 18),
                         label: const Text('Manual Entry'),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      DropdownButton<int?>(
-                        value: _coachFilterId,
-                        hint: const Text('All coaches'),
-                        items: [
-                          const DropdownMenuItem<int?>(
-                              value: null, child: Text('All coaches')),
-                          ..._coaches.map((c) => DropdownMenuItem<int?>(
-                              value: c.id, child: Text(c.name))),
-                        ],
-                        onChanged: (v) {
-                          setState(() => _coachFilterId = v);
-                          _loadCoachRecords();
-                        },
-                      ),
-                      OutlinedButton(
-                        onPressed: () => _pickCoachFilterDate(true),
-                        child: Text(_coachFilterDateFrom == null
-                            ? 'From date'
-                            : _coachFilterDateFrom!
-                                .toIso8601String()
-                                .substring(0, 10)),
-                      ),
-                      OutlinedButton(
-                        onPressed: () => _pickCoachFilterDate(false),
-                        child: Text(_coachFilterDateTo == null
-                            ? 'To date'
-                            : _coachFilterDateTo!
-                                .toIso8601String()
-                                .substring(0, 10)),
+                      TextButton.icon(
+                        key: const ValueKey('toggle-coach-attendance'),
+                        onPressed: () => setState(() =>
+                            _showCoachAttendanceRecords =
+                                !_showCoachAttendanceRecords),
+                        icon: Icon(_showCoachAttendanceRecords
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined),
+                        label:
+                            Text(_showCoachAttendanceRecords ? 'Hide' : 'Show'),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  if (_coachRecordsLoading && _coachRecords.isEmpty)
-                    const Padding(
-                        padding: EdgeInsets.all(20),
-                        child: Center(child: CircularProgressIndicator())),
-                  if (_coachRecordsLoading && _coachRecords.isNotEmpty)
-                    const LinearProgressIndicator(),
-                  if (!_coachRecordsLoading && _coachRecords.isEmpty)
-                    const Padding(
-                        padding: EdgeInsets.all(20),
-                        child: Center(
-                            child: Text(
-                                'No coach attendance records match these filters.'))),
-                  if (!_coachRecordsLoading &&
-                      _coachRecords.isNotEmpty &&
-                      _visibleCoachRecords.isEmpty)
-                    const Padding(
-                        padding: EdgeInsets.all(20),
-                        child: Center(child: Text('No results found.'))),
-                  if (_visibleCoachRecords.isNotEmpty)
-                    ..._visibleCoachRecords.map((r) {
-                      final id = r['id'] as int;
-                      final status = r['status'] as String? ?? 'PRESENT';
-                      final entry = r['entry_time'] != null
-                          ? (r['entry_time'] as String).substring(11, 16)
-                          : '-';
-                      final exit = r['exit_time'] != null
-                          ? (r['exit_time'] as String).substring(11, 16)
-                          : '-';
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          title: Text(r['coach_name'] as String? ?? '-'),
-                          subtitle:
-                              Text('${r['date']} · Entry $entry · Exit $exit'),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Chip(
-                                label: Text(status,
-                                    style: const TextStyle(
-                                        fontSize: 11, color: Colors.white)),
-                                backgroundColor: status == 'PRESENT'
-                                    ? AppColors.success
-                                    : status == 'ABSENT'
-                                        ? AppColors.danger
-                                        : AppColors.warning,
-                                visualDensity: VisualDensity.compact,
-                              ),
-                              IconButton(
-                                  icon:
-                                      const Icon(Icons.edit_outlined, size: 20),
-                                  onPressed: () => _openEditCoachRecord(r)),
-                              _removingCoachId == id
-                                  ? const Padding(
-                                      padding: EdgeInsets.all(10),
-                                      child: SizedBox(
-                                          height: 16,
-                                          width: 16,
-                                          child: CircularProgressIndicator(
-                                              strokeWidth: 2)))
-                                  : IconButton(
-                                      icon: const Icon(Icons.delete_outline,
-                                          size: 20, color: AppColors.danger),
-                                      onPressed: () => _removeCoachRecord(r)),
-                            ],
-                          ),
+                  if (_showCoachAttendanceRecords) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        DropdownButton<int?>(
+                          value: _coachFilterId,
+                          hint: const Text('All coaches'),
+                          items: [
+                            const DropdownMenuItem<int?>(
+                                value: null, child: Text('All coaches')),
+                            ..._coaches.map((c) => DropdownMenuItem<int?>(
+                                value: c.id, child: Text(c.name))),
+                          ],
+                          onChanged: (v) {
+                            setState(() => _coachFilterId = v);
+                            _loadCoachRecords();
+                          },
                         ),
-                      );
-                    }),
+                        OutlinedButton(
+                          onPressed: () => _pickCoachFilterDate(true),
+                          child: Text(_coachFilterDateFrom == null
+                              ? 'From date'
+                              : _coachFilterDateFrom!
+                                  .toIso8601String()
+                                  .substring(0, 10)),
+                        ),
+                        OutlinedButton(
+                          onPressed: () => _pickCoachFilterDate(false),
+                          child: Text(_coachFilterDateTo == null
+                              ? 'To date'
+                              : _coachFilterDateTo!
+                                  .toIso8601String()
+                                  .substring(0, 10)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (_coachRecordsLoading && _coachRecords.isEmpty)
+                      const Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Center(child: CircularProgressIndicator())),
+                    if (_coachRecordsLoading && _coachRecords.isNotEmpty)
+                      const LinearProgressIndicator(),
+                    if (!_coachRecordsLoading && _coachRecords.isEmpty)
+                      const Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Center(
+                              child: Text(
+                                  'No coach attendance records match these filters.'))),
+                    if (!_coachRecordsLoading &&
+                        _coachRecords.isNotEmpty &&
+                        _visibleCoachRecords.isEmpty)
+                      const Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Center(child: Text('No results found.'))),
+                    if (_visibleCoachRecords.isNotEmpty)
+                      ..._visibleCoachRecords.map((r) {
+                        final id = r['id'] as int;
+                        final status = r['status'] as String? ?? 'PRESENT';
+                        final entry = r['entry_time'] != null
+                            ? (r['entry_time'] as String).substring(11, 16)
+                            : '-';
+                        final exit = r['exit_time'] != null
+                            ? (r['exit_time'] as String).substring(11, 16)
+                            : '-';
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: ListTile(
+                            title: Text(r['coach_name'] as String? ?? '-'),
+                            subtitle: Text(
+                                '${r['date']} · Entry $entry · Exit $exit'),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Chip(
+                                  label: Text(status,
+                                      style: const TextStyle(
+                                          fontSize: 11, color: Colors.white)),
+                                  backgroundColor: status == 'PRESENT'
+                                      ? AppColors.success
+                                      : status == 'ABSENT'
+                                          ? AppColors.danger
+                                          : AppColors.warning,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                IconButton(
+                                    icon: const Icon(Icons.edit_outlined,
+                                        size: 20),
+                                    onPressed: () => _openEditCoachRecord(r)),
+                                _removingCoachId == id
+                                    ? const Padding(
+                                        padding: EdgeInsets.all(10),
+                                        child: SizedBox(
+                                            height: 16,
+                                            width: 16,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2)))
+                                    : IconButton(
+                                        icon: const Icon(Icons.delete_outline,
+                                            size: 20, color: AppColors.danger),
+                                        onPressed: () => _removeCoachRecord(r)),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                  ],
                 ],
               ),
             ),

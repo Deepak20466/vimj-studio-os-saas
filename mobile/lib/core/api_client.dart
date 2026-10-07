@@ -7,6 +7,7 @@ import 'auth_storage.dart';
 
 const _requestTimeout = Duration(seconds: 25);
 const _loginTimeout = Duration(seconds: 75);
+const _loginRetryWarmUpWait = Duration(seconds: 2);
 const _loginTimeoutMessage =
     'The server is taking too long to wake up. Please try signing in again in a moment.';
 
@@ -191,8 +192,12 @@ class ApiClient {
       throw ApiException(0,
           'The server did not respond in time. Check your connection and try again.');
     } on http.ClientException {
-      if (path == '/auth/login' && !retriedTransient) {
-        await _waitForLoginRetry(requestLoginTimer);
+      if (!retriedTransient && (method == 'GET' || path == '/auth/login')) {
+        if (path == '/auth/login') {
+          await _waitForLoginRetry(requestLoginTimer);
+        } else {
+          await Future<void>.delayed(const Duration(milliseconds: 400));
+        }
         return _request(method, path,
             query: query,
             body: body,
@@ -205,12 +210,13 @@ class ApiClient {
           'Could not connect to the server. Check your connection and try again.');
     }
 
-    // Render can briefly return a gateway error while its free-tier instance is
-    // starting. Retry safe reads and login once so that transient startup errors
-    // do not immediately surface as a server failure.
+    // Retry safe reads and login once after transient server errors so a brief
+    // backend or gateway failure does not immediately surface to the user.
+    final transientServerError =
+        response.statusCode >= 500 && response.statusCode < 600;
     if (!retriedTransient &&
         (method == 'GET' || path == '/auth/login') &&
-        const {502, 503, 504}.contains(response.statusCode)) {
+        transientServerError) {
       if (path == '/auth/login') {
         await _waitForLoginRetry(requestLoginTimer);
       } else {
@@ -274,15 +280,24 @@ class ApiClient {
   Future<void> _waitForLoginRetry(Stopwatch? timer) async {
     final remaining = _remainingLoginTimeout(timer);
     final pendingWarmUp = _warmUpFuture;
-    try {
-      if (pendingWarmUp != null) {
-        await pendingWarmUp.timeout(remaining);
-      } else {
-        await Future<void>.delayed(const Duration(milliseconds: 400))
-            .timeout(remaining);
+    if (pendingWarmUp != null) {
+      // Let the health request make progress, but don't make a failed login wait
+      // for the entire cold-start window before its retry. The login request
+      // itself retains the remaining part of the 75-second overall budget.
+      final wait =
+          remaining < _loginRetryWarmUpWait ? remaining : _loginRetryWarmUpWait;
+      try {
+        await pendingWarmUp.timeout(wait);
+      } on TimeoutException {
+        _remainingLoginTimeout(timer);
       }
+      return;
+    }
+    try {
+      await Future<void>.delayed(const Duration(milliseconds: 400))
+          .timeout(remaining);
     } on TimeoutException {
-      throw ApiException(0, _loginTimeoutMessage);
+      _remainingLoginTimeout(timer);
     }
   }
 
@@ -316,11 +331,16 @@ class ApiClient {
       throw ApiException(0,
           'The server did not respond in time. Check your connection and try again.');
     } on http.ClientException {
+      if (!retriedTransient) {
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        return _getBytes(path, query: query, retriedTransient: true);
+      }
       throw ApiException(0,
           'Could not connect to the server. Check your connection and try again.');
     }
     if (!retriedTransient &&
-        const {502, 503, 504}.contains(response.statusCode)) {
+        response.statusCode >= 500 &&
+        response.statusCode < 600) {
       await Future<void>.delayed(const Duration(milliseconds: 400));
       return _getBytes(path, query: query, retriedTransient: true);
     }

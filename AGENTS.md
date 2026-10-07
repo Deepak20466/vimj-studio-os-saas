@@ -301,3 +301,28 @@ following additional updates:
   assets match GitHub's published digests and pass `apksigner verify`; their
   signing certificate SHA-256 is
   `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
+
+## 2026-10-07 Admin Attendance List Controls and Login Recovery
+
+- Keep this update scoped to Flutter mobile and this notes file. Do not change
+  web, backend, or unrelated Admin Attendance behavior.
+- Admin mobile Attendance adds independent Hide/Show controls for the Student
+  Attendance “All Attendance Records” section and the main Coach Attendance
+  list. Both lists remain visible by default; hiding a list preserves its
+  records and filters.
+- The shared Admin/Coach API client retries one transient HTTP 5xx response for
+  login and safe GET requests, including raw PDF downloads. It retries one
+  connection failure for login and safe GET requests. Before retrying login it
+  waits at most two seconds for an in-flight health warm-up, leaving the
+  remaining portion of the existing 75-second login timeout for a cold start.
+  Timeout and connection errors continue to show actionable messages.
+- Release target: mobile version `1.26.13+49`, tag `mobile-v1.26.13`, through
+  `.github/workflows/release-mobile.yml`. GitHub Actions must use the existing
+  persistent signing key; never commit or share the key.
+- Verify the Flutter test suite, Dart analysis, and split-ABI Android release
+  build before publishing. Record the published commit, workflow run, APK
+  checksums, and signing verification here after release.
+- Local verification on 2026-10-07: all 21 Flutter tests passed; Flutter
+  analysis exited successfully with 0 errors/warnings and 174 informational
+  lints; local split-ABI release compilation succeeded for armeabi-v7a,
+  arm64-v8a, and x86_64.

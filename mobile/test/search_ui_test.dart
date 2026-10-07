@@ -133,6 +133,56 @@ void main() {
         findsOneWidget);
   });
 
+  testWidgets('Admin attendance record lists can be hidden independently',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    _SearchApi().install();
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: const Scaffold(body: AdminAttendanceTab()),
+    ));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('All Attendance Records'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    final studentSearch = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField &&
+          widget.decoration?.hintText ==
+              'Student, activity, coach, date, or status',
+    );
+    expect(studentSearch, findsOneWidget);
+
+    await tester
+        .tap(find.byKey(const ValueKey('toggle-all-student-attendance')));
+    await tester.pumpAndSettle();
+    expect(studentSearch, findsNothing);
+
+    await tester
+        .tap(find.byKey(const ValueKey('toggle-all-student-attendance')));
+    await tester.pumpAndSettle();
+    expect(studentSearch, findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('coach-attendance-section')),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    final coachEmptyState =
+        find.text('No coach attendance records match these filters.');
+    expect(coachEmptyState, findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('toggle-coach-attendance')));
+    await tester.pumpAndSettle();
+    expect(coachEmptyState, findsNothing);
+  });
+
   testWidgets('Coach attendance searches the selected day details',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
