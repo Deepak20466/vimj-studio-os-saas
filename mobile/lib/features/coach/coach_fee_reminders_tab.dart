@@ -5,6 +5,7 @@ import '../../core/app_theme.dart';
 import '../../core/auth_storage.dart';
 import '../../core/models.dart';
 import '../shared/notification_bell_action.dart';
+import '../shared/pinned_search_section.dart';
 
 class CoachFeeRemindersTab extends StatefulWidget {
   const CoachFeeRemindersTab({super.key});
@@ -181,133 +182,148 @@ class _CoachFeeRemindersTabState extends State<CoachFeeRemindersTab> {
                               child: Center(
                                   child: Text('No fee reminders drafted yet.')))
                         ])
-                      : ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
-                          itemCount: 1 +
-                              (_visibleDrafts.isEmpty
-                                  ? 1
-                                  : _visibleDrafts.length),
-                          itemBuilder: (context, i) {
-                            if (i == 0)
-                              return Column(children: [
-                                TextField(
-                                    decoration: InputDecoration(
-                                        labelText: 'Search reminders',
-                                        prefixIcon: const Icon(Icons.search),
-                                        suffixIcon: _search.isEmpty
-                                            ? null
-                                            : IconButton(
-                                                onPressed: () => setState(
-                                                    () => _search = ''),
-                                                icon: const Icon(Icons.clear))),
-                                    onChanged: (v) =>
-                                        setState(() => _search = v)),
-                                Wrap(spacing: 8, children: [
-                                  DropdownButton<String?>(
-                                      value: _statusFilter,
-                                      hint: const Text('All statuses'),
-                                      items: const [
-                                        DropdownMenuItem<String?>(
-                                            value: null,
-                                            child: Text('All statuses')),
-                                        DropdownMenuItem<String?>(
-                                            value: 'PENDING',
-                                            child: Text('Pending')),
-                                        DropdownMenuItem<String?>(
-                                            value: 'APPROVED',
-                                            child: Text('Approved')),
-                                        DropdownMenuItem<String?>(
-                                            value: 'REJECTED',
-                                            child: Text('Rejected'))
-                                      ],
-                                      onChanged: (v) =>
-                                          setState(() => _statusFilter = v)),
-                                  DropdownButton<String?>(
-                                      value: _periodFilter,
-                                      hint: const Text('All periods'),
-                                      items: [
-                                        const DropdownMenuItem<String?>(
-                                            value: null,
-                                            child: Text('All periods')),
-                                        ..._drafts
-                                            .map((d) => '${d.month}/${d.year}')
-                                            .toSet()
-                                            .map((p) =>
-                                                DropdownMenuItem<String?>(
-                                                    value: p, child: Text(p)))
-                                      ],
-                                      onChanged: (v) =>
-                                          setState(() => _periodFilter = v)),
-                                  if (_search.isNotEmpty ||
-                                      _statusFilter != null ||
-                                      _periodFilter != null)
-                                    TextButton(
-                                        onPressed: () => setState(() {
-                                              _search = '';
-                                              _statusFilter = null;
-                                              _periodFilter = null;
-                                            }),
-                                        child: const Text('Clear filters'))
-                                ])
-                              ]);
-                            if (_visibleDrafts.isEmpty)
-                              return const Padding(
-                                  padding: EdgeInsets.all(32),
-                                  child:
-                                      Center(child: Text('No results found.')));
-                            final d = _visibleDrafts[i - 1];
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                            child: Text(
-                                                '${d.studentName ?? "Student #${d.studentId}"} · ${d.month}/${d.year}',
-                                                style: const TextStyle(
-                                                    fontWeight:
-                                                        FontWeight.bold))),
-                                        Chip(
-                                            label: Text(d.status,
-                                                style: const TextStyle(
-                                                    fontSize: 11,
-                                                    color: Colors.white)),
-                                            backgroundColor:
-                                                _statusColor(d.status)),
-                                        if (d.status == 'PENDING')
-                                          IconButton(
-                                            tooltip: 'Delete reminder',
-                                            icon: const Icon(
-                                                Icons.delete_outline,
-                                                color: AppColors.danger),
-                                            onPressed: () => _deleteDraft(d),
+                      : ListView(
+                          padding: const EdgeInsets.only(bottom: 90),
+                          children: [
+                            PinnedSearchSection(
+                              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                              search: TextField(
+                                  decoration: InputDecoration(
+                                      labelText: 'Search reminders',
+                                      prefixIcon: const Icon(Icons.search),
+                                      suffixIcon: _search.isEmpty
+                                          ? null
+                                          : IconButton(
+                                              onPressed: () =>
+                                                  setState(() => _search = ''),
+                                              icon: const Icon(Icons.clear))),
+                                  onChanged: (v) =>
+                                      setState(() => _search = v)),
+                              results: ListView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                padding:
+                                    const EdgeInsets.fromLTRB(12, 0, 12, 90),
+                                itemCount: 1 +
+                                    (_visibleDrafts.isEmpty
+                                        ? 1
+                                        : _visibleDrafts.length),
+                                itemBuilder: (context, i) {
+                                  if (i == 0)
+                                    return Wrap(spacing: 8, children: [
+                                      DropdownButton<String?>(
+                                          value: _statusFilter,
+                                          hint: const Text('All statuses'),
+                                          items: const [
+                                            DropdownMenuItem<String?>(
+                                                value: null,
+                                                child: Text('All statuses')),
+                                            DropdownMenuItem<String?>(
+                                                value: 'PENDING',
+                                                child: Text('Pending')),
+                                            DropdownMenuItem<String?>(
+                                                value: 'APPROVED',
+                                                child: Text('Approved')),
+                                            DropdownMenuItem<String?>(
+                                                value: 'REJECTED',
+                                                child: Text('Rejected'))
+                                          ],
+                                          onChanged: (v) => setState(
+                                              () => _statusFilter = v)),
+                                      DropdownButton<String?>(
+                                          value: _periodFilter,
+                                          hint: const Text('All periods'),
+                                          items: [
+                                            const DropdownMenuItem<String?>(
+                                                value: null,
+                                                child: Text('All periods')),
+                                            ..._drafts
+                                                .map((d) =>
+                                                    '${d.month}/${d.year}')
+                                                .toSet()
+                                                .map((p) =>
+                                                    DropdownMenuItem<String?>(
+                                                        value: p,
+                                                        child: Text(p)))
+                                          ],
+                                          onChanged: (v) => setState(
+                                              () => _periodFilter = v)),
+                                      if (_search.isNotEmpty ||
+                                          _statusFilter != null ||
+                                          _periodFilter != null)
+                                        TextButton(
+                                            onPressed: () => setState(() {
+                                                  _search = '';
+                                                  _statusFilter = null;
+                                                  _periodFilter = null;
+                                                }),
+                                            child: const Text('Clear filters'))
+                                    ]);
+                                  if (_visibleDrafts.isEmpty)
+                                    return const Padding(
+                                        padding: EdgeInsets.all(32),
+                                        child: Center(
+                                            child: Text('No results found.')));
+                                  final d = _visibleDrafts[i - 1];
+                                  return Card(
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(12),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                  child: Text(
+                                                      '${d.studentName ?? "Student #${d.studentId}"} · ${d.month}/${d.year}',
+                                                      style: const TextStyle(
+                                                          fontWeight: FontWeight
+                                                              .bold))),
+                                              Chip(
+                                                  label: Text(d.status,
+                                                      style: const TextStyle(
+                                                          fontSize: 11,
+                                                          color: Colors.white)),
+                                                  backgroundColor:
+                                                      _statusColor(d.status)),
+                                              if (d.status == 'PENDING')
+                                                IconButton(
+                                                  tooltip: 'Delete reminder',
+                                                  icon: const Icon(
+                                                      Icons.delete_outline,
+                                                      color: AppColors.danger),
+                                                  onPressed: () =>
+                                                      _deleteDraft(d),
+                                                ),
+                                            ],
                                           ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(d.message),
-                                    if (d.decisionNote != null)
-                                      Text('Note: ${d.decisionNote}',
-                                          style: const TextStyle(
-                                              color: AppColors.textMuted)),
-                                    if (d.status == 'APPROVED')
-                                      Align(
-                                        alignment: Alignment.centerRight,
-                                        child: TextButton.icon(
-                                            onPressed: () => _copy(d.message),
-                                            icon: const Icon(Icons.copy,
-                                                size: 16),
-                                            label: const Text('Copy')),
+                                          const SizedBox(height: 6),
+                                          Text(d.message),
+                                          if (d.decisionNote != null)
+                                            Text('Note: ${d.decisionNote}',
+                                                style: const TextStyle(
+                                                    color:
+                                                        AppColors.textMuted)),
+                                          if (d.status == 'APPROVED')
+                                            Align(
+                                              alignment: Alignment.centerRight,
+                                              child: TextButton.icon(
+                                                  onPressed: () =>
+                                                      _copy(d.message),
+                                                  icon: const Icon(Icons.copy,
+                                                      size: 16),
+                                                  label: const Text('Copy')),
+                                            ),
+                                        ],
                                       ),
-                                  ],
-                                ),
+                                    ),
+                                  );
+                                },
                               ),
-                            );
-                          },
+                            ),
+                          ],
                         ),
             ),
     );

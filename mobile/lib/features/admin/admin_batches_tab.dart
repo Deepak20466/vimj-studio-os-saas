@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/models.dart';
+import '../shared/pinned_search_section.dart';
 
 const _allDays = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 const _allMonths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
@@ -404,94 +405,100 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
                 await _load();
                 await _loadCoverage();
               },
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
-                itemCount:
-                    2 + (_visibleBatches.isEmpty ? 1 : _visibleBatches.length),
-                itemBuilder: (context, i) {
-                  if (i == 0) return _coverageSection();
-                  if (i == 1) {
-                    return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('All Batches',
-                              style: Theme.of(context).textTheme.titleMedium),
-                          _batchFilters()
-                        ]);
-                  }
-                  if (_visibleBatches.isEmpty) {
-                    return Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Center(
-                            child: Text(_batches.isEmpty
-                                ? 'No batches yet. Create one to schedule a recurring class.'
-                                : 'No results found.')));
-                  }
-                  final b = _visibleBatches[i - 2];
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                    '${_activityName(b.activityId)} · ${b.location}',
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.bold)),
-                              ),
-                              _removingId == b.id
-                                  ? const Padding(
-                                      padding: EdgeInsets.all(10),
-                                      child: SizedBox(
-                                          height: 16,
-                                          width: 16,
-                                          child: CircularProgressIndicator(
-                                              strokeWidth: 2)))
-                                  : PopupMenuButton<String>(
-                                      onSelected: (v) {
-                                        if (v == 'edit') _openForm(batch: b);
-                                        if (v == 'generate')
-                                          _generateSessions(b);
-                                        if (v == 'delete') _remove(b);
-                                      },
-                                      itemBuilder: (_) => [
-                                        const PopupMenuItem(
-                                            value: 'generate',
-                                            child: Text('Generate Sessions')),
-                                        const PopupMenuItem(
-                                            value: 'edit', child: Text('Edit')),
-                                        const PopupMenuItem(
-                                            value: 'delete',
-                                            child: Text('Delete')),
+              child: ListView(
+                padding: const EdgeInsets.only(bottom: 90),
+                children: [
+                  _coverageSection(),
+                  PinnedSearchSection(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                    search: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('All Batches',
+                            style: Theme.of(context).textTheme.titleMedium),
+                        _batchFilters(),
+                      ],
+                    ),
+                    results: Column(children: [
+                      if (_visibleBatches.isEmpty)
+                        Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Center(
+                                child: Text(_batches.isEmpty
+                                    ? 'No batches yet. Create one to schedule a recurring class.'
+                                    : 'No results found.')))
+                      else
+                        ..._visibleBatches.map((b) => Card(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                              '${_activityName(b.activityId)} · ${b.location}',
+                                              style: const TextStyle(
+                                                  fontWeight: FontWeight.bold)),
+                                        ),
+                                        _removingId == b.id
+                                            ? const Padding(
+                                                padding: EdgeInsets.all(10),
+                                                child: SizedBox(
+                                                    height: 16,
+                                                    width: 16,
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                            strokeWidth: 2)))
+                                            : PopupMenuButton<String>(
+                                                onSelected: (v) {
+                                                  if (v == 'edit')
+                                                    _openForm(batch: b);
+                                                  if (v == 'generate')
+                                                    _generateSessions(b);
+                                                  if (v == 'delete') _remove(b);
+                                                },
+                                                itemBuilder: (_) => [
+                                                  const PopupMenuItem(
+                                                      value: 'generate',
+                                                      child: Text(
+                                                          'Generate Sessions')),
+                                                  const PopupMenuItem(
+                                                      value: 'edit',
+                                                      child: Text('Edit')),
+                                                  const PopupMenuItem(
+                                                      value: 'delete',
+                                                      child: Text('Delete')),
+                                                ],
+                                              ),
                                       ],
                                     ),
-                            ],
-                          ),
-                          Text(
-                              '${b.sessionPeriod} · ${b.startTime} - ${b.endTime}',
-                              style:
-                                  const TextStyle(color: AppColors.textMuted)),
-                          Text('Coach: ${_coachName(b.coachId)}',
-                              style:
-                                  const TextStyle(color: AppColors.textMuted)),
-                          Text('Days: ${b.daysOfWeek.join(", ")}',
-                              style:
-                                  const TextStyle(color: AppColors.textMuted)),
-                          Text(
-                            b.activeMonths.length == 12
-                                ? 'Months: All year'
-                                : 'Months: ${b.activeMonths.map((m) => _monthNames[m]).join(", ")}',
-                            style: const TextStyle(color: AppColors.textMuted),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
+                                    Text(
+                                        '${b.sessionPeriod} · ${b.startTime} - ${b.endTime}',
+                                        style: const TextStyle(
+                                            color: AppColors.textMuted)),
+                                    Text('Coach: ${_coachName(b.coachId)}',
+                                        style: const TextStyle(
+                                            color: AppColors.textMuted)),
+                                    Text('Days: ${b.daysOfWeek.join(", ")}',
+                                        style: const TextStyle(
+                                            color: AppColors.textMuted)),
+                                    Text(
+                                      b.activeMonths.length == 12
+                                          ? 'Months: All year'
+                                          : 'Months: ${b.activeMonths.map((m) => _monthNames[m]).join(", ")}',
+                                      style: const TextStyle(
+                                          color: AppColors.textMuted),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )),
+                    ]),
+                  ),
+                ],
               ),
             ),
     );

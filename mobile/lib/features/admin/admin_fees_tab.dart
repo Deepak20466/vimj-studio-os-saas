@@ -4,6 +4,7 @@ import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/export_helper.dart';
 import '../../core/models.dart';
+import '../shared/pinned_search_section.dart';
 
 class AdminFeesTab extends StatefulWidget {
   const AdminFeesTab({super.key});
@@ -363,75 +364,80 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                     Text('Pending Fee Receipts (from Coaches)',
                         style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 8),
-                    TextField(
-                        decoration: InputDecoration(
-                            labelText: 'Search pending receipts',
-                            prefixIcon: const Icon(Icons.search),
-                            suffixIcon: _receiptSearch.isEmpty
-                                ? null
-                                : IconButton(
-                                    onPressed: () =>
-                                        setState(() => _receiptSearch = ''),
-                                    icon: const Icon(Icons.clear))),
-                        onChanged: (v) => setState(() => _receiptSearch = v)),
-                    Wrap(spacing: 8, children: [
-                      DropdownButton<String>(
-                          value: _receiptPeriod,
-                          hint: const Text('All periods'),
-                          items: [
-                            const DropdownMenuItem(
-                                value: '', child: Text('All periods')),
-                            ..._receiptPeriods.map((p) =>
-                                DropdownMenuItem(value: p, child: Text(p)))
-                          ],
-                          onChanged: (v) =>
-                              setState(() => _receiptPeriod = v ?? '')),
-                      if (_receiptSearch.isNotEmpty ||
-                          _receiptPeriod.isNotEmpty)
-                        TextButton(
-                            onPressed: () => setState(() {
-                                  _receiptSearch = '';
-                                  _receiptPeriod = '';
-                                }),
-                            child: const Text('Clear filters'))
-                    ]),
-                    if (_visiblePendingReceipts.isEmpty)
-                      const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: Text('No results found.')),
-                    ..._visiblePendingReceipts.map(
-                      (r) => Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          title: Text(
-                              '${_receiptStudentName(r)} — ${r.productName?.isNotEmpty == true ? "${r.productName}: " : ""}₹${r.amount} + product ${r.productAmount} = ${(double.parse(r.amount) + double.parse(r.productAmount)).toStringAsFixed(2)}'),
-                          subtitle: Text(
-                              '${r.month}/${r.year} · ${r.paymentMode}${r.decisionNote != null && r.decisionNote!.isNotEmpty ? "\n${r.decisionNote}" : ""}'),
-                          isThreeLine: r.decisionNote != null &&
-                              r.decisionNote!.isNotEmpty,
-                          trailing: _busyReceiptId == r.id
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2))
-                              : Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                        icon: const Icon(Icons.check_circle,
-                                            color: AppColors.success),
-                                        onPressed: () =>
-                                            _decideReceipt(r, true)),
-                                    IconButton(
-                                        icon: const Icon(Icons.cancel,
-                                            color: AppColors.danger),
-                                        onPressed: () =>
-                                            _decideReceipt(r, false)),
-                                  ],
-                                ),
+                    PinnedSearchSection(
+                      padding: EdgeInsets.zero,
+                      search: TextField(
+                          decoration: InputDecoration(
+                              labelText: 'Search pending receipts',
+                              prefixIcon: const Icon(Icons.search),
+                              suffixIcon: _receiptSearch.isEmpty
+                                  ? null
+                                  : IconButton(
+                                      onPressed: () =>
+                                          setState(() => _receiptSearch = ''),
+                                      icon: const Icon(Icons.clear))),
+                          onChanged: (v) => setState(() => _receiptSearch = v)),
+                      results: Column(children: [
+                        Wrap(spacing: 8, children: [
+                          DropdownButton<String>(
+                              value: _receiptPeriod,
+                              hint: const Text('All periods'),
+                              items: [
+                                const DropdownMenuItem(
+                                    value: '', child: Text('All periods')),
+                                ..._receiptPeriods.map((p) =>
+                                    DropdownMenuItem(value: p, child: Text(p)))
+                              ],
+                              onChanged: (v) =>
+                                  setState(() => _receiptPeriod = v ?? '')),
+                          if (_receiptSearch.isNotEmpty ||
+                              _receiptPeriod.isNotEmpty)
+                            TextButton(
+                                onPressed: () => setState(() {
+                                      _receiptSearch = '';
+                                      _receiptPeriod = '';
+                                    }),
+                                child: const Text('Clear filters'))
+                        ]),
+                        if (_visiblePendingReceipts.isEmpty)
+                          const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: Text('No results found.')),
+                        ..._visiblePendingReceipts.map(
+                          (r) => Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: ListTile(
+                              title: Text(
+                                  '${_receiptStudentName(r)} — ${r.productName?.isNotEmpty == true ? "${r.productName}: " : ""}₹${r.amount} + product ${r.productAmount} = ${(double.parse(r.amount) + double.parse(r.productAmount)).toStringAsFixed(2)}'),
+                              subtitle: Text(
+                                  '${r.month}/${r.year} · ${r.paymentMode}${r.decisionNote != null && r.decisionNote!.isNotEmpty ? "\n${r.decisionNote}" : ""}'),
+                              isThreeLine: r.decisionNote != null &&
+                                  r.decisionNote!.isNotEmpty,
+                              trailing: _busyReceiptId == r.id
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2))
+                                  : Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                            icon: const Icon(Icons.check_circle,
+                                                color: AppColors.success),
+                                            onPressed: () =>
+                                                _decideReceipt(r, true)),
+                                        IconButton(
+                                            icon: const Icon(Icons.cancel,
+                                                color: AppColors.danger),
+                                            onPressed: () =>
+                                                _decideReceipt(r, false)),
+                                      ],
+                                    ),
+                            ),
+                          ),
                         ),
-                      ),
+                      ]),
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -439,74 +445,79 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                     Text('Approved Fee Receipts',
                         style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 8),
-                    TextField(
-                        decoration: InputDecoration(
-                            labelText: 'Search approved receipts',
-                            prefixIcon: const Icon(Icons.search),
-                            suffixIcon: _receiptSearch.isEmpty
-                                ? null
-                                : IconButton(
-                                    onPressed: () =>
-                                        setState(() => _receiptSearch = ''),
-                                    icon: const Icon(Icons.clear))),
-                        onChanged: (v) => setState(() => _receiptSearch = v)),
-                    Wrap(spacing: 8, children: [
-                      DropdownButton<String>(
-                          value: _receiptPeriod,
-                          hint: const Text('All periods'),
-                          items: [
-                            const DropdownMenuItem(
-                                value: '', child: Text('All periods')),
-                            ..._receiptPeriods.map((p) =>
-                                DropdownMenuItem(value: p, child: Text(p)))
-                          ],
-                          onChanged: (v) =>
-                              setState(() => _receiptPeriod = v ?? '')),
-                      if (_receiptSearch.isNotEmpty ||
-                          _receiptPeriod.isNotEmpty)
-                        TextButton(
-                            onPressed: () => setState(() {
-                                  _receiptSearch = '';
-                                  _receiptPeriod = '';
-                                }),
-                            child: const Text('Clear filters'))
-                    ]),
-                    if (_visibleApprovedReceipts.isEmpty)
-                      const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: Text('No results found.')),
-                    ..._visibleApprovedReceipts.map(
-                      (r) => Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          title: Text(
-                              '${_receiptStudentName(r)} — ${r.productName?.isNotEmpty == true ? "${r.productName}: " : ""}₹${r.amount} + product ${r.productAmount} = ${(double.parse(r.amount) + double.parse(r.productAmount)).toStringAsFixed(2)}'),
-                          subtitle: Text('${r.month}/${r.year}'),
-                          trailing: _downloadingReceiptId == r.id
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2))
-                              : Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                        icon: const Icon(
-                                            Icons.picture_as_pdf_outlined),
-                                        tooltip: 'Receipt (PDF)',
-                                        onPressed: () =>
-                                            _downloadReceipt(r.id, 'pdf')),
-                                    IconButton(
-                                        icon: const Icon(
-                                            Icons.table_chart_outlined),
-                                        tooltip: 'Receipt (CSV)',
-                                        onPressed: () =>
-                                            _downloadReceipt(r.id, 'csv')),
-                                  ],
-                                ),
+                    PinnedSearchSection(
+                      padding: EdgeInsets.zero,
+                      search: TextField(
+                          decoration: InputDecoration(
+                              labelText: 'Search approved receipts',
+                              prefixIcon: const Icon(Icons.search),
+                              suffixIcon: _receiptSearch.isEmpty
+                                  ? null
+                                  : IconButton(
+                                      onPressed: () =>
+                                          setState(() => _receiptSearch = ''),
+                                      icon: const Icon(Icons.clear))),
+                          onChanged: (v) => setState(() => _receiptSearch = v)),
+                      results: Column(children: [
+                        Wrap(spacing: 8, children: [
+                          DropdownButton<String>(
+                              value: _receiptPeriod,
+                              hint: const Text('All periods'),
+                              items: [
+                                const DropdownMenuItem(
+                                    value: '', child: Text('All periods')),
+                                ..._receiptPeriods.map((p) =>
+                                    DropdownMenuItem(value: p, child: Text(p)))
+                              ],
+                              onChanged: (v) =>
+                                  setState(() => _receiptPeriod = v ?? '')),
+                          if (_receiptSearch.isNotEmpty ||
+                              _receiptPeriod.isNotEmpty)
+                            TextButton(
+                                onPressed: () => setState(() {
+                                      _receiptSearch = '';
+                                      _receiptPeriod = '';
+                                    }),
+                                child: const Text('Clear filters'))
+                        ]),
+                        if (_visibleApprovedReceipts.isEmpty)
+                          const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: Text('No results found.')),
+                        ..._visibleApprovedReceipts.map(
+                          (r) => Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: ListTile(
+                              title: Text(
+                                  '${_receiptStudentName(r)} — ${r.productName?.isNotEmpty == true ? "${r.productName}: " : ""}₹${r.amount} + product ${r.productAmount} = ${(double.parse(r.amount) + double.parse(r.productAmount)).toStringAsFixed(2)}'),
+                              subtitle: Text('${r.month}/${r.year}'),
+                              trailing: _downloadingReceiptId == r.id
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2))
+                                  : Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                            icon: const Icon(
+                                                Icons.picture_as_pdf_outlined),
+                                            tooltip: 'Receipt (PDF)',
+                                            onPressed: () =>
+                                                _downloadReceipt(r.id, 'pdf')),
+                                        IconButton(
+                                            icon: const Icon(
+                                                Icons.table_chart_outlined),
+                                            tooltip: 'Receipt (CSV)',
+                                            onPressed: () =>
+                                                _downloadReceipt(r.id, 'csv')),
+                                      ],
+                                    ),
+                            ),
+                          ),
                         ),
-                      ),
+                      ]),
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -514,72 +525,84 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                     Text('Pending Fee Reminder Drafts (from Coaches)',
                         style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 8),
-                    TextField(
-                        decoration: InputDecoration(
-                            labelText: 'Search reminder drafts',
-                            prefixIcon: const Icon(Icons.search),
-                            suffixIcon: _reminderSearch.isEmpty
-                                ? null
-                                : IconButton(
-                                    onPressed: () =>
-                                        setState(() => _reminderSearch = ''),
-                                    icon: const Icon(Icons.clear))),
-                        onChanged: (v) => setState(() => _reminderSearch = v)),
-                    if (_reminderSearch.isNotEmpty)
-                      TextButton(
-                          onPressed: () => setState(() => _reminderSearch = ''),
-                          child: const Text('Clear search')),
-                    if (_visibleReminders.isEmpty)
-                      const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: Text('No results found.')),
-                    ..._visibleReminders.map(
-                      (d) => Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                  '${d.studentName ?? _studentNames[d.studentId] ?? "Student #${d.studentId}"} · ${d.month}/${d.year}',
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 4),
-                              Text(d.message),
-                              const SizedBox(height: 8),
-                              _busyReminderId == d.id
-                                  ? const Center(
-                                      child: SizedBox(
-                                          width: 20,
-                                          height: 20,
-                                          child: CircularProgressIndicator(
-                                              strokeWidth: 2)))
-                                  : Row(
-                                      children: [
-                                        OutlinedButton(
-                                            onPressed: () =>
-                                                _copyMessage(d.message),
-                                            child: const Text('Copy')),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                            child: OutlinedButton(
+                    PinnedSearchSection(
+                      padding: EdgeInsets.zero,
+                      search: Column(children: [
+                        TextField(
+                            decoration: InputDecoration(
+                                labelText: 'Search reminder drafts',
+                                prefixIcon: const Icon(Icons.search),
+                                suffixIcon: _reminderSearch.isEmpty
+                                    ? null
+                                    : IconButton(
+                                        onPressed: () => setState(
+                                            () => _reminderSearch = ''),
+                                        icon: const Icon(Icons.clear))),
+                            onChanged: (v) =>
+                                setState(() => _reminderSearch = v)),
+                        if (_reminderSearch.isNotEmpty)
+                          TextButton(
+                              onPressed: () =>
+                                  setState(() => _reminderSearch = ''),
+                              child: const Text('Clear search')),
+                      ]),
+                      results: Column(children: [
+                        if (_visibleReminders.isEmpty)
+                          const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: Text('No results found.')),
+                        ..._visibleReminders.map(
+                          (d) => Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                      '${d.studentName ?? _studentNames[d.studentId] ?? "Student #${d.studentId}"} · ${d.month}/${d.year}',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 4),
+                                  Text(d.message),
+                                  const SizedBox(height: 8),
+                                  _busyReminderId == d.id
+                                      ? const Center(
+                                          child: SizedBox(
+                                              width: 20,
+                                              height: 20,
+                                              child: CircularProgressIndicator(
+                                                  strokeWidth: 2)))
+                                      : Row(
+                                          children: [
+                                            OutlinedButton(
                                                 onPressed: () =>
-                                                    _decideReminder(d, false),
-                                                child: const Text('Reject'))),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                            child: ElevatedButton(
-                                                onPressed: () =>
-                                                    _decideReminder(d, true),
-                                                child: const Text(
-                                                    'Approve & Send'))),
-                                      ],
-                                    ),
-                            ],
+                                                    _copyMessage(d.message),
+                                                child: const Text('Copy')),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                                child: OutlinedButton(
+                                                    onPressed: () =>
+                                                        _decideReminder(
+                                                            d, false),
+                                                    child:
+                                                        const Text('Reject'))),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                                child: ElevatedButton(
+                                                    onPressed: () =>
+                                                        _decideReminder(
+                                                            d, true),
+                                                    child: const Text(
+                                                        'Approve & Send'))),
+                                          ],
+                                        ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                      ]),
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -612,156 +635,168 @@ class _AdminFeesTabState extends State<AdminFeesTab> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  TextField(
-                    decoration: const InputDecoration(
-                        hintText: 'Search by student name or month/year...',
-                        prefixIcon: Icon(Icons.search)),
-                    onChanged: (v) => setState(() => _search = v),
-                  ),
-                  Wrap(spacing: 8, runSpacing: 4, children: [
-                    DropdownButton<String?>(
-                        value: _feeStatusFilter,
-                        hint: const Text('All statuses'),
-                        items: const [
-                          DropdownMenuItem<String?>(
-                              value: null, child: Text('All statuses')),
-                          DropdownMenuItem<String?>(
-                              value: 'PAID', child: Text('Paid')),
-                          DropdownMenuItem<String?>(
-                              value: 'UNPAID', child: Text('Unpaid')),
-                          DropdownMenuItem<String?>(
-                              value: 'OVERDUE', child: Text('Overdue'))
-                        ],
-                        onChanged: (v) => setState(() => _feeStatusFilter = v)),
-                    DropdownButton<String>(
-                        value: _feePeriodFilter,
-                        hint: const Text('All periods'),
-                        items: [
-                          const DropdownMenuItem(
-                              value: '', child: Text('All periods')),
-                          ..._feePeriods.map(
-                              (p) => DropdownMenuItem(value: p, child: Text(p)))
-                        ],
-                        onChanged: (v) =>
-                            setState(() => _feePeriodFilter = v ?? '')),
-                    if (_search.isNotEmpty ||
-                        _feeStatusFilter != null ||
-                        _feePeriodFilter.isNotEmpty)
-                      TextButton(
-                          onPressed: () => setState(() {
-                                _search = '';
-                                _feeStatusFilter = null;
-                                _feePeriodFilter = '';
-                              }),
-                          child: const Text('Clear filters'))
-                  ]),
-                  const SizedBox(height: 8),
-                  Text('Fee records',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  if (_fees.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Center(
-                          child: Text(_unpaidOnly
-                              ? 'No outstanding fees. Everyone is paid up.'
-                              : 'No fee records yet.')),
-                    )
-                  else if (_visibleFees.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: const Center(child: Text('No results found.')),
-                    )
-                  else
-                    ..._visibleFees.map(
-                      (f) => Card(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        child: Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                      child: Text(_feeStudentName(f),
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold))),
-                                  Chip(
-                                    label: Text(f.status,
-                                        style: const TextStyle(
-                                            color: Colors.white, fontSize: 11)),
-                                    backgroundColor: _statusColor(f.status),
-                                    visualDensity: VisualDensity.compact,
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                  '${f.month}/${f.year} · ₹${f.amount} + products ${f.productAmount} = ${(double.parse(f.amount) + double.parse(f.productAmount)).toStringAsFixed(2)} · balance ₹${f.balanceAmount} · due ${f.dueDate}',
-                                  style: const TextStyle(
-                                      color: AppColors.textMuted)),
-                              const SizedBox(height: 12),
-                              Row(
-                                children: [
-                                  if (f.status != 'PAID') ...[
-                                    Expanded(
-                                        child: OutlinedButton(
-                                            onPressed: () => _remind(f),
-                                            child: const Text('Remind'))),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                        child: ElevatedButton(
-                                            onPressed: () => _markPaid(f),
-                                            child: const Text('Mark Paid'))),
-                                  ] else if (_downloadingReceiptId == f.id)
-                                    const Expanded(
-                                        child: Center(
-                                            child: SizedBox(
-                                                width: 20,
-                                                height: 20,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                        strokeWidth: 2))))
-                                  else ...[
-                                    Expanded(
-                                        child: OutlinedButton(
-                                            onPressed: () =>
-                                                _downloadFeeReceipt(f, 'pdf'),
-                                            child: const Text('PDF'))),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                        child: OutlinedButton(
-                                            onPressed: () =>
-                                                _downloadFeeReceipt(f, 'csv'),
-                                            child: const Text('CSV'))),
-                                  ],
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Expanded(
-                                      child: TextButton(
-                                          onPressed: () => _openEdit(f),
-                                          child: const Text('Edit'))),
-                                  Expanded(
-                                    child: TextButton(
-                                      onPressed: () => _remove(f),
-                                      style: TextButton.styleFrom(
-                                          foregroundColor: AppColors.danger),
-                                      child: const Text('Delete'),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                  PinnedSearchSection(
+                    padding: EdgeInsets.zero,
+                    search: TextField(
+                      decoration: const InputDecoration(
+                          hintText: 'Search by student name or month/year...',
+                          prefixIcon: Icon(Icons.search)),
+                      onChanged: (v) => setState(() => _search = v),
+                    ),
+                    results: Column(children: [
+                      Wrap(spacing: 8, runSpacing: 4, children: [
+                        DropdownButton<String?>(
+                            value: _feeStatusFilter,
+                            hint: const Text('All statuses'),
+                            items: const [
+                              DropdownMenuItem<String?>(
+                                  value: null, child: Text('All statuses')),
+                              DropdownMenuItem<String?>(
+                                  value: 'PAID', child: Text('Paid')),
+                              DropdownMenuItem<String?>(
+                                  value: 'UNPAID', child: Text('Unpaid')),
+                              DropdownMenuItem<String?>(
+                                  value: 'OVERDUE', child: Text('Overdue'))
                             ],
+                            onChanged: (v) =>
+                                setState(() => _feeStatusFilter = v)),
+                        DropdownButton<String>(
+                            value: _feePeriodFilter,
+                            hint: const Text('All periods'),
+                            items: [
+                              const DropdownMenuItem(
+                                  value: '', child: Text('All periods')),
+                              ..._feePeriods.map((p) =>
+                                  DropdownMenuItem(value: p, child: Text(p)))
+                            ],
+                            onChanged: (v) =>
+                                setState(() => _feePeriodFilter = v ?? '')),
+                        if (_search.isNotEmpty ||
+                            _feeStatusFilter != null ||
+                            _feePeriodFilter.isNotEmpty)
+                          TextButton(
+                              onPressed: () => setState(() {
+                                    _search = '';
+                                    _feeStatusFilter = null;
+                                    _feePeriodFilter = '';
+                                  }),
+                              child: const Text('Clear filters'))
+                      ]),
+                      const SizedBox(height: 8),
+                      Text('Fee records',
+                          style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: 8),
+                      if (_fees.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Center(
+                              child: Text(_unpaidOnly
+                                  ? 'No outstanding fees. Everyone is paid up.'
+                                  : 'No fee records yet.')),
+                        )
+                      else if (_visibleFees.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: const Center(child: Text('No results found.')),
+                        )
+                      else
+                        ..._visibleFees.map(
+                          (f) => Card(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            child: Padding(
+                              padding: const EdgeInsets.all(14),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                          child: Text(_feeStudentName(f),
+                                              style: const TextStyle(
+                                                  fontWeight:
+                                                      FontWeight.bold))),
+                                      Chip(
+                                        label: Text(f.status,
+                                            style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 11)),
+                                        backgroundColor: _statusColor(f.status),
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                      '${f.month}/${f.year} · ₹${f.amount} + products ${f.productAmount} = ${(double.parse(f.amount) + double.parse(f.productAmount)).toStringAsFixed(2)} · balance ₹${f.balanceAmount} · due ${f.dueDate}',
+                                      style: const TextStyle(
+                                          color: AppColors.textMuted)),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      if (f.status != 'PAID') ...[
+                                        Expanded(
+                                            child: OutlinedButton(
+                                                onPressed: () => _remind(f),
+                                                child: const Text('Remind'))),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                            child: ElevatedButton(
+                                                onPressed: () => _markPaid(f),
+                                                child:
+                                                    const Text('Mark Paid'))),
+                                      ] else if (_downloadingReceiptId == f.id)
+                                        const Expanded(
+                                            child: Center(
+                                                child: SizedBox(
+                                                    width: 20,
+                                                    height: 20,
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                            strokeWidth: 2))))
+                                      else ...[
+                                        Expanded(
+                                            child: OutlinedButton(
+                                                onPressed: () =>
+                                                    _downloadFeeReceipt(
+                                                        f, 'pdf'),
+                                                child: const Text('PDF'))),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                            child: OutlinedButton(
+                                                onPressed: () =>
+                                                    _downloadFeeReceipt(
+                                                        f, 'csv'),
+                                                child: const Text('CSV'))),
+                                      ],
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                          child: TextButton(
+                                              onPressed: () => _openEdit(f),
+                                              child: const Text('Edit'))),
+                                      Expanded(
+                                        child: TextButton(
+                                          onPressed: () => _remove(f),
+                                          style: TextButton.styleFrom(
+                                              foregroundColor:
+                                                  AppColors.danger),
+                                          child: const Text('Delete'),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
+                    ]),
+                  ),
                 ],
               ),
             ),

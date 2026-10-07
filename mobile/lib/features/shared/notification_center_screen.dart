@@ -3,12 +3,14 @@ import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/models.dart';
 import '../../core/notification_polling_service.dart';
+import 'pinned_search_section.dart';
 
 class NotificationCenterScreen extends StatefulWidget {
   const NotificationCenterScreen({super.key});
 
   @override
-  State<NotificationCenterScreen> createState() => _NotificationCenterScreenState();
+  State<NotificationCenterScreen> createState() =>
+      _NotificationCenterScreenState();
 }
 
 class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
@@ -16,9 +18,14 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
   bool _loading = true;
   String _search = '';
   String? _statusFilter;
-  List<AppNotification> get _visibleItems => _items.where((n) =>
-      '${n.title} ${n.message} ${n.type}'.toLowerCase().contains(_search.trim().toLowerCase()) &&
-      (_statusFilter == null || (_statusFilter == 'UNREAD' ? !n.isRead : n.isRead))).toList();
+  List<AppNotification> get _visibleItems => _items
+      .where((n) =>
+          '${n.title} ${n.message} ${n.type}'
+              .toLowerCase()
+              .contains(_search.trim().toLowerCase()) &&
+          (_statusFilter == null ||
+              (_statusFilter == 'UNREAD' ? !n.isRead : n.isRead)))
+      .toList();
 
   @override
   void initState() {
@@ -29,10 +36,15 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final data = await ApiClient.instance.get('/notifications') as Map<String, dynamic>;
-      _items = (data['items'] as List).map((e) => AppNotification.fromJson(e as Map<String, dynamic>)).toList();
+      final data = await ApiClient.instance.get('/notifications')
+          as Map<String, dynamic>;
+      _items = (data['items'] as List)
+          .map((e) => AppNotification.fromJson(e as Map<String, dynamic>))
+          .toList();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -47,8 +59,14 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
           final i = _items.indexWhere((x) => x.id == n.id);
           if (i != -1) {
             _items[i] = AppNotification(
-              id: n.id, type: n.type, title: n.title, message: n.message,
-              link: n.link, delayMinutes: n.delayMinutes, isRead: true, createdAt: n.createdAt,
+              id: n.id,
+              type: n.type,
+              title: n.title,
+              message: n.message,
+              link: n.link,
+              delayMinutes: n.delayMinutes,
+              isRead: true,
+              createdAt: n.createdAt,
             );
           }
         });
@@ -63,7 +81,9 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
       await ApiClient.instance.put('/notifications/read-all');
       _load();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -74,10 +94,14 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
         setState(() => _items.removeWhere((x) => x.id == n.id));
       }
       if (!n.isRead) {
-        NotificationPollingService.unreadCount.value = (NotificationPollingService.unreadCount.value - 1).clamp(0, 1 << 30);
+        NotificationPollingService.unreadCount.value =
+            (NotificationPollingService.unreadCount.value - 1)
+                .clamp(0, 1 << 30);
       }
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -88,8 +112,13 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
         title: const Text('Delete all notifications?'),
         content: const Text('This clears your entire notification list.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete all', style: TextStyle(color: AppColors.danger))),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete all',
+                  style: TextStyle(color: AppColors.danger))),
         ],
       ),
     );
@@ -99,7 +128,9 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
       if (mounted) setState(() => _items = []);
       NotificationPollingService.unreadCount.value = 0;
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -113,6 +144,41 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     return '${diff.inDays}d ago';
   }
 
+  Widget _buildSearchFilters() => Column(
+        children: [
+          TextField(
+              decoration: InputDecoration(
+                  labelText: 'Search notifications',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _search.isEmpty
+                      ? null
+                      : IconButton(
+                          onPressed: () => setState(() => _search = ''),
+                          icon: const Icon(Icons.clear))),
+              onChanged: (v) => setState(() => _search = v)),
+          Wrap(spacing: 8, children: [
+            DropdownButton<String?>(
+                value: _statusFilter,
+                hint: const Text('All notifications'),
+                items: const [
+                  DropdownMenuItem<String?>(
+                      value: null, child: Text('All notifications')),
+                  DropdownMenuItem<String?>(
+                      value: 'UNREAD', child: Text('Unread')),
+                  DropdownMenuItem<String?>(value: 'READ', child: Text('Read'))
+                ],
+                onChanged: (v) => setState(() => _statusFilter = v)),
+            if (_search.isNotEmpty || _statusFilter != null)
+              TextButton(
+                  onPressed: () => setState(() {
+                        _search = '';
+                        _statusFilter = null;
+                      }),
+                  child: const Text('Clear filters'))
+          ])
+        ],
+      );
+
   @override
   Widget build(BuildContext context) {
     final hasUnread = _items.any((n) => !n.isRead);
@@ -120,8 +186,16 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
       appBar: AppBar(
         title: const Text('Notifications'),
         actions: [
-          if (hasUnread) TextButton(onPressed: _markAllRead, child: const Text('Mark all read', style: TextStyle(color: Colors.white))),
-          if (_items.isNotEmpty) TextButton(onPressed: _removeAll, child: const Text('Clear all', style: TextStyle(color: Colors.white))),
+          if (hasUnread)
+            TextButton(
+                onPressed: _markAllRead,
+                child: const Text('Mark all read',
+                    style: TextStyle(color: Colors.white))),
+          if (_items.isNotEmpty)
+            TextButton(
+                onPressed: _removeAll,
+                child: const Text('Clear all',
+                    style: TextStyle(color: Colors.white))),
         ],
       ),
       body: _loading
@@ -129,36 +203,69 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
           : RefreshIndicator(
               onRefresh: _load,
               child: _items.isEmpty
-                  ? ListView(children: const [Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No notifications yet.')))])
-                  : _visibleItems.isEmpty
-                      ? ListView(padding: const EdgeInsets.all(12), children: [TextField(decoration: InputDecoration(labelText: 'Search notifications', prefixIcon: const Icon(Icons.search), suffixIcon: _search.isEmpty ? null : IconButton(onPressed: () => setState(() => _search = ''), icon: const Icon(Icons.clear))), onChanged: (v) => setState(() => _search = v)), DropdownButton<String?>(value: _statusFilter, hint: const Text('All notifications'), items: const [DropdownMenuItem<String?>(value: null, child: Text('All notifications')), DropdownMenuItem<String?>(value: 'UNREAD', child: Text('Unread')), DropdownMenuItem<String?>(value: 'READ', child: Text('Read'))], onChanged: (v) => setState(() => _statusFilter = v)), if (_search.isNotEmpty || _statusFilter != null) TextButton(onPressed: () => setState(() { _search = ''; _statusFilter = null; }), child: const Text('Clear filters')), const Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No results found.')))] )
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(12),
-                      itemCount: _visibleItems.length + 1,
-                      separatorBuilder: (_, __) => const SizedBox(height: 6),
-                      itemBuilder: (context, i) {
-                        if (i == 0) return Column(children: [TextField(decoration: InputDecoration(labelText: 'Search notifications', prefixIcon: const Icon(Icons.search), suffixIcon: _search.isEmpty ? null : IconButton(onPressed: () => setState(() => _search = ''), icon: const Icon(Icons.clear))), onChanged: (v) => setState(() => _search = v)), Wrap(spacing: 8, children: [DropdownButton<String?>(value: _statusFilter, hint: const Text('All notifications'), items: const [DropdownMenuItem<String?>(value: null, child: Text('All notifications')), DropdownMenuItem<String?>(value: 'UNREAD', child: Text('Unread')), DropdownMenuItem<String?>(value: 'READ', child: Text('Read'))], onChanged: (v) => setState(() => _statusFilter = v)), if (_search.isNotEmpty || _statusFilter != null) TextButton(onPressed: () => setState(() { _search = ''; _statusFilter = null; }), child: const Text('Clear filters'))])]);
-                        final n = _visibleItems[i - 1];
-                        return Card(
-                          color: n.isRead ? null : AppColors.brandOrange.withOpacity(0.08),
-                          child: ListTile(
-                            onTap: () => _markRead(n),
-                            title: Text(n.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                            subtitle: Text(n.message, style: const TextStyle(fontSize: 12.5)),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(_timeAgo(n.createdAt), style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.textMuted),
-                                  tooltip: 'Delete',
-                                  onPressed: () => _remove(n),
+                  ? ListView(children: const [
+                      Padding(
+                          padding: EdgeInsets.all(32),
+                          child: Center(child: Text('No notifications yet.')))
+                    ])
+                  : ListView(
+                      padding: EdgeInsets.zero,
+                      children: [
+                        PinnedSearchSection(
+                          padding: const EdgeInsets.all(12),
+                          search: _buildSearchFilters(),
+                          results: _visibleItems.isEmpty
+                              ? const Padding(
+                                  padding: EdgeInsets.all(32),
+                                  child:
+                                      Center(child: Text('No results found.')))
+                              : ListView.separated(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  padding: EdgeInsets.zero,
+                                  itemCount: _visibleItems.length,
+                                  separatorBuilder: (_, __) =>
+                                      const SizedBox(height: 6),
+                                  itemBuilder: (context, i) {
+                                    final n = _visibleItems[i];
+                                    return Card(
+                                      color: n.isRead
+                                          ? null
+                                          : AppColors.brandOrange
+                                              .withOpacity(0.08),
+                                      child: ListTile(
+                                        onTap: () => _markRead(n),
+                                        title: Text(n.title,
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13)),
+                                        subtitle: Text(n.message,
+                                            style: const TextStyle(
+                                                fontSize: 12.5)),
+                                        trailing: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(_timeAgo(n.createdAt),
+                                                style: const TextStyle(
+                                                    fontSize: 11,
+                                                    color:
+                                                        AppColors.textMuted)),
+                                            IconButton(
+                                              icon: const Icon(
+                                                  Icons.delete_outline,
+                                                  size: 18,
+                                                  color: AppColors.textMuted),
+                                              tooltip: 'Delete',
+                                              onPressed: () => _remove(n),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
+                        ),
+                      ],
                     ),
             ),
     );

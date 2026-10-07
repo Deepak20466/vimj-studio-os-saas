@@ -22,6 +22,10 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _bootstrap() async {
+    // Begin waking the API before reading local session state so the health
+    // request can overlap startup and the first dashboard or login request.
+    unawaited(ApiClient.instance.warmUp());
+
     // A stored session is trusted on its own — no re-authentication gate on every
     // app open. The client's explicit ask (2026-09-14): once logged in, stay logged
     // in until Logout is pressed; the backend's rotating 30-day refresh token
@@ -36,9 +40,6 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!mounted) return;
 
     if (session == null) {
-      // Start waking the production API before the login form is displayed.
-      // LoginScreen joins this request, so credential entry can overlap startup.
-      unawaited(ApiClient.instance.warmUp());
       _goToLogin();
       return;
     }
@@ -47,16 +48,19 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   void _goToLogin() {
-    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
+    Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const LoginScreen()));
   }
 
   void _goToHome(String role) {
     switch (role) {
       case 'COACH':
-        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const CoachHome()));
+        Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const CoachHome()));
         break;
       case 'ADMIN':
-        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const AdminHome()));
+        Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const AdminHome()));
         break;
       default:
         // The backend rejects student logins outright, so a stored session
@@ -74,7 +78,11 @@ class _SplashScreenState extends State<SplashScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [AppColors.brandOrangeBright, AppColors.brandOrangeDark, AppColors.brandYellowBright],
+            colors: [
+              AppColors.brandOrangeBright,
+              AppColors.brandOrangeDark,
+              AppColors.brandYellowBright
+            ],
             stops: [0.0, 0.55, 1.0],
           ),
         ),
@@ -84,13 +92,19 @@ class _SplashScreenState extends State<SplashScreen> {
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
-                child: Image.asset('assets/images/logo.jpeg', width: 100, height: 100, fit: BoxFit.contain),
+                decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20)),
+                child: Image.asset('assets/images/logo.jpeg',
+                    width: 100, height: 100, fit: BoxFit.contain),
               ),
               const SizedBox(height: 16),
               const Text(
                 'VIMJ Studio',
-                style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
               const CircularProgressIndicator(color: Colors.white),

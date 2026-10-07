@@ -239,6 +239,12 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
+    await tester.scrollUntilVisible(
+      find.text('Student Attendance'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
     await _enterSearch(tester, 'maya not confirm');
     expect(find.text('Maya Sharma'), findsOneWidget);
 

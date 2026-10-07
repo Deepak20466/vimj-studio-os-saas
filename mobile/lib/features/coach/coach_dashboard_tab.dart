@@ -8,6 +8,7 @@ import '../../core/offline_queue.dart';
 import '../../core/sync_service.dart';
 import 'mark_attendance_screen.dart';
 import '../shared/notification_bell_action.dart';
+import '../shared/pinned_search_section.dart';
 
 const _myAttendanceStatusLabels = {
   'PRESENT': 'Present',
@@ -328,82 +329,93 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
                 ),
               ),
             const SizedBox(height: 8),
-            Text("Today's Classes",
-                style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            TextField(
-                decoration: InputDecoration(
-                    labelText: 'Search classes',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _classSearch.isEmpty
-                        ? null
-                        : IconButton(
-                            onPressed: () => setState(() => _classSearch = ''),
-                            icon: const Icon(Icons.clear))),
-                onChanged: (v) => setState(() => _classSearch = v)),
-            Wrap(spacing: 8, children: [
-              DropdownButton<int?>(
-                  value: _activityFilter,
-                  hint: const Text('All activities'),
-                  items: [
-                    const DropdownMenuItem<int?>(
-                        value: null, child: Text('All activities')),
-                    ..._classes.map((c) => c.activityId).toSet().map((id) =>
-                        DropdownMenuItem<int?>(
-                            value: id, child: Text('Activity #$id')))
-                  ],
-                  onChanged: (v) => setState(() => _activityFilter = v)),
-              if (_classSearch.isNotEmpty || _activityFilter != null)
-                TextButton(
-                    onPressed: () => setState(() {
-                          _classSearch = '';
-                          _activityFilter = null;
-                        }),
-                    child: const Text('Clear filters'))
-            ]),
-            if (!_classesLoaded)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_classes.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: Text('No classes scheduled today.')),
-              )
-            else if (_visibleClasses.isEmpty)
-              const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24),
-                  child: Center(child: Text('No results found.')))
-            else
-              ..._visibleClasses.map((c) {
-                final s = _summaries[c.id];
-                return Card(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: ListTile(
-                      leading: const Icon(Icons.fitness_center),
-                      title: Text('${c.startTime} - ${c.endTime}'),
-                      subtitle: s == null
-                          ? const Text('Loading class details...')
-                          : s.isEmpty
-                              ? const Text('-')
-                              : Text(
-                                  'Students: ${s['enrolled_count']} · Marked: ${s['marked_count']} · Paid/Unpaid: ${s['fee_paid_count']}/${s['fee_unpaid_count']}',
-                                  style: const TextStyle(fontSize: 12)),
-                      isThreeLine: s != null && s.isNotEmpty,
-                      trailing: ElevatedButton(
-                        onPressed: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                              builder: (_) =>
-                                  MarkAttendanceScreen(classSession: c)),
+            PinnedSearchSection(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              search: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("Today's Classes",
+                      style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  TextField(
+                      decoration: InputDecoration(
+                          labelText: 'Search classes',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: _classSearch.isEmpty
+                              ? null
+                              : IconButton(
+                                  onPressed: () =>
+                                      setState(() => _classSearch = ''),
+                                  icon: const Icon(Icons.clear))),
+                      onChanged: (v) => setState(() => _classSearch = v)),
+                ],
+              ),
+              results: Column(children: [
+                Wrap(spacing: 8, children: [
+                  DropdownButton<int?>(
+                      value: _activityFilter,
+                      hint: const Text('All activities'),
+                      items: [
+                        const DropdownMenuItem<int?>(
+                            value: null, child: Text('All activities')),
+                        ..._classes.map((c) => c.activityId).toSet().map((id) =>
+                            DropdownMenuItem<int?>(
+                                value: id, child: Text('Activity #$id')))
+                      ],
+                      onChanged: (v) => setState(() => _activityFilter = v)),
+                  if (_classSearch.isNotEmpty || _activityFilter != null)
+                    TextButton(
+                        onPressed: () => setState(() {
+                              _classSearch = '';
+                              _activityFilter = null;
+                            }),
+                        child: const Text('Clear filters'))
+                ]),
+                if (!_classesLoaded)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (_classes.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: Text('No classes scheduled today.')),
+                  )
+                else if (_visibleClasses.isEmpty)
+                  const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(child: Text('No results found.')))
+                else
+                  ..._visibleClasses.map((c) {
+                    final s = _summaries[c.id];
+                    return Card(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: ListTile(
+                          leading: const Icon(Icons.fitness_center),
+                          title: Text('${c.startTime} - ${c.endTime}'),
+                          subtitle: s == null
+                              ? const Text('Loading class details...')
+                              : s.isEmpty
+                                  ? const Text('-')
+                                  : Text(
+                                      'Students: ${s['enrolled_count']} · Marked: ${s['marked_count']} · Paid/Unpaid: ${s['fee_paid_count']}/${s['fee_unpaid_count']}',
+                                      style: const TextStyle(fontSize: 12)),
+                          isThreeLine: s != null && s.isNotEmpty,
+                          trailing: ElevatedButton(
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      MarkAttendanceScreen(classSession: c)),
+                            ),
+                            child: const Text('Mark'),
+                          ),
                         ),
-                        child: const Text('Mark'),
                       ),
-                    ),
-                  ),
-                );
-              }),
+                    );
+                  }),
+              ]),
+            ),
           ],
         ),
       ),

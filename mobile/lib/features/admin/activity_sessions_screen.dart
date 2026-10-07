@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/models.dart';
+import '../shared/pinned_search_section.dart';
 
 const _allDays = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 const _allMonths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
@@ -263,78 +264,90 @@ class _ActivitySessionsScreenState extends State<ActivitySessionsScreen> {
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _load,
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(0, 0, 0, 90),
-                itemCount:
-                    1 + (_visibleBatches.isEmpty ? 1 : _visibleBatches.length),
-                itemBuilder: (context, i) {
-                  if (i == 0) return _filters();
-                  if (_visibleBatches.isEmpty) {
-                    return Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Center(
-                        child: Text(_batches.isEmpty
-                            ? 'No sessions scheduled yet for this activity.'
-                            : 'No results found.'),
-                      ),
-                    );
-                  }
-                  final b = _visibleBatches[i - 1];
-                  return Card(
-                    margin: const EdgeInsets.fromLTRB(12, 4, 12, 10),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                  child: Text(
-                                      '${_sessionLabel(b.sessionPeriod)} · ${b.startTime}-${b.endTime}',
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold))),
-                              _removingId == b.id
-                                  ? const Padding(
-                                      padding: EdgeInsets.all(10),
-                                      child: SizedBox(
-                                          height: 16,
-                                          width: 16,
-                                          child: CircularProgressIndicator(
-                                              strokeWidth: 2)))
-                                  : PopupMenuButton<String>(
-                                      onSelected: (v) {
-                                        if (v == 'roster') _openRoster(b);
-                                        if (v == 'edit') _openForm(batch: b);
-                                        if (v == 'delete') _remove(b);
-                                      },
-                                      itemBuilder: (_) => [
-                                        const PopupMenuItem(
-                                            value: 'roster',
-                                            child: Text('Roster')),
-                                        const PopupMenuItem(
-                                            value: 'edit', child: Text('Edit')),
-                                        const PopupMenuItem(
-                                            value: 'delete',
-                                            child: Text('Delete')),
-                                      ],
-                                    ),
-                            ],
+              child: ListView(
+                padding: const EdgeInsets.only(bottom: 90),
+                children: [
+                  PinnedSearchSection(
+                    padding: EdgeInsets.zero,
+                    search: _filters(),
+                    results: ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount:
+                          _visibleBatches.isEmpty ? 1 : _visibleBatches.length,
+                      itemBuilder: (context, i) {
+                        if (_visibleBatches.isEmpty) {
+                          return Padding(
+                            padding: const EdgeInsets.all(32),
+                            child: Center(
+                              child: Text(_batches.isEmpty
+                                  ? 'No sessions scheduled yet for this activity.'
+                                  : 'No results found.'),
+                            ),
+                          );
+                        }
+                        final b = _visibleBatches[i];
+                        return Card(
+                          margin: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                        child: Text(
+                                            '${_sessionLabel(b.sessionPeriod)} · ${b.startTime}-${b.endTime}',
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.bold))),
+                                    _removingId == b.id
+                                        ? const Padding(
+                                            padding: EdgeInsets.all(10),
+                                            child: SizedBox(
+                                                height: 16,
+                                                width: 16,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                        strokeWidth: 2)))
+                                        : PopupMenuButton<String>(
+                                            onSelected: (v) {
+                                              if (v == 'roster') _openRoster(b);
+                                              if (v == 'edit')
+                                                _openForm(batch: b);
+                                              if (v == 'delete') _remove(b);
+                                            },
+                                            itemBuilder: (_) => [
+                                              const PopupMenuItem(
+                                                  value: 'roster',
+                                                  child: Text('Roster')),
+                                              const PopupMenuItem(
+                                                  value: 'edit',
+                                                  child: Text('Edit')),
+                                              const PopupMenuItem(
+                                                  value: 'delete',
+                                                  child: Text('Delete')),
+                                            ],
+                                          ),
+                                  ],
+                                ),
+                                Text('Days: ${b.daysOfWeek.join(", ")}',
+                                    style: const TextStyle(
+                                        color: AppColors.textMuted)),
+                                Text('Location: ${b.location}',
+                                    style: const TextStyle(
+                                        color: AppColors.textMuted)),
+                                Text('Coach: ${_coachName(b.coachId)}',
+                                    style: const TextStyle(
+                                        color: AppColors.textMuted)),
+                              ],
+                            ),
                           ),
-                          Text('Days: ${b.daysOfWeek.join(", ")}',
-                              style:
-                                  const TextStyle(color: AppColors.textMuted)),
-                          Text('Location: ${b.location}',
-                              style:
-                                  const TextStyle(color: AppColors.textMuted)),
-                          Text('Coach: ${_coachName(b.coachId)}',
-                              style:
-                                  const TextStyle(color: AppColors.textMuted)),
-                        ],
-                      ),
+                        );
+                      },
                     ),
-                  );
-                },
+                  ),
+                ],
               ),
             ),
     );

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/models.dart';
+import '../shared/pinned_search_section.dart';
 import '../shared/theme_toggle_tile.dart';
 
 class AdminSettingsTab extends StatefulWidget {
@@ -384,82 +385,92 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
           ],
         ),
         const SizedBox(height: 8),
-        TextField(
-          decoration: InputDecoration(
-            hintText: 'Search by name or email...',
-            prefixIcon: const Icon(Icons.search),
-            suffixIcon: _coachSearch.isEmpty
-                ? null
-                : IconButton(
-                    tooltip: 'Clear search',
-                    icon: const Icon(Icons.clear),
-                    onPressed: () => setState(() => _coachSearch = ''),
-                  ),
+        PinnedSearchSection(
+          padding: EdgeInsets.zero,
+          search: TextField(
+            decoration: InputDecoration(
+              hintText: 'Search by name or email...',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _coachSearch.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Clear search',
+                      icon: const Icon(Icons.clear),
+                      onPressed: () => setState(() => _coachSearch = ''),
+                    ),
+            ),
+            onChanged: (v) => setState(() => _coachSearch = v),
           ),
-          onChanged: (v) => setState(() => _coachSearch = v),
-        ),
-        const SizedBox(height: 12),
-        _loadingCoaches
-            ? const Padding(
-                padding: EdgeInsets.all(16),
-                child: Center(child: CircularProgressIndicator()))
-            : _visibleCoaches.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Center(
-                        child: Text(_coaches.isEmpty && _coachSearch.isEmpty
-                            ? 'No coaches found.'
-                            : 'No results found.')))
-                : Column(
-                    children: _visibleCoaches
-                        .map((c) => Card(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              child: ListTile(
-                                title: Row(
-                                  children: [
-                                    Flexible(
-                                        child: Text(c.name,
-                                            style: const TextStyle(
-                                                fontWeight: FontWeight.bold),
-                                            overflow: TextOverflow.ellipsis)),
-                                    const SizedBox(width: 8),
-                                    Chip(
-                                      label: Text(
-                                          c.isActive ? 'Active' : 'Inactive',
-                                          style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 11)),
-                                      backgroundColor: c.isActive
-                                          ? AppColors.success
-                                          : AppColors.danger,
-                                      visualDensity: VisualDensity.compact,
-                                      materialTapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
+          results: Column(children: [
+            const SizedBox(height: 12),
+            _loadingCoaches
+                ? const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(child: CircularProgressIndicator()))
+                : _visibleCoaches.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Center(
+                            child: Text(_coaches.isEmpty && _coachSearch.isEmpty
+                                ? 'No coaches found.'
+                                : 'No results found.')))
+                    : Column(
+                        children: _visibleCoaches
+                            .map((c) => Card(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  child: ListTile(
+                                    title: Row(
+                                      children: [
+                                        Flexible(
+                                            child: Text(c.name,
+                                                style: const TextStyle(
+                                                    fontWeight:
+                                                        FontWeight.bold),
+                                                overflow:
+                                                    TextOverflow.ellipsis)),
+                                        const SizedBox(width: 8),
+                                        Chip(
+                                          label: Text(
+                                              c.isActive
+                                                  ? 'Active'
+                                                  : 'Inactive',
+                                              style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 11)),
+                                          backgroundColor: c.isActive
+                                              ? AppColors.success
+                                              : AppColors.danger,
+                                          visualDensity: VisualDensity.compact,
+                                          materialTapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                                subtitle: Text(c.email),
-                                trailing: PopupMenuButton<String>(
-                                  onSelected: (v) {
-                                    if (v == 'credentials')
-                                      _openCoachCredentials(c);
-                                    if (v == 'toggle') _toggleCoachActive(c);
-                                  },
-                                  itemBuilder: (_) => [
-                                    const PopupMenuItem(
-                                        value: 'credentials',
-                                        child: Text('Change Login')),
-                                    PopupMenuItem(
-                                        value: 'toggle',
-                                        child: Text(c.isActive
-                                            ? 'Deactivate'
-                                            : 'Activate')),
-                                  ],
-                                ),
-                              ),
-                            ))
-                        .toList(),
-                  ),
+                                    subtitle: Text(c.email),
+                                    trailing: PopupMenuButton<String>(
+                                      onSelected: (v) {
+                                        if (v == 'credentials')
+                                          _openCoachCredentials(c);
+                                        if (v == 'toggle')
+                                          _toggleCoachActive(c);
+                                      },
+                                      itemBuilder: (_) => [
+                                        const PopupMenuItem(
+                                            value: 'credentials',
+                                            child: Text('Change Login')),
+                                        PopupMenuItem(
+                                            value: 'toggle',
+                                            child: Text(c.isActive
+                                                ? 'Deactivate'
+                                                : 'Activate')),
+                                      ],
+                                    ),
+                                  ),
+                                ))
+                            .toList(),
+                      ),
+          ]),
+        ),
         const SizedBox(height: 24),
         Container(
           padding: const EdgeInsets.all(16),

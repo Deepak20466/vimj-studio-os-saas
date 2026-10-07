@@ -7,6 +7,7 @@ import '../../core/app_theme.dart';
 import '../../core/auth_storage.dart';
 import '../../core/models.dart';
 import '../shared/notification_bell_action.dart';
+import '../shared/pinned_search_section.dart';
 
 const _feeReminderMessage =
     "Hi this is VIMJ Studio and it is an reminder for fee payment is pending for the sos "
@@ -341,142 +342,157 @@ class _CoachStudentsTabState extends State<CoachStudentsTab> {
                   : ListView(
                       padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
                       children: [
-                        TextField(
-                            decoration: InputDecoration(
-                                labelText: 'Search student name or phone',
-                                prefixIcon: const Icon(Icons.search),
-                                suffixIcon: _rosterSearch.isEmpty
-                                    ? null
-                                    : IconButton(
-                                        onPressed: () =>
-                                            setState(() => _rosterSearch = ''),
-                                        icon: const Icon(Icons.clear))),
-                            onChanged: (v) =>
-                                setState(() => _rosterSearch = v)),
-                        Wrap(spacing: 8, children: [
-                          DropdownButton<int?>(
-                              value: _activityFilter,
-                              hint: const Text('All activities'),
-                              items: [
-                                const DropdownMenuItem<int?>(
-                                    value: null, child: Text('All activities')),
-                                ..._activities.map((a) =>
-                                    DropdownMenuItem<int?>(
-                                        value: a.activityId,
-                                        child: Text(a.activityName)))
-                              ],
+                        PinnedSearchSection(
+                          padding: EdgeInsets.zero,
+                          search: TextField(
+                              decoration: InputDecoration(
+                                  labelText: 'Search student name or phone',
+                                  prefixIcon: const Icon(Icons.search),
+                                  suffixIcon: _rosterSearch.isEmpty
+                                      ? null
+                                      : IconButton(
+                                          onPressed: () => setState(
+                                              () => _rosterSearch = ''),
+                                          icon: const Icon(Icons.clear))),
                               onChanged: (v) =>
-                                  setState(() => _activityFilter = v)),
-                          if (_rosterSearch.isNotEmpty ||
-                              _activityFilter != null)
-                            TextButton(
-                                onPressed: () => setState(() {
-                                      _rosterSearch = '';
-                                      _activityFilter = null;
-                                    }),
-                                child: const Text('Clear filters'))
-                        ]),
-                        ..._activities
-                            .where((a) =>
-                                _activityFilter == null ||
-                                a.activityId == _activityFilter)
-                            .map((a) {
-                          final roster = _rosterByActivity[a.activityId] ?? [];
-                          final visibleRoster = roster
-                              .where((s) =>
-                                  '${s.name} ${s.phone ?? ''} ${s.phoneSecondary ?? ''} ${s.email}'
-                                      .toLowerCase()
-                                      .contains(
-                                          _rosterSearch.trim().toLowerCase()))
-                              .toList();
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(a.activityName,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16)),
-                                  const SizedBox(height: 6),
-                                  if (roster.isEmpty)
-                                    const Padding(
-                                        padding:
-                                            EdgeInsets.symmetric(vertical: 8),
-                                        child: Text('No students enrolled yet.',
-                                            style: TextStyle(
-                                                color: AppColors.textMuted)))
-                                  else if (visibleRoster.isEmpty)
-                                    const Padding(
-                                        padding:
-                                            EdgeInsets.symmetric(vertical: 8),
-                                        child: Text('No results found.',
-                                            style: TextStyle(
-                                                color: AppColors.textMuted)))
-                                  else
-                                    ...visibleRoster.map((s) => ListTile(
-                                          contentPadding: EdgeInsets.zero,
-                                          leading: CircleAvatar(
-                                            radius: 20,
-                                            backgroundImage: _photos[s.id] !=
-                                                    null
-                                                ? MemoryImage(_photos[s.id]!)
-                                                : null,
-                                            child: _photos[s.id] == null
-                                                ? const Icon(
-                                                    Icons.person_outline)
-                                                : null,
-                                          ),
-                                          title: Text(s.name),
-                                          subtitle: Text(
-                                              "${s.phone ?? '-'} / ${s.phoneSecondary ?? '-'}"),
-                                          trailing: PopupMenuButton<String>(
-                                            onSelected: (v) {
-                                              if (v == 'copy')
-                                                _copyFeeReminder();
-                                              if (v == 'photo')
-                                                _capturePhoto(s);
-                                              if (v == 'delete_photo')
-                                                _deletePhoto(s);
-                                              if (v == 'edit') _openEdit(s);
-                                              if (v == 'delete')
-                                                _removeStudent(s);
-                                            },
-                                            itemBuilder: (_) => [
-                                              const PopupMenuItem(
-                                                  value: 'copy',
-                                                  child: Text(
-                                                      'Copy Fee Reminder')),
-                                              const PopupMenuItem(
-                                                  value: 'photo',
-                                                  child: Text('Capture Photo')),
-                                              const PopupMenuItem(
-                                                  value: 'delete_photo',
-                                                  child: Text('Delete Photo')),
-                                              const PopupMenuItem(
-                                                  value: 'edit',
-                                                  child: Text('Edit')),
-                                              const PopupMenuItem(
-                                                  value: 'delete',
-                                                  child: Text('Delete')),
-                                            ],
-                                          ),
-                                        )),
-                                ],
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                        if (_activities
-                            .where((a) =>
-                                _activityFilter == null ||
-                                a.activityId == _activityFilter)
-                            .isEmpty)
-                          const Padding(
-                              padding: EdgeInsets.all(20),
-                              child: Text('No results found.')),
+                                  setState(() => _rosterSearch = v)),
+                          results: Column(children: [
+                            Wrap(spacing: 8, children: [
+                              DropdownButton<int?>(
+                                  value: _activityFilter,
+                                  hint: const Text('All activities'),
+                                  items: [
+                                    const DropdownMenuItem<int?>(
+                                        value: null,
+                                        child: Text('All activities')),
+                                    ..._activities.map((a) =>
+                                        DropdownMenuItem<int?>(
+                                            value: a.activityId,
+                                            child: Text(a.activityName)))
+                                  ],
+                                  onChanged: (v) =>
+                                      setState(() => _activityFilter = v)),
+                              if (_rosterSearch.isNotEmpty ||
+                                  _activityFilter != null)
+                                TextButton(
+                                    onPressed: () => setState(() {
+                                          _rosterSearch = '';
+                                          _activityFilter = null;
+                                        }),
+                                    child: const Text('Clear filters'))
+                            ]),
+                            ..._activities
+                                .where((a) =>
+                                    _activityFilter == null ||
+                                    a.activityId == _activityFilter)
+                                .map((a) {
+                              final roster =
+                                  _rosterByActivity[a.activityId] ?? [];
+                              final visibleRoster = roster
+                                  .where((s) =>
+                                      '${s.name} ${s.phone ?? ''} ${s.phoneSecondary ?? ''} ${s.email}'
+                                          .toLowerCase()
+                                          .contains(_rosterSearch
+                                              .trim()
+                                              .toLowerCase()))
+                                  .toList();
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(a.activityName,
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16)),
+                                      const SizedBox(height: 6),
+                                      if (roster.isEmpty)
+                                        const Padding(
+                                            padding: EdgeInsets.symmetric(
+                                                vertical: 8),
+                                            child: Text(
+                                                'No students enrolled yet.',
+                                                style: TextStyle(
+                                                    color:
+                                                        AppColors.textMuted)))
+                                      else if (visibleRoster.isEmpty)
+                                        const Padding(
+                                            padding: EdgeInsets.symmetric(
+                                                vertical: 8),
+                                            child: Text('No results found.',
+                                                style: TextStyle(
+                                                    color:
+                                                        AppColors.textMuted)))
+                                      else
+                                        ...visibleRoster.map((s) => ListTile(
+                                              contentPadding: EdgeInsets.zero,
+                                              leading: CircleAvatar(
+                                                radius: 20,
+                                                backgroundImage:
+                                                    _photos[s.id] != null
+                                                        ? MemoryImage(
+                                                            _photos[s.id]!)
+                                                        : null,
+                                                child: _photos[s.id] == null
+                                                    ? const Icon(
+                                                        Icons.person_outline)
+                                                    : null,
+                                              ),
+                                              title: Text(s.name),
+                                              subtitle: Text(
+                                                  "${s.phone ?? '-'} / ${s.phoneSecondary ?? '-'}"),
+                                              trailing: PopupMenuButton<String>(
+                                                onSelected: (v) {
+                                                  if (v == 'copy')
+                                                    _copyFeeReminder();
+                                                  if (v == 'photo')
+                                                    _capturePhoto(s);
+                                                  if (v == 'delete_photo')
+                                                    _deletePhoto(s);
+                                                  if (v == 'edit') _openEdit(s);
+                                                  if (v == 'delete')
+                                                    _removeStudent(s);
+                                                },
+                                                itemBuilder: (_) => [
+                                                  const PopupMenuItem(
+                                                      value: 'copy',
+                                                      child: Text(
+                                                          'Copy Fee Reminder')),
+                                                  const PopupMenuItem(
+                                                      value: 'photo',
+                                                      child: Text(
+                                                          'Capture Photo')),
+                                                  const PopupMenuItem(
+                                                      value: 'delete_photo',
+                                                      child:
+                                                          Text('Delete Photo')),
+                                                  const PopupMenuItem(
+                                                      value: 'edit',
+                                                      child: Text('Edit')),
+                                                  const PopupMenuItem(
+                                                      value: 'delete',
+                                                      child: Text('Delete')),
+                                                ],
+                                              ),
+                                            )),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                            if (_activities
+                                .where((a) =>
+                                    _activityFilter == null ||
+                                    a.activityId == _activityFilter)
+                                .isEmpty)
+                              const Padding(
+                                  padding: EdgeInsets.all(20),
+                                  child: Text('No results found.')),
+                          ]),
+                        ),
                       ],
                     ),
             ),

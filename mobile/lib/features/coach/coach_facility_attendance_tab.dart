@@ -15,10 +15,12 @@ class CoachFacilityAttendanceTab extends StatefulWidget {
   const CoachFacilityAttendanceTab({super.key});
 
   @override
-  State<CoachFacilityAttendanceTab> createState() => _CoachFacilityAttendanceTabState();
+  State<CoachFacilityAttendanceTab> createState() =>
+      _CoachFacilityAttendanceTabState();
 }
 
-class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab> {
+class _CoachFacilityAttendanceTabState
+    extends State<CoachFacilityAttendanceTab> {
   int? _coachId;
 
   List<dynamic> _myAttendance = [];
@@ -29,6 +31,7 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
   List<AdminAttendanceRecord> _records = [];
   bool _recordsLoading = true;
   String _attendanceSearch = '';
+  bool _showStudentAttendanceRecords = true;
   String? _attendanceStatusFilter;
   String? _approvalFilter;
   int? _activityFilter;
@@ -55,10 +58,13 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
     if (_coachId == null) return;
     setState(() => _myAttendanceLoading = true);
     try {
-      final data = await ApiClient.instance.get('/coaches/$_coachId/attendance') as List;
+      final data =
+          await ApiClient.instance.get('/coaches/$_coachId/attendance') as List;
       _myAttendance = data;
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _myAttendanceLoading = false);
     }
@@ -71,9 +77,13 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
         'date_from': _isoDate(_monthStart),
         'date_to': _isoDate(_monthEnd),
       }) as List;
-      _records = data.map((e) => AdminAttendanceRecord.fromJson(e as Map<String, dynamic>)).toList();
+      _records = data
+          .map((e) => AdminAttendanceRecord.fromJson(e as Map<String, dynamic>))
+          .toList();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _recordsLoading = false);
     }
@@ -114,12 +124,20 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
 
   Future<void> _export(String kind, {String? day}) async {
     try {
-      final query = <String, dynamic>{'month': _viewMonth.month, 'year': _viewMonth.year, 'kind': kind, 'fmt': 'pdf'};
+      final query = <String, dynamic>{
+        'month': _viewMonth.month,
+        'year': _viewMonth.year,
+        'kind': kind,
+        'fmt': 'pdf'
+      };
       if (day != null) query['day'] = int.parse(day.substring(8, 10));
       final bytes = await ApiClient.instance.getBytes('/reports', query: query);
-      await shareExportedFile(bytes, '${kind}_${_viewMonth.year}_${_viewMonth.month}${day == null ? '' : '_$day'}.pdf');
+      await shareExportedFile(bytes,
+          '${kind}_${_viewMonth.year}_${_viewMonth.month}${day == null ? '' : '_$day'}.pdf');
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -141,7 +159,8 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
     }
   }
 
-  String _approvalLabel(String status) => status == 'PENDING' ? 'Awaiting Admin' : status;
+  String _approvalLabel(String status) =>
+      status == 'PENDING' ? 'Awaiting Admin' : status;
 
   Future<void> _viewPhoto(AdminAttendanceRecord r) async {
     showDialog(
@@ -152,7 +171,9 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
           width: 280,
           height: 280,
           child: FutureBuilder<Uint8List>(
-            future: ApiClient.instance.getBytes('/attendance/selfie/${r.id}').then((b) => Uint8List.fromList(b)),
+            future: ApiClient.instance
+                .getBytes('/attendance/selfie/${r.id}')
+                .then((b) => Uint8List.fromList(b)),
             builder: (ctx, snapshot) {
               if (snapshot.connectionState != ConnectionState.done) {
                 return const Center(child: CircularProgressIndicator());
@@ -160,11 +181,16 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
               if (snapshot.hasError || !snapshot.hasData) {
                 return const Center(child: Text('Photo not available.'));
               }
-              return ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.memory(snapshot.data!, fit: BoxFit.contain));
+              return ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.memory(snapshot.data!, fit: BoxFit.contain));
             },
           ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Close'))
+        ],
       ),
     );
   }
@@ -200,7 +226,9 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
         decoration: BoxDecoration(
           color: isSelected ? AppColors.brandLight : AppColors.bg,
           border: Border.all(
-            color: isToday || isSelected ? AppColors.brandOrange : AppColors.textMuted.withOpacity(0.25),
+            color: isToday || isSelected
+                ? AppColors.brandOrange
+                : AppColors.textMuted.withOpacity(0.25),
             width: isToday || isSelected ? 1.4 : 1,
           ),
           borderRadius: BorderRadius.circular(8),
@@ -208,16 +236,21 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${day.day}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+            Text('${day.day}',
+                style:
+                    const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
             const SizedBox(height: 2),
             Row(
               children: [
-                if (facility != null) _dot(_statusColor(facility['status'] as String)),
+                if (facility != null)
+                  _dot(_statusColor(facility['status'] as String)),
                 ...statuses.map((s) => _dot(_statusColor(s))),
               ],
             ),
             if (students.isNotEmpty)
-              Text('${students.length}', style: const TextStyle(fontSize: 9, color: AppColors.textMuted)),
+              Text('${students.length}',
+                  style:
+                      const TextStyle(fontSize: 9, color: AppColors.textMuted)),
           ],
         ),
       ),
@@ -229,7 +262,9 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
       children: [
         Row(
           children: [
-            IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => _goMonth(-1)),
+            IconButton(
+                icon: const Icon(Icons.chevron_left),
+                onPressed: () => _goMonth(-1)),
             Expanded(
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -255,10 +290,13 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
                 ],
               ),
             ),
-            IconButton(icon: const Icon(Icons.chevron_right), onPressed: () => _goMonth(1)),
+            IconButton(
+                icon: const Icon(Icons.chevron_right),
+                onPressed: () => _goMonth(1)),
           ],
         ),
-        if (_recordsLoading || _myAttendanceLoading) const LinearProgressIndicator(),
+        if (_recordsLoading || _myAttendanceLoading)
+          const LinearProgressIndicator(),
         const SizedBox(height: 8),
         GridView.count(
           crossAxisCount: 7,
@@ -270,17 +308,26 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
           children: [
             for (final w in const ['S', 'M', 'T', 'W', 'T', 'F', 'S'])
               Center(
-                child: Text(w, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+                child: Text(w,
+                    style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textMuted)),
               ),
             for (var i = 0; i < _leadingBlanks; i++) const SizedBox.shrink(),
-            for (var d = 1; d <= _daysInMonth; d++) _dayCell(DateTime(_viewMonth.year, _viewMonth.month, d)),
+            for (var d = 1; d <= _daysInMonth; d++)
+              _dayCell(DateTime(_viewMonth.year, _viewMonth.month, d)),
           ],
         ),
       ],
     );
   }
 
-  Widget _buildDetailPanel() {
+  Widget _buildDetailPanel({
+    bool includeHeader = true,
+    bool includeToolbar = true,
+    bool includeResults = true,
+  }) {
     final key = _selectedDate;
     if (key == null) {
       return const Text(
@@ -293,127 +340,257 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
     final visibleStudents = students
         .where((r) =>
             matchesSearchQuery(
-                  [
-                    r.studentName,
-                    r.activityName,
-                    r.status,
-                    r.approvalStatus,
-                    r.classDate,
-                    r.timestamp,
-                    r.id,
-                    r.studentId,
-                    r.classId,
-                    r.activityId,
-                    r.coachName,
-                  ],
-                  _attendanceSearch,
-                ) &&
+              [
+                r.studentName,
+                r.activityName,
+                r.status,
+                r.approvalStatus,
+                r.classDate,
+                r.timestamp,
+                r.id,
+                r.studentId,
+                r.classId,
+                r.activityId,
+                r.coachName,
+              ],
+              _attendanceSearch,
+            ) &&
             (_attendanceStatusFilter == null ||
                 r.status == _attendanceStatusFilter) &&
-            (_approvalFilter == null || r.approvalStatus == _approvalFilter) &&
+            (_approvalFilter == null || _approvalFilter == r.approvalStatus) &&
             (_activityFilter == null || r.activityId == _activityFilter))
         .toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(DateFormat('EEEE, MMM d, yyyy').format(DateTime.parse(key)), style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 14),
-        Text('My Facility Attendance', style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 6),
-        if (facility == null)
-          const Text('No facility attendance marked on this date.', style: TextStyle(fontSize: 12, color: AppColors.textMuted))
-        else
-          Wrap(
-            spacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
+        if (includeHeader) ...[
+          Text(DateFormat('EEEE, MMM d, yyyy').format(DateTime.parse(key)),
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 14),
+          Text('My Facility Attendance',
+              style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 6),
+          if (facility == null)
+            const Text('No facility attendance marked on this date.',
+                style: TextStyle(fontSize: 12, color: AppColors.textMuted))
+          else
+            Wrap(
+              spacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Chip(
+                  label: Text(facility['status'] as String,
+                      style:
+                          const TextStyle(fontSize: 10, color: Colors.white)),
+                  backgroundColor: _statusColor(facility['status'] as String),
+                  visualDensity: VisualDensity.compact,
+                ),
+                Text(
+                    'Marked at ${_fmtTime(facility['entry_time'] as String?)} — locked',
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.textMuted)),
+              ],
+            ),
+          const SizedBox(height: 18),
+          Row(
             children: [
-              Chip(
-                label: Text(facility['status'] as String, style: const TextStyle(fontSize: 10, color: Colors.white)),
-                backgroundColor: _statusColor(facility['status'] as String),
-                visualDensity: VisualDensity.compact,
+              Expanded(
+                child: Text('Student Attendance',
+                    style: Theme.of(context).textTheme.titleSmall),
               ),
-              Text('Marked at ${_fmtTime(facility['entry_time'] as String?)} — locked', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+              if (!_showStudentAttendanceRecords)
+                Tooltip(
+                  message: '${visibleStudents.length} matching student records',
+                  child: Chip(
+                    label: Text('${visibleStudents.length}'),
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              if (!_showStudentAttendanceRecords)
+                TextButton.icon(
+                  key: const ValueKey('toggle-coach-student-attendance'),
+                  onPressed: () =>
+                      setState(() => _showStudentAttendanceRecords = true),
+                  icon: const Icon(Icons.visibility_outlined),
+                  label: const Text('Show'),
+                ),
             ],
           ),
-        const SizedBox(height: 18),
-        Text('Student Attendance', style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 6),
-        TextField(
-          decoration: InputDecoration(
-            labelText: 'Search attendance',
-            hintText: 'Student, activity, or status',
-            prefixIcon: const Icon(Icons.search),
-            suffixIcon: _attendanceSearch.isEmpty
-                ? null
-                : IconButton(
-                    icon: const Icon(Icons.clear),
-                    tooltip: 'Clear search',
-                    onPressed: () => setState(() => _attendanceSearch = ''),
-                  ),
-            border: const OutlineInputBorder(),
-            isDense: true,
+        ],
+        if (includeToolbar && _showStudentAttendanceRecords)
+          _buildStudentAttendanceToolbar(),
+        if (includeResults && _showStudentAttendanceRecords) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              DropdownButton<String?>(
+                value: _attendanceStatusFilter,
+                hint: const Text('All statuses'),
+                items: const [
+                  DropdownMenuItem<String?>(
+                      value: null, child: Text('All statuses')),
+                  DropdownMenuItem<String?>(
+                      value: 'PRESENT', child: Text('Present')),
+                  DropdownMenuItem<String?>(
+                      value: 'ABSENT', child: Text('Absent')),
+                  DropdownMenuItem<String?>(
+                      value: 'LEAVE', child: Text('Leave')),
+                  DropdownMenuItem<String?>(
+                      value: 'NOT_CONFIRM', child: Text('Not Confirm')),
+                ],
+                onChanged: (v) => setState(() => _attendanceStatusFilter = v),
+              ),
+              DropdownButton<String?>(
+                value: _approvalFilter,
+                hint: const Text('All reviews'),
+                items: const [
+                  DropdownMenuItem<String?>(
+                      value: null, child: Text('All reviews')),
+                  DropdownMenuItem<String?>(
+                      value: 'PENDING', child: Text('Pending')),
+                  DropdownMenuItem<String?>(
+                      value: 'APPROVED', child: Text('Approved')),
+                  DropdownMenuItem<String?>(
+                      value: 'REJECTED', child: Text('Rejected')),
+                ],
+                onChanged: (v) => setState(() => _approvalFilter = v),
+              ),
+              DropdownButton<int?>(
+                value: _activityFilter,
+                hint: const Text('All activities'),
+                items: [
+                  const DropdownMenuItem<int?>(
+                      value: null, child: Text('All activities')),
+                  ...{
+                    for (final record in students)
+                      record.activityId: record.activityName,
+                  }.entries.map((entry) => DropdownMenuItem<int?>(
+                        value: entry.key,
+                        child: Text(entry.value),
+                      )),
+                ],
+                onChanged: (v) => setState(() => _activityFilter = v),
+              ),
+              if (_attendanceSearch.isNotEmpty ||
+                  _attendanceStatusFilter != null ||
+                  _approvalFilter != null ||
+                  _activityFilter != null)
+                TextButton(
+                  onPressed: () => setState(() {
+                    _attendanceSearch = '';
+                    _attendanceStatusFilter = null;
+                    _approvalFilter = null;
+                    _activityFilter = null;
+                  }),
+                  child: const Text('Clear filters'),
+                ),
+            ],
           ),
-          onChanged: (value) => setState(() => _attendanceSearch = value),
-        ),
-        const SizedBox(height: 8),
-        Wrap(spacing: 8, children: [DropdownButton<String?>(value: _attendanceStatusFilter, hint: const Text('All statuses'), items: const [DropdownMenuItem<String?>(value: null, child: Text('All statuses')), DropdownMenuItem<String?>(value: 'PRESENT', child: Text('Present')), DropdownMenuItem<String?>(value: 'ABSENT', child: Text('Absent')), DropdownMenuItem<String?>(value: 'LEAVE', child: Text('Leave')), DropdownMenuItem<String?>(value: 'NOT_CONFIRM', child: Text('Not Confirm'))], onChanged: (v) => setState(() => _attendanceStatusFilter = v)), DropdownButton<String?>(value: _approvalFilter, hint: const Text('All reviews'), items: const [DropdownMenuItem<String?>(value: null, child: Text('All reviews')), DropdownMenuItem<String?>(value: 'PENDING', child: Text('Pending')), DropdownMenuItem<String?>(value: 'APPROVED', child: Text('Approved')), DropdownMenuItem<String?>(value: 'REJECTED', child: Text('Rejected'))], onChanged: (v) => setState(() => _approvalFilter = v)), DropdownButton<int?>(value: _activityFilter, hint: const Text('All activities'), items: [const DropdownMenuItem<int?>(value: null, child: Text('All activities')), ...{for (final r in students) r.activityId: r.activityName}.entries.map((e) => DropdownMenuItem<int?>(value: e.key, child: Text(e.value)))], onChanged: (v) => setState(() => _activityFilter = v)), if (_attendanceSearch.isNotEmpty || _attendanceStatusFilter != null || _approvalFilter != null || _activityFilter != null) TextButton(onPressed: () => setState(() { _attendanceSearch = ''; _attendanceStatusFilter = null; _approvalFilter = null; _activityFilter = null; }), child: const Text('Clear filters'))]),
-        if (students.isEmpty)
-          const Text('No student attendance marked on this date.', style: TextStyle(fontSize: 12, color: AppColors.textMuted))
-        else if (visibleStudents.isEmpty)
-          const Text('No student attendance matches this search.', style: TextStyle(fontSize: 12, color: AppColors.textMuted))
-        else
-          ...visibleStudents.map((r) => Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.textMuted.withOpacity(0.2)),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(r.studentName,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Wrap(
-                            alignment: WrapAlignment.end,
-                            spacing: 4,
-                            children: [
-                              Chip(
-                                label: Text(r.status,
-                                    style: const TextStyle(
-                                        fontSize: 10, color: Colors.white)),
-                                backgroundColor: _statusColor(r.status),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                              Chip(
-                                label: Text(_approvalLabel(r.approvalStatus),
-                                    style: const TextStyle(
-                                        fontSize: 10, color: Colors.white)),
-                                backgroundColor:
-                                    _approvalColor(r.approvalStatus),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            ],
+          if (students.isEmpty)
+            const Text('No student attendance marked on this date.',
+                style: TextStyle(fontSize: 12, color: AppColors.textMuted))
+          else if (visibleStudents.isEmpty)
+            const Text('No student attendance matches this search.',
+                style: TextStyle(fontSize: 12, color: AppColors.textMuted))
+          else
+            ...visibleStudents.map((r) => Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    border:
+                        Border.all(color: AppColors.textMuted.withOpacity(0.2)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(r.studentName,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold)),
                           ),
-                        ),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Wrap(
+                              alignment: WrapAlignment.end,
+                              spacing: 4,
+                              children: [
+                                Chip(
+                                  label: Text(r.status,
+                                      style: const TextStyle(
+                                          fontSize: 10, color: Colors.white)),
+                                  backgroundColor: _statusColor(r.status),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                Chip(
+                                  label: Text(_approvalLabel(r.approvalStatus),
+                                      style: const TextStyle(
+                                          fontSize: 10, color: Colors.white)),
+                                  backgroundColor:
+                                      _approvalColor(r.approvalStatus),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(r.activityName,
+                          style: const TextStyle(
+                              color: AppColors.textMuted, fontSize: 12)),
+                      if (r.hasSelfie) ...[
+                        const SizedBox(height: 6),
+                        OutlinedButton(
+                            onPressed: () => _viewPhoto(r),
+                            child: const Text('View Photo')),
                       ],
-                    ),
-                    Text(r.activityName, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-                    if (r.hasSelfie) ...[
-                      const SizedBox(height: 6),
-                      OutlinedButton(onPressed: () => _viewPhoto(r), child: const Text('View Photo')),
                     ],
-                  ],
-                ),
-              )),
+                  ),
+                )),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildStudentAttendanceToolbar() {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            decoration: InputDecoration(
+              labelText: 'Search attendance',
+              hintText: 'Student, activity, or status',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _attendanceSearch.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.clear),
+                      tooltip: 'Clear search',
+                      onPressed: () => setState(() => _attendanceSearch = ''),
+                    ),
+              border: const OutlineInputBorder(),
+              isDense: true,
+            ),
+            onChanged: (value) => setState(() => _attendanceSearch = value),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Tooltip(
+          message: 'Hide student attendance records',
+          child: TextButton.icon(
+            key: const ValueKey('toggle-coach-student-attendance'),
+            onPressed: () =>
+                setState(() => _showStudentAttendanceRecords = false),
+            icon: const Icon(Icons.visibility_off_outlined),
+            label: const Text('Hide'),
+          ),
+        ),
       ],
     );
   }
@@ -421,31 +598,153 @@ class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Attendance'), actions: const [NotificationBellAction(), SizedBox(width: 4)]),
+      appBar: AppBar(
+          title: const Text('Attendance'),
+          actions: const [NotificationBellAction(), SizedBox(width: 4)]),
       body: RefreshIndicator(
         onRefresh: () async {
           await _loadMyAttendance();
           await _loadMonthRecords();
         },
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Wrap(spacing: 8, children: [
-              OutlinedButton(onPressed: _selectedDate == null ? null : () => _export('classes_detail', day: _selectedDate), child: const Text('Day Classes & Attendance PDF')),
-              OutlinedButton(onPressed: () => _export('students_summary'), child: const Text('Monthly Attendance & Classes PDF')),
-              OutlinedButton(onPressed: () => _export('fees_paid'), child: const Text('Fees Paid PDF')),
-              OutlinedButton(onPressed: () => _export('fees_pending'), child: const Text('Fees Pending PDF')),
-            ]),
-            Card(
-              child: Padding(padding: const EdgeInsets.all(14), child: _buildCalendar()),
+        child: CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.all(16),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  Wrap(spacing: 8, children: [
+                    OutlinedButton(
+                        onPressed: _selectedDate == null
+                            ? null
+                            : () =>
+                                _export('classes_detail', day: _selectedDate),
+                        child: const Text('Day Classes & Attendance PDF')),
+                    OutlinedButton(
+                        onPressed: () => _export('students_summary'),
+                        child: const Text('Monthly Attendance & Classes PDF')),
+                    OutlinedButton(
+                        onPressed: () => _export('fees_paid'),
+                        child: const Text('Fees Paid PDF')),
+                    OutlinedButton(
+                        onPressed: () => _export('fees_pending'),
+                        child: const Text('Fees Pending PDF')),
+                  ]),
+                  Card(
+                    child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: _buildCalendar()),
+                  ),
+                  const SizedBox(height: 16),
+                ]),
+              ),
             ),
-            const SizedBox(height: 16),
-            Card(
-              child: Padding(padding: const EdgeInsets.all(14), child: _buildDetailPanel()),
+            if (_selectedDate == null)
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                sliver: SliverToBoxAdapter(
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: _buildDetailPanel(),
+                    ),
+                  ),
+                ),
+              )
+            else if (_showStudentAttendanceRecords)
+              SliverMainAxisGroup(
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    sliver: SliverToBoxAdapter(
+                      child: Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: _buildDetailPanel(
+                            includeToolbar: false,
+                            includeResults: false,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SliverPersistentHeader(
+                    pinned: true,
+                    delegate: _CoachAttendanceSearchHeaderDelegate(
+                      child: _buildStudentAttendanceToolbar(),
+                    ),
+                  ),
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    sliver: SliverToBoxAdapter(
+                      child: Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: _buildDetailPanel(
+                            includeHeader: false,
+                            includeToolbar: false,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 72)),
+                ],
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                sliver: SliverToBoxAdapter(
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: _buildDetailPanel(
+                        includeToolbar: false,
+                        includeResults: false,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            const SliverPadding(
+              padding: EdgeInsets.only(bottom: 90),
+              sliver: SliverToBoxAdapter(child: SizedBox.shrink()),
             ),
           ],
         ),
       ),
     );
   }
+}
+
+class _CoachAttendanceSearchHeaderDelegate
+    extends SliverPersistentHeaderDelegate {
+  const _CoachAttendanceSearchHeaderDelegate({required this.child});
+
+  final Widget child;
+
+  @override
+  double get minExtent => 68;
+
+  @override
+  double get maxExtent => 68;
+
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    final theme = Theme.of(context);
+    return SizedBox.expand(
+      child: Material(
+        color: theme.colorScheme.surface,
+        elevation: overlapsContent ? 2 : 0,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(_CoachAttendanceSearchHeaderDelegate oldDelegate) =>
+      child != oldDelegate.child;
 }

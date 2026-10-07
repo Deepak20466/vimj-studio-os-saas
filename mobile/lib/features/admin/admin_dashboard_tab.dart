@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/dismissed_items.dart';
+import '../shared/pinned_search_section.dart';
 
 const _missingAttendanceDismissKey = 'missing_attendance';
 
@@ -493,55 +494,66 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Coaches Missing Attendance Today',
-                    style:
-                        TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                const SizedBox(height: 8),
-                TextField(
-                    decoration: InputDecoration(
-                        labelText: 'Search coach, activity, or date',
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: _missingSearch.isEmpty
-                            ? null
-                            : IconButton(
-                                onPressed: () =>
-                                    setState(() => _missingSearch = ''),
-                                icon: const Icon(Icons.clear))),
-                    onChanged: (v) => setState(() => _missingSearch = v)),
-                if (!_missingLoaded)
-                  const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: Center(child: CircularProgressIndicator()))
-                else if (_missingFailed && _missing.isEmpty)
-                  const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: Text(
-                          'Attendance alerts are unavailable. Pull to retry.'))
-                else if (_missing.isEmpty)
-                  const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: Text(
-                          'All coaches have marked attendance for ended classes today.'))
-                else if (_visibleMissing.isEmpty)
-                  const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: Text('No results found.'))
-                else
-                  ..._visibleMissing.map((m) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(m['coach_name'] ?? '-'),
-                        subtitle: Text(
-                            '${m['activity_name'] ?? '-'} · ${m['date'] ?? ''} · ends ${m['end_time'] ?? ''}'),
-                        leading: const Icon(Icons.warning_amber_rounded,
-                            color: AppColors.warning),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline,
-                              color: AppColors.danger),
-                          tooltip: 'Dismiss this alert',
-                          onPressed: () =>
-                              _dismissMissing(m as Map<String, dynamic>),
-                        ),
-                      )),
+                PinnedSearchSection(
+                  padding: EdgeInsets.zero,
+                  backgroundColor: Colors.white,
+                  search: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Coaches Missing Attendance Today',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 16)),
+                      const SizedBox(height: 8),
+                      TextField(
+                          decoration: InputDecoration(
+                              labelText: 'Search coach, activity, or date',
+                              prefixIcon: const Icon(Icons.search),
+                              suffixIcon: _missingSearch.isEmpty
+                                  ? null
+                                  : IconButton(
+                                      onPressed: () =>
+                                          setState(() => _missingSearch = ''),
+                                      icon: const Icon(Icons.clear))),
+                          onChanged: (v) => setState(() => _missingSearch = v)),
+                    ],
+                  ),
+                  results: Column(children: [
+                    if (!_missingLoaded)
+                      const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Center(child: CircularProgressIndicator()))
+                    else if (_missingFailed && _missing.isEmpty)
+                      const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Text(
+                              'Attendance alerts are unavailable. Pull to retry.'))
+                    else if (_missing.isEmpty)
+                      const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Text(
+                              'All coaches have marked attendance for ended classes today.'))
+                    else if (_visibleMissing.isEmpty)
+                      const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Text('No results found.'))
+                    else
+                      ..._visibleMissing.map((m) => ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(m['coach_name'] ?? '-'),
+                            subtitle: Text(
+                                '${m['activity_name'] ?? '-'} · ${m['date'] ?? ''} · ends ${m['end_time'] ?? ''}'),
+                            leading: const Icon(Icons.warning_amber_rounded,
+                                color: AppColors.warning),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline,
+                                  color: AppColors.danger),
+                              tooltip: 'Dismiss this alert',
+                              onPressed: () =>
+                                  _dismissMissing(m as Map<String, dynamic>),
+                            ),
+                          )),
+                  ]),
+                ),
               ],
             ),
           ),

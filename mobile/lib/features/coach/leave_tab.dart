@@ -4,6 +4,7 @@ import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/models.dart';
 import '../shared/notification_bell_action.dart';
+import '../shared/pinned_search_section.dart';
 
 class LeaveTab extends StatefulWidget {
   const LeaveTab({super.key});
@@ -145,123 +146,136 @@ class _LeaveTabState extends State<LeaveTab> {
               child: ListView(
                 padding: const EdgeInsets.all(12),
                 children: [
-                  TextField(
-                      decoration: InputDecoration(
-                          labelText: 'Search leave requests',
-                          prefixIcon: const Icon(Icons.search),
-                          suffixIcon: _search.isEmpty
-                              ? null
-                              : IconButton(
-                                  onPressed: () => setState(() => _search = ''),
-                                  icon: const Icon(Icons.clear))),
-                      onChanged: (v) => setState(() => _search = v)),
-                  Wrap(spacing: 8, children: [
-                    DropdownButton<String?>(
-                        value: _statusFilter,
-                        hint: const Text('All statuses'),
-                        items: const [
-                          DropdownMenuItem(
-                              value: null, child: Text('All statuses')),
-                          DropdownMenuItem(
-                              value: 'PENDING', child: Text('Pending')),
-                          DropdownMenuItem(
-                              value: 'APPROVED', child: Text('Approved')),
-                          DropdownMenuItem(
-                              value: 'REJECTED', child: Text('Rejected'))
-                        ],
-                        onChanged: (v) => setState(() => _statusFilter = v)),
-                    OutlinedButton(
-                        onPressed: () => _pickFilterDate(true),
-                        child: Text(_dateFrom == null
-                            ? 'From date'
-                            : _dateFrom!.toIso8601String().substring(0, 10))),
-                    OutlinedButton(
-                        onPressed: () => _pickFilterDate(false),
-                        child: Text(_dateTo == null
-                            ? 'To date'
-                            : _dateTo!.toIso8601String().substring(0, 10))),
-                    if (_search.isNotEmpty ||
-                        _statusFilter != null ||
-                        _dateFrom != null ||
-                        _dateTo != null)
-                      TextButton(
-                          onPressed: () => setState(() {
-                                _search = '';
-                                _statusFilter = null;
-                                _dateFrom = null;
-                                _dateTo = null;
-                              }),
-                          child: const Text('Clear filters'))
-                  ]),
-                  if (_leaves.isEmpty)
-                    const Padding(
-                        padding: EdgeInsets.all(32),
-                        child: Center(child: Text('No leave requests yet.')))
-                  else if (_visibleLeaves.isEmpty)
-                    const Padding(
-                        padding: EdgeInsets.all(32),
-                        child: Center(child: Text('No results found.')))
-                  else
-                    ..._visibleLeaves.map((l) => Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
+                  PinnedSearchSection(
+                    padding: EdgeInsets.zero,
+                    search: TextField(
+                        decoration: InputDecoration(
+                            labelText: 'Search leave requests',
+                            prefixIcon: const Icon(Icons.search),
+                            suffixIcon: _search.isEmpty
+                                ? null
+                                : IconButton(
+                                    onPressed: () =>
+                                        setState(() => _search = ''),
+                                    icon: const Icon(Icons.clear))),
+                        onChanged: (v) => setState(() => _search = v)),
+                    results: Column(children: [
+                      Wrap(spacing: 8, children: [
+                        DropdownButton<String?>(
+                            value: _statusFilter,
+                            hint: const Text('All statuses'),
+                            items: const [
+                              DropdownMenuItem(
+                                  value: null, child: Text('All statuses')),
+                              DropdownMenuItem(
+                                  value: 'PENDING', child: Text('Pending')),
+                              DropdownMenuItem(
+                                  value: 'APPROVED', child: Text('Approved')),
+                              DropdownMenuItem(
+                                  value: 'REJECTED', child: Text('Rejected'))
+                            ],
+                            onChanged: (v) =>
+                                setState(() => _statusFilter = v)),
+                        OutlinedButton(
+                            onPressed: () => _pickFilterDate(true),
+                            child: Text(_dateFrom == null
+                                ? 'From date'
+                                : _dateFrom!
+                                    .toIso8601String()
+                                    .substring(0, 10))),
+                        OutlinedButton(
+                            onPressed: () => _pickFilterDate(false),
+                            child: Text(_dateTo == null
+                                ? 'To date'
+                                : _dateTo!.toIso8601String().substring(0, 10))),
+                        if (_search.isNotEmpty ||
+                            _statusFilter != null ||
+                            _dateFrom != null ||
+                            _dateTo != null)
+                          TextButton(
+                              onPressed: () => setState(() {
+                                    _search = '';
+                                    _statusFilter = null;
+                                    _dateFrom = null;
+                                    _dateTo = null;
+                                  }),
+                              child: const Text('Clear filters'))
+                      ]),
+                      if (_leaves.isEmpty)
+                        const Padding(
+                            padding: EdgeInsets.all(32),
+                            child:
+                                Center(child: Text('No leave requests yet.')))
+                      else if (_visibleLeaves.isEmpty)
+                        const Padding(
+                            padding: EdgeInsets.all(32),
+                            child: Center(child: Text('No results found.')))
+                      else
+                        ..._visibleLeaves.map((l) => Card(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Expanded(
-                                        child: Text(
-                                            '${l.startDate} to ${l.endDate}',
-                                            style: const TextStyle(
-                                                fontWeight: FontWeight.bold))),
-                                    Chip(
-                                      label: Text(l.status,
-                                          style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 11)),
-                                      backgroundColor: _statusColor(l.status),
-                                      visualDensity: VisualDensity.compact,
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Expanded(
+                                            child: Text(
+                                                '${l.startDate} to ${l.endDate}',
+                                                style: const TextStyle(
+                                                    fontWeight:
+                                                        FontWeight.bold))),
+                                        Chip(
+                                          label: Text(l.status,
+                                              style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 11)),
+                                          backgroundColor:
+                                              _statusColor(l.status),
+                                          visualDensity: VisualDensity.compact,
+                                        ),
+                                      ],
                                     ),
+                                    const SizedBox(height: 4),
+                                    Text(l.reason),
+                                    if (l.decisionNote != null &&
+                                        l.decisionNote!.isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text(l.decisionNote!,
+                                          style: const TextStyle(
+                                              color: AppColors.textMuted,
+                                              fontSize: 12)),
+                                    ],
+                                    if (l.status == 'PENDING') ...[
+                                      const SizedBox(height: 8),
+                                      _busyId == l.id
+                                          ? const Center(
+                                              child: SizedBox(
+                                                  width: 20,
+                                                  height: 20,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                          strokeWidth: 2)))
+                                          : Align(
+                                              alignment: Alignment.centerLeft,
+                                              child: OutlinedButton(
+                                                onPressed: () => _cancel(l),
+                                                style: OutlinedButton.styleFrom(
+                                                    foregroundColor:
+                                                        AppColors.danger),
+                                                child: const Text('Cancel'),
+                                              ),
+                                            ),
+                                    ],
                                   ],
                                 ),
-                                const SizedBox(height: 4),
-                                Text(l.reason),
-                                if (l.decisionNote != null &&
-                                    l.decisionNote!.isNotEmpty) ...[
-                                  const SizedBox(height: 4),
-                                  Text(l.decisionNote!,
-                                      style: const TextStyle(
-                                          color: AppColors.textMuted,
-                                          fontSize: 12)),
-                                ],
-                                if (l.status == 'PENDING') ...[
-                                  const SizedBox(height: 8),
-                                  _busyId == l.id
-                                      ? const Center(
-                                          child: SizedBox(
-                                              width: 20,
-                                              height: 20,
-                                              child: CircularProgressIndicator(
-                                                  strokeWidth: 2)))
-                                      : Align(
-                                          alignment: Alignment.centerLeft,
-                                          child: OutlinedButton(
-                                            onPressed: () => _cancel(l),
-                                            style: OutlinedButton.styleFrom(
-                                                foregroundColor:
-                                                    AppColors.danger),
-                                            child: const Text('Cancel'),
-                                          ),
-                                        ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        )),
+                              ),
+                            )),
+                    ]),
+                  ),
                 ],
               ),
             ),
