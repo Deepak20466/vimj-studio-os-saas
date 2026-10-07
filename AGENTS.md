@@ -493,3 +493,18 @@ following additional updates:
   All assets match GitHub's published digests and pass `apksigner verify`; all
   use the persistent signing certificate SHA-256
   `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
+
+## 2026-10-08 Compact Admin Attendance Empty States
+
+- In the mobile Admin Attendance calendar detail, show Coach Attendance and
+  Student Attendance sections only when that date has records for the section.
+  Hide student filters when there are no student records and use one concise
+  no-attendance message when both groups are empty.
+- Show Coaches Missing Attendance Today only when missing coach rows exist.
+  Reduce the calendar detail card padding and the gap before the main Student
+  Attendance list so empty sections do not leave a large blank area.
+- Preserve calendar selection, selected-day filters when student rows exist,
+  the main sticky Student and Coach attendance controls, and coach-missing alerts.
+- Release target: mobile version `1.26.23+59`, tag `mobile-v1.26.23`, through
+  `.github/workflows/release-mobile.yml` using the persistent Android signing
+  key. Never commit or share the signing key.

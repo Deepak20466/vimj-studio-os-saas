@@ -1434,12 +1434,10 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
         Text(DateFormat('EEEE, MMM d, yyyy').format(selected),
             style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 14),
-        Text('Coach Attendance', style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 6),
-        if (coaches.isEmpty)
-          const Text('No coach attendance marked on this date.',
-              style: TextStyle(fontSize: 12, color: AppColors.textMuted))
-        else
+        if (coaches.isNotEmpty) ...[
+          Text('Coach Attendance',
+              style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 6),
           ...coaches.map((record) {
             final status = record['status'] as String? ?? 'UNKNOWN';
             return Padding(
@@ -1465,149 +1463,163 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
               ),
             );
           }),
-        const SizedBox(height: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Student Attendance',
-                style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                DropdownButton<String?>(
-                  value: _calendarStatusFilter,
-                  hint: const Text('All statuses'),
-                  items: const [
-                    DropdownMenuItem<String?>(
-                        value: null, child: Text('All statuses')),
-                    DropdownMenuItem<String?>(
-                        value: 'PRESENT', child: Text('Present')),
-                    DropdownMenuItem<String?>(
-                        value: 'ABSENT', child: Text('Absent')),
-                    DropdownMenuItem<String?>(
-                        value: 'LEAVE', child: Text('Leave')),
-                    DropdownMenuItem<String?>(
-                        value: 'NOT_CONFIRM', child: Text('Not Confirm')),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => _calendarStatusFilter = value),
-                ),
-                DropdownButton<String?>(
-                  value: _calendarApprovalFilter,
-                  hint: const Text('All reviews'),
-                  items: const [
-                    DropdownMenuItem<String?>(
-                        value: null, child: Text('All reviews')),
-                    DropdownMenuItem<String?>(
-                        value: 'PENDING', child: Text('Pending')),
-                    DropdownMenuItem<String?>(
-                        value: 'APPROVED', child: Text('Approved')),
-                    DropdownMenuItem<String?>(
-                        value: 'REJECTED', child: Text('Rejected')),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => _calendarApprovalFilter = value),
-                ),
-                DropdownButton<int?>(
-                  value: _calendarActivityFilter,
-                  hint: const Text('All activities'),
-                  items: [
-                    const DropdownMenuItem<int?>(
-                        value: null, child: Text('All activities')),
-                    ...{
-                      for (final record in students)
-                        record.activityId: record.activityName
-                    }.entries.map((entry) => DropdownMenuItem<int?>(
-                        value: entry.key, child: Text(entry.value))),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => _calendarActivityFilter = value),
-                ),
-                if (_calendarStatusFilter != null ||
-                    _calendarApprovalFilter != null ||
-                    _calendarActivityFilter != null)
-                  TextButton(
-                    onPressed: () => setState(() {
-                      _calendarStatusFilter = null;
-                      _calendarApprovalFilter = null;
-                      _calendarActivityFilter = null;
-                    }),
-                    child: const Text('Clear filters'),
+        ],
+        if (students.isEmpty)
+          Padding(
+            padding: EdgeInsets.only(top: coaches.isEmpty ? 6 : 8),
+            child: Text(
+              coaches.isEmpty
+                  ? 'No attendance recorded for this date.'
+                  : 'No student attendance recorded for this date.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.textMuted,
                   ),
-              ],
             ),
-            if (students.isEmpty)
-              const Text('No student attendance marked on this date.',
-                  style: TextStyle(fontSize: 12, color: AppColors.textMuted))
-            else if (visibleStudents.isEmpty)
-              const Text('No student attendance matches these filters.',
-                  style: TextStyle(fontSize: 12, color: AppColors.textMuted))
-            else
-              ...visibleStudents.map((record) => Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                          color: AppColors.textMuted.withOpacity(0.2)),
-                      borderRadius: BorderRadius.circular(8),
+          )
+        else ...[
+          if (coaches.isNotEmpty) const SizedBox(height: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Student Attendance',
+                  style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  DropdownButton<String?>(
+                    value: _calendarStatusFilter,
+                    hint: const Text('All statuses'),
+                    items: const [
+                      DropdownMenuItem<String?>(
+                          value: null, child: Text('All statuses')),
+                      DropdownMenuItem<String?>(
+                          value: 'PRESENT', child: Text('Present')),
+                      DropdownMenuItem<String?>(
+                          value: 'ABSENT', child: Text('Absent')),
+                      DropdownMenuItem<String?>(
+                          value: 'LEAVE', child: Text('Leave')),
+                      DropdownMenuItem<String?>(
+                          value: 'NOT_CONFIRM', child: Text('Not Confirm')),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => _calendarStatusFilter = value),
+                  ),
+                  DropdownButton<String?>(
+                    value: _calendarApprovalFilter,
+                    hint: const Text('All reviews'),
+                    items: const [
+                      DropdownMenuItem<String?>(
+                          value: null, child: Text('All reviews')),
+                      DropdownMenuItem<String?>(
+                          value: 'PENDING', child: Text('Pending')),
+                      DropdownMenuItem<String?>(
+                          value: 'APPROVED', child: Text('Approved')),
+                      DropdownMenuItem<String?>(
+                          value: 'REJECTED', child: Text('Rejected')),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => _calendarApprovalFilter = value),
+                  ),
+                  DropdownButton<int?>(
+                    value: _calendarActivityFilter,
+                    hint: const Text('All activities'),
+                    items: [
+                      const DropdownMenuItem<int?>(
+                          value: null, child: Text('All activities')),
+                      ...{
+                        for (final record in students)
+                          record.activityId: record.activityName
+                      }.entries.map((entry) => DropdownMenuItem<int?>(
+                          value: entry.key, child: Text(entry.value))),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => _calendarActivityFilter = value),
+                  ),
+                  if (_calendarStatusFilter != null ||
+                      _calendarApprovalFilter != null ||
+                      _calendarActivityFilter != null)
+                    TextButton(
+                      onPressed: () => setState(() {
+                        _calendarStatusFilter = null;
+                        _calendarApprovalFilter = null;
+                        _calendarActivityFilter = null;
+                      }),
+                      child: const Text('Clear filters'),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Text(record.studentName,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold)),
-                            ),
-                            const SizedBox(width: 8),
-                            Flexible(
-                              child: Wrap(
-                                alignment: WrapAlignment.end,
-                                spacing: 4,
-                                children: [
-                                  Chip(
-                                    label: Text(record.status,
-                                        style: const TextStyle(
-                                            fontSize: 10, color: Colors.white)),
-                                    backgroundColor:
-                                        _calendarStatusColor(record.status),
-                                    visualDensity: VisualDensity.compact,
-                                  ),
-                                  Chip(
-                                    label: Text(
-                                        record.approvalStatus == 'PENDING'
-                                            ? 'Awaiting Admin'
-                                            : record.approvalStatus,
-                                        style: const TextStyle(
-                                            fontSize: 10, color: Colors.white)),
-                                    backgroundColor: _calendarApprovalColor(
-                                        record.approvalStatus),
-                                    visualDensity: VisualDensity.compact,
-                                  ),
-                                ],
+                ],
+              ),
+              if (visibleStudents.isEmpty)
+                const Text('No student attendance matches these filters.',
+                    style: TextStyle(fontSize: 12, color: AppColors.textMuted))
+              else
+                ...visibleStudents.map((record) => Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                            color: AppColors.textMuted.withOpacity(0.2)),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Text(record.studentName,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold)),
                               ),
-                            ),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Wrap(
+                                  alignment: WrapAlignment.end,
+                                  spacing: 4,
+                                  children: [
+                                    Chip(
+                                      label: Text(record.status,
+                                          style: const TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.white)),
+                                      backgroundColor:
+                                          _calendarStatusColor(record.status),
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                    Chip(
+                                      label: Text(
+                                          record.approvalStatus == 'PENDING'
+                                              ? 'Awaiting Admin'
+                                              : record.approvalStatus,
+                                          style: const TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.white)),
+                                      backgroundColor: _calendarApprovalColor(
+                                          record.approvalStatus),
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(record.activityName,
+                              style: const TextStyle(
+                                  color: AppColors.textMuted, fontSize: 12)),
+                          if (record.hasSelfie) ...[
+                            const SizedBox(height: 6),
+                            OutlinedButton(
+                                onPressed: () => _viewSelfie(record),
+                                child: const Text('View Photo')),
                           ],
-                        ),
-                        Text(record.activityName,
-                            style: const TextStyle(
-                                color: AppColors.textMuted, fontSize: 12)),
-                        if (record.hasSelfie) ...[
-                          const SizedBox(height: 6),
-                          OutlinedButton(
-                              onPressed: () => _viewSelfie(record),
-                              child: const Text('View Photo')),
                         ],
-                      ],
-                    ),
-                  )),
-          ],
-        ),
+                      ),
+                    )),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -2165,26 +2177,19 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                 ),
                 Card(
                   child: Padding(
-                      padding: const EdgeInsets.all(14),
+                      padding: const EdgeInsets.all(12),
                       child: _buildCalendarDetail()),
                 ),
                 KeyedSubtree(
                     key: _missingSectionStartKey,
                     child: const SizedBox.shrink()),
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                  child: Text('Coaches Missing Attendance Today',
-                      style:
-                          TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                ),
-                const SizedBox(height: 8),
-                if (_missing.isEmpty)
+                if (_missing.isNotEmpty) ...[
                   const Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Center(
-                          child: Text(
-                              'All coaches have marked attendance for ended classes today.')))
-                else
+                    padding: EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                    child: Text('Coaches Missing Attendance Today',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16)),
+                  ),
                   ..._missing.map((m) => Card(
                         margin: const EdgeInsets.only(bottom: 8),
                         child: ListTile(
@@ -2201,12 +2206,13 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                           ),
                         ),
                       )),
+                ],
                 KeyedSubtree(
                     key: _missingSectionEndKey, child: const SizedBox.shrink()),
                 KeyedSubtree(
                     key: _studentSectionStartKey,
                     child: const SizedBox.shrink()),
-                const SizedBox(height: 20),
+                const SizedBox(height: 8),
                 KeyedSubtree(
                   key: _studentSectionHeadingKey,
                   child: _attendanceSectionHeading(
