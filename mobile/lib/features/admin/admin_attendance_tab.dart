@@ -544,12 +544,20 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
         color: theme.colorScheme.secondaryContainer,
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Text(
-        'Today',
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: theme.colorScheme.onSecondaryContainer,
-          fontWeight: FontWeight.w700,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.calendar_today_outlined,
+              size: 13, color: theme.colorScheme.onSecondaryContainer),
+          const SizedBox(width: 4),
+          Text(
+            'Today',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSecondaryContainer,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }

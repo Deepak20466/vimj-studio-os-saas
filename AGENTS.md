@@ -562,3 +562,11 @@ following additional updates:
   All assets match GitHub's published digests and pass `apksigner verify`; all
   use the persistent signing certificate SHA-256
   `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
+
+## 2026-10-08 Today Badge Calendar Icon
+
+- Add a small calendar icon beside the “Today” badge in the mobile Admin
+  Attendance selected-day Coach and Student Attendance headings.
+- Release target: mobile version `1.26.26+62`, tag `mobile-v1.26.26`, through
+  `.github/workflows/release-mobile.yml` using the persistent Android signing
+  key. Never commit or share the signing key.
