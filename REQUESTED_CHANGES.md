@@ -57,3 +57,10 @@ Coach student-photo removal (2026-10-06):
 - The shared mobile login already starts /health warm-up in the background, keeps its bounded timeout and retry, and opens the dashboard shell immediately after authentication. Render free-tier cold starts remain host-controlled.
 - Release target: mobile version 1.26.16+52, tag mobile-v1.26.16, using .github/workflows/release-mobile.yml and the persistent Android signing key.
 - Verification: all 24 Flutter tests passed; Dart analysis had 0 errors/warnings and 174 informational lints; local split-ABI release compilation passed for armeabi-v7a, arm64-v8a, and x86_64.
+- Published from commit `7596400e03a5ed5a9ee4b8d5f5d0875cf7528d1b` by GitHub Actions run `37666207039`:
+  https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.26.16
+- Published APK SHA-256: arm64-v8a `61746e803fa335ce9f86e41e971d7cf5f6f01eed435d2d2702e989ab378f2cf1`,
+  armeabi-v7a `8e1a49165478e5365cccdb08556122ff70ed9ef2f047adc02270212f003b2938`,
+  x86_64 `91d5670c4077002d10a127968cff009074447040216aef9a2d2ca3b3e1714267`.
+  All assets match GitHub published digests and pass `apksigner verify`. All use
+  certificate SHA-256 `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
