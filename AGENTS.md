@@ -517,3 +517,16 @@ following additional updates:
   All assets match GitHub's published digests and pass `apksigner verify`; all
   use the persistent signing certificate SHA-256
   `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
+
+## 2026-10-08 Sticky Selected-Day Student Attendance Controls
+
+- In the mobile Admin Attendance selected-day detail, add a Show/Hide control
+  for student attendance. Keep the Student Attendance heading and its status,
+  review, and activity filters sticky while selected-day student rows scroll;
+  release the sticky toolbar at the end of that selected-day section.
+- Add a theme-primary divider between Coach Attendance and Student Attendance
+  to distinguish the two groups. Keep the main Student and Coach lists and
+  their existing sticky controls unchanged.
+- Release target: mobile version `1.26.24+60`, tag `mobile-v1.26.24`, through
+  `.github/workflows/release-mobile.yml` using the persistent Android signing
+  key. Never commit or share the signing key.
