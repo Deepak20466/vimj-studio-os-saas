@@ -1341,38 +1341,70 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                               style: TextStyle(
                                   fontWeight: FontWeight.bold, fontSize: 16)),
                         ),
-                        TextButton.icon(
-                          key: const ValueKey('toggle-all-student-attendance'),
-                          onPressed: _toggleStudentAttendanceRecords,
-                          icon: Icon(_showAllAttendanceRecords
-                              ? Icons.visibility_off_outlined
-                              : Icons.visibility_outlined),
-                          label:
-                              Text(_showAllAttendanceRecords ? 'Hide' : 'Show'),
-                        ),
+                        if (!_showAllAttendanceRecords && !_recordsLoading)
+                          Tooltip(
+                            message:
+                                '${_visibleRecords.length} matching student attendance records',
+                            child: Chip(
+                              label: Text('${_visibleRecords.length}'),
+                              visualDensity: VisualDensity.compact,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              padding: EdgeInsets.zero,
+                            ),
+                          ),
+                        if (!_showAllAttendanceRecords)
+                          Tooltip(
+                            message: 'Show all student attendance records',
+                            child: TextButton.icon(
+                              key: const ValueKey(
+                                  'toggle-all-student-attendance'),
+                              onPressed: _toggleStudentAttendanceRecords,
+                              icon: const Icon(Icons.visibility_outlined),
+                              label: const Text('Show'),
+                            ),
+                          ),
                       ],
                     ),
                   ),
                   if (_showAllAttendanceRecords) ...[
                     const SizedBox(height: 8),
-                    TextField(
-                      decoration: InputDecoration(
-                        labelText: 'Search attendance',
-                        hintText: 'Student, activity, coach, date, or status',
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: _attendanceSearch.isEmpty
-                            ? null
-                            : IconButton(
-                                icon: const Icon(Icons.clear),
-                                tooltip: 'Clear search',
-                                onPressed: () =>
-                                    setState(() => _attendanceSearch = ''),
-                              ),
-                        border: const OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      onChanged: (value) =>
-                          setState(() => _attendanceSearch = value),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            decoration: InputDecoration(
+                              labelText: 'Search attendance',
+                              hintText:
+                                  'Student, activity, coach, date, or status',
+                              prefixIcon: const Icon(Icons.search),
+                              suffixIcon: _attendanceSearch.isEmpty
+                                  ? null
+                                  : IconButton(
+                                      icon: const Icon(Icons.clear),
+                                      tooltip: 'Clear search',
+                                      onPressed: () =>
+                                          setState(() => _attendanceSearch = ''),
+                                    ),
+                              border: const OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            onChanged: (value) =>
+                                setState(() => _attendanceSearch = value),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Tooltip(
+                          message: 'Hide all student attendance records',
+                          child: TextButton.icon(
+                            key: const ValueKey(
+                                'toggle-all-student-attendance'),
+                            onPressed: _toggleStudentAttendanceRecords,
+                            icon: const Icon(Icons.visibility_off_outlined),
+                            label: const Text('Hide'),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 8),
                     Wrap(spacing: 8, runSpacing: 8, children: [
@@ -1488,20 +1520,6 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                             ],
                             onChanged: (v) =>
                                 setState(() => _approvalFilter = v)),
-                        SizedBox(
-                            width: 220,
-                            child: TextField(
-                                decoration: InputDecoration(
-                                    labelText: 'Search coach or date',
-                                    prefixIcon: const Icon(Icons.search),
-                                    suffixIcon: _coachSearch.isEmpty
-                                        ? null
-                                        : IconButton(
-                                            onPressed: () => setState(
-                                                () => _coachSearch = ''),
-                                            icon: const Icon(Icons.clear))),
-                                onChanged: (v) =>
-                                    setState(() => _coachSearch = v))),
                         DropdownButton<String?>(
                             value: _coachStatusFilter,
                             hint: const Text('All statuses'),
@@ -1730,24 +1748,72 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                           key: ValueKey('coach-attendance-section'),
                           style: TextStyle(
                               fontWeight: FontWeight.bold, fontSize: 18)),
+                      if (!_showCoachAttendanceRecords &&
+                          !_coachRecordsLoading)
+                        Tooltip(
+                          message:
+                              '${_visibleCoachRecords.length} matching coach attendance records',
+                          child: Chip(
+                            label: Text('${_visibleCoachRecords.length}'),
+                            visualDensity: VisualDensity.compact,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            padding: EdgeInsets.zero,
+                          ),
+                        ),
                       ElevatedButton.icon(
                         onPressed: _openCoachManualEntry,
                         icon: const Icon(Icons.add, size: 18),
                         label: const Text('Manual Entry'),
                       ),
-                      TextButton.icon(
-                        key: const ValueKey('toggle-coach-attendance'),
-                        onPressed: _toggleCoachAttendanceRecords,
-                        icon: Icon(_showCoachAttendanceRecords
-                            ? Icons.visibility_off_outlined
-                            : Icons.visibility_outlined),
-                        label:
-                            Text(_showCoachAttendanceRecords ? 'Hide' : 'Show'),
-                      ),
+                      if (!_showCoachAttendanceRecords)
+                        Tooltip(
+                          message: 'Show coach attendance records',
+                          child: TextButton.icon(
+                            key: const ValueKey('toggle-coach-attendance'),
+                            onPressed: _toggleCoachAttendanceRecords,
+                            icon: const Icon(Icons.visibility_outlined),
+                            label: const Text('Show'),
+                          ),
+                        ),
                     ],
                   ),
                   if (_showCoachAttendanceRecords) ...[
                     const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            decoration: InputDecoration(
+                              labelText: 'Search coach or date',
+                              prefixIcon: const Icon(Icons.search),
+                              suffixIcon: _coachSearch.isEmpty
+                                  ? null
+                                  : IconButton(
+                                      onPressed: () =>
+                                          setState(() => _coachSearch = ''),
+                                      tooltip: 'Clear search',
+                                      icon: const Icon(Icons.clear),
+                                    ),
+                              border: const OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            onChanged: (value) =>
+                                setState(() => _coachSearch = value),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Tooltip(
+                          message: 'Hide coach attendance records',
+                          child: TextButton.icon(
+                            key: const ValueKey('toggle-coach-attendance'),
+                            onPressed: _toggleCoachAttendanceRecords,
+                            icon: const Icon(Icons.visibility_off_outlined),
+                            label: const Text('Hide'),
+                          ),
+                        ),
+                      ],
+                    ),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,

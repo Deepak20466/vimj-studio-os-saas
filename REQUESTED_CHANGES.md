@@ -50,3 +50,10 @@ Coach student-photo removal (2026-10-06):
 - Regression coverage checks successful removal, missing-photo handling, and that a coach cannot remove a photo outside their roster.
 - Android update: version 1.26.3+39. GitHub Actions run 37462527351 completed successfully and published all three ABI APKs at https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.26.3.
 - Verified the deployed backend OpenAPI includes `DELETE /students/{student_id}/photo`. Backend regression suite (8 tests), frontend lint and production build, Flutter analysis, Flutter widget test, and local split-ABI release build passed.
+
+## 2026-10-07 Admin Attendance Layout and Login Responsiveness
+
+- Student and Coach attendance list visibility controls sit beside their search fields. Collapsed lists retain a visible Show control, a count badge for matching records, and a section-specific tooltip.
+- The shared mobile login already starts /health warm-up in the background, keeps its bounded timeout and retry, and opens the dashboard shell immediately after authentication. Render free-tier cold starts remain host-controlled.
+- Release target: mobile version 1.26.16+52, tag mobile-v1.26.16, using .github/workflows/release-mobile.yml and the persistent Android signing key.
+- Verification: all 24 Flutter tests passed; Dart analysis had 0 errors/warnings and 174 informational lints; local split-ABI release compilation passed for armeabi-v7a, arm64-v8a, and x86_64.
