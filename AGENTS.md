@@ -429,3 +429,28 @@ following additional updates:
   All three assets match GitHub's published digests, pass `apksigner verify`,
   and use the persistent signing certificate SHA-256
   `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
+
+## 2026-10-08 Collapsible Admin Attendance Toolbars
+
+- Keep this follow-up scoped to the Flutter mobile Admin Attendance screen and
+  this existing agent notes file. Do not change web, backend, or unrelated
+  Admin Attendance behavior.
+- Student and Coach Attendance toolbars start compact with the sticky search,
+  visibility action, and a responsive Filters control. Expanding Filters keeps
+  the full filter controls and student bulk-approval action in the sticky area.
+  Active filter counts remain visible while the panel is collapsed.
+- Align search, filter, date, clear, and approval controls for phone widths.
+  Student record status summaries wrap cleanly, and narrow calendar cells use
+  a compact day and marker layout to prevent clipped text.
+- Preserve the student and coach attendance data, search behavior, existing
+  filters, approval actions, visibility preferences, manual-entry chooser, and
+  separate selected-day calendar search.
+- Release target: mobile version `1.26.21+57`, tag `mobile-v1.26.21`, through
+  `.github/workflows/release-mobile.yml` using the persistent Android signing
+  key. Never commit or share the signing key.
+- Local verification on 2026-10-08: all 32 Flutter tests passed; Flutter
+  analysis completed with no errors or warnings (193 informational lints); the
+  local split-ABI release compile succeeded for armeabi-v7a, arm64-v8a, and
+  x86_64. Local APKs use the Android debug certificate, so publish only the
+  GitHub Actions APKs signed with the persistent release key.
+- Release verification: pending GitHub Actions publication.

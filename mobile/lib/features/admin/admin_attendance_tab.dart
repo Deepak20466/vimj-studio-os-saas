@@ -24,8 +24,9 @@ const _coachSectionStartKey = ValueKey<String>('coach-section-start');
 const _coachSearchToolbarKey = ValueKey<String>('coach-search-toolbar');
 const _coachSectionEndKey = ValueKey<String>('coach-section-end');
 const _attendancePageSize = 500;
-const _studentAttendanceToolbarHeight = 284.0;
-const _coachAttendanceToolbarHeight = 176.0;
+const _attendanceToolbarCollapsedHeight = 68.0;
+const _studentAttendanceToolbarExpandedHeight = 294.0;
+const _coachAttendanceToolbarExpandedHeight = 188.0;
 
 class AdminAttendanceTab extends StatefulWidget {
   const AdminAttendanceTab({super.key});
@@ -56,6 +57,8 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
   String _attendanceSearch = '';
   DateTime? _filterDateFrom;
   DateTime? _filterDateTo;
+  bool _studentFiltersExpanded = false;
+  bool _coachFiltersExpanded = false;
   int? _removingId;
   int? _approvalBusyId;
   bool _approvingAll = false;
@@ -262,6 +265,18 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
         _coachFilterDateTo != null,
       ].where((active) => active).length;
 
+  double get _studentAttendanceToolbarHeight => _studentFiltersExpanded
+      ? _studentAttendanceToolbarExpandedHeight
+      : _attendanceToolbarCollapsedHeight;
+
+  double get _coachAttendanceToolbarHeight => _coachFiltersExpanded
+      ? _coachAttendanceToolbarExpandedHeight
+      : _attendanceToolbarCollapsedHeight;
+
+  String _activeFilterMessage(int count) => count == 0
+      ? 'No active filters'
+      : 'Clear $count active filter${count == 1 ? '' : 's'}';
+
   Widget _attendanceFilterDropdown<T>({
     required String label,
     required T? value,
@@ -282,10 +297,15 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
           child: DropdownButton<T>(
             value: value,
             isExpanded: true,
+            iconEnabledColor: theme.colorScheme.onSurfaceVariant,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurface,
+              fontSize: 14,
+            ),
             hint: Text(label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyMedium),
+                style: theme.textTheme.bodyMedium?.copyWith(fontSize: 14)),
             items: items,
             onChanged: onChanged,
           ),
@@ -299,12 +319,15 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
     required DateTime? value,
     required VoidCallback onPressed,
   }) {
+    final theme = Theme.of(context);
     return SizedBox(
       height: 48,
       child: OutlinedButton.icon(
         onPressed: onPressed,
         style: OutlinedButton.styleFrom(
+          minimumSize: const Size(0, 48),
           padding: const EdgeInsets.symmetric(horizontal: 8),
+          foregroundColor: theme.colorScheme.onSurface,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -314,7 +337,290 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
           value == null ? label : DateFormat('yyyy-MM-dd').format(value),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.labelMedium,
         ),
+      ),
+    );
+  }
+
+  Widget _attendanceSearchField({
+    required String label,
+    required String hint,
+    required String query,
+    required ValueChanged<String> onChanged,
+  }) {
+    final theme = Theme.of(context);
+    return TextField(
+      textInputAction: TextInputAction.search,
+      style: theme.textTheme.bodyMedium?.copyWith(
+        color: theme.colorScheme.onSurface,
+        fontSize: 14,
+      ),
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        prefixIcon: const Icon(Icons.search_rounded, size: 20),
+        suffixIcon: query.isEmpty
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.close_rounded, size: 20),
+                tooltip: 'Clear search',
+                onPressed: () => onChanged(''),
+                visualDensity: VisualDensity.compact,
+              ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: theme.colorScheme.outlineVariant),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5),
+        ),
+        isDense: true,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      ),
+      onChanged: onChanged,
+    );
+  }
+
+  Widget _attendanceToolbarHeader({
+    required String searchLabel,
+    required String searchHint,
+    required String query,
+    required ValueChanged<String> onSearchChanged,
+    required int activeFilterCount,
+    required String filterGroupLabel,
+    required bool filtersExpanded,
+    required VoidCallback onToggleFilters,
+    required Key filtersButtonKey,
+    required Key visibilityButtonKey,
+    required String visibilityTooltip,
+    required VoidCallback onToggleVisibility,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compactControls = constraints.maxWidth < 340;
+        return SizedBox(
+          height: 56,
+          child: Row(
+            children: [
+              Expanded(
+                child: _attendanceSearchField(
+                  label: searchLabel,
+                  hint: searchHint,
+                  query: query,
+                  onChanged: onSearchChanged,
+                ),
+              ),
+              const SizedBox(width: 6),
+              _attendanceFiltersToggle(
+                compact: compactControls,
+                count: activeFilterCount,
+                groupLabel: filterGroupLabel,
+                expanded: filtersExpanded,
+                buttonKey: filtersButtonKey,
+                onPressed: onToggleFilters,
+              ),
+              const SizedBox(width: 2),
+              _attendanceVisibilityToggle(
+                compact: compactControls,
+                buttonKey: visibilityButtonKey,
+                tooltip: visibilityTooltip,
+                onPressed: onToggleVisibility,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _attendanceFiltersToggle({
+    required bool compact,
+    required int count,
+    required String groupLabel,
+    required bool expanded,
+    required Key buttonKey,
+    required VoidCallback onPressed,
+  }) {
+    final theme = Theme.of(context);
+    final tooltip =
+        '${expanded ? 'Hide' : 'Show'} $groupLabel filters. ${_activeFilterMessage(count)}';
+    final filterIcon = Stack(
+      clipBehavior: Clip.none,
+      children: [
+        const Icon(Icons.tune_rounded, size: 19),
+        if (count > 0)
+          Positioned(
+            right: -10,
+            top: -9,
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 3),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                '$count',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onPrimary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 10,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+
+    if (compact) {
+      return Tooltip(
+        message: tooltip,
+        child: IconButton(
+          key: buttonKey,
+          onPressed: onPressed,
+          constraints: const BoxConstraints.tightFor(width: 44, height: 44),
+          padding: EdgeInsets.zero,
+          visualDensity: VisualDensity.standard,
+          icon: filterIcon,
+        ),
+      );
+    }
+
+    return Tooltip(
+      message: tooltip,
+      child: SizedBox(
+        height: 44,
+        child: OutlinedButton(
+          key: buttonKey,
+          onPressed: onPressed,
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(0, 44),
+            padding: const EdgeInsets.symmetric(horizontal: 9),
+            foregroundColor: expanded
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurface,
+            side: BorderSide(
+              color: expanded
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.outlineVariant,
+            ),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            textStyle: theme.textTheme.labelMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              filterIcon,
+              const SizedBox(width: 6),
+              Text(count == 0 ? 'Filters' : 'Filters ($count)'),
+              const SizedBox(width: 2),
+              Icon(
+                expanded
+                    ? Icons.expand_less_rounded
+                    : Icons.expand_more_rounded,
+                size: 18,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _attendanceVisibilityToggle({
+    required bool compact,
+    required Key buttonKey,
+    required String tooltip,
+    required VoidCallback onPressed,
+  }) {
+    if (compact) {
+      return Tooltip(
+        message: tooltip,
+        child: IconButton(
+          key: buttonKey,
+          onPressed: onPressed,
+          constraints: const BoxConstraints.tightFor(width: 44, height: 44),
+          padding: EdgeInsets.zero,
+          icon: const Icon(Icons.visibility_off_outlined, size: 20),
+        ),
+      );
+    }
+
+    return Tooltip(
+      message: tooltip,
+      child: TextButton.icon(
+        key: buttonKey,
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          foregroundColor: Theme.of(context).colorScheme.onSurface,
+          minimumSize: const Size(44, 44),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: Theme.of(context).textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+        ),
+        icon: const Icon(Icons.visibility_off_outlined, size: 19),
+        label: const Text('Hide'),
+      ),
+    );
+  }
+
+  Widget _attendanceClearFiltersButton({
+    required bool compact,
+    required Key buttonKey,
+    required int activeFilterCount,
+    required VoidCallback onPressed,
+  }) {
+    final theme = Theme.of(context);
+    final enabled = activeFilterCount > 0;
+    final icon = const Icon(Icons.filter_alt_off_outlined, size: 18);
+    final tooltip = enabled
+        ? _activeFilterMessage(activeFilterCount)
+        : 'No filters to clear';
+
+    if (compact) {
+      return Tooltip(
+        message: tooltip,
+        child: IconButton(
+          key: buttonKey,
+          onPressed: enabled ? onPressed : null,
+          constraints: const BoxConstraints.tightFor(width: 48, height: 48),
+          padding: EdgeInsets.zero,
+          icon: icon,
+        ),
+      );
+    }
+
+    return Tooltip(
+      message: tooltip,
+      child: TextButton.icon(
+        key: buttonKey,
+        onPressed: enabled ? onPressed : null,
+        style: TextButton.styleFrom(
+          foregroundColor: theme.colorScheme.onSurface,
+          minimumSize: const Size(0, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: theme.textTheme.labelMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        icon: icon,
+        label: const Text('Clear'),
       ),
     );
   }
@@ -350,172 +656,146 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        SizedBox(
-          height: 56,
-          child: Row(
+        _attendanceToolbarHeader(
+          searchLabel: 'Search attendance',
+          searchHint: 'Student, activity, coach, date, or status',
+          query: _attendanceSearch,
+          onSearchChanged: _onStudentAttendanceSearchChanged,
+          activeFilterCount: _studentAttendanceActiveFilterCount,
+          filterGroupLabel: 'student attendance',
+          filtersExpanded: _studentFiltersExpanded,
+          onToggleFilters: () => setState(
+            () => _studentFiltersExpanded = !_studentFiltersExpanded,
+          ),
+          filtersButtonKey: const ValueKey('toggle-student-attendance-filters'),
+          visibilityButtonKey: const ValueKey('toggle-all-student-attendance'),
+          visibilityTooltip: 'Hide all student attendance records',
+          onToggleVisibility: _toggleStudentAttendanceRecords,
+        ),
+        if (_studentFiltersExpanded) ...[
+          const SizedBox(height: 8),
+          _attendanceFilterDropdown<int?>(
+            label: 'All activities',
+            value: _filterActivityId,
+            items: [
+              const DropdownMenuItem<int?>(
+                  value: null, child: Text('All activities')),
+              ..._activities.map((a) => DropdownMenuItem<int?>(
+                  value: a.id,
+                  child: Text(a.name,
+                      maxLines: 1, overflow: TextOverflow.ellipsis))),
+            ],
+            onChanged: (value) {
+              setState(() => _filterActivityId = value);
+              _loadRecords();
+            },
+          ),
+          const SizedBox(height: 8),
+          Row(
             children: [
               Expanded(
-                child: TextField(
-                  decoration: InputDecoration(
-                    labelText: 'Search attendance',
-                    hintText: 'Student, activity, coach, date, or status',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _attendanceSearch.isEmpty
-                        ? null
-                        : IconButton(
-                            icon: const Icon(Icons.clear),
-                            tooltip: 'Clear search',
-                            onPressed: () =>
-                                _onStudentAttendanceSearchChanged(''),
-                          ),
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                  ),
-                  onChanged: _onStudentAttendanceSearchChanged,
+                child: _attendanceFilterDropdown<String?>(
+                  label: 'All statuses',
+                  value: _filterStatus,
+                  items: const [
+                    DropdownMenuItem<String?>(
+                        value: null, child: Text('All statuses')),
+                    DropdownMenuItem<String?>(
+                        value: 'PRESENT', child: Text('Present')),
+                    DropdownMenuItem<String?>(
+                        value: 'ABSENT', child: Text('Absent')),
+                    DropdownMenuItem<String?>(
+                        value: 'LEAVE', child: Text('Leave')),
+                    DropdownMenuItem<String?>(
+                        value: 'NOT_CONFIRM', child: Text('Not Confirm')),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _filterStatus = value);
+                    _loadRecords();
+                  },
                 ),
               ),
               const SizedBox(width: 8),
-              Tooltip(
-                message: 'Hide all student attendance records',
-                child: TextButton.icon(
-                  key: const ValueKey('toggle-all-student-attendance'),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  onPressed: _toggleStudentAttendanceRecords,
-                  icon: const Icon(Icons.visibility_off_outlined, size: 20),
-                  label: const Text('Hide'),
+              Expanded(
+                child: _attendanceFilterDropdown<String?>(
+                  label: 'All reviews',
+                  value: _approvalFilter,
+                  items: const [
+                    DropdownMenuItem<String?>(
+                        value: null, child: Text('All reviews')),
+                    DropdownMenuItem<String?>(
+                        value: 'PENDING', child: Text('Pending')),
+                    DropdownMenuItem<String?>(
+                        value: 'APPROVED', child: Text('Approved')),
+                    DropdownMenuItem<String?>(
+                        value: 'REJECTED', child: Text('Rejected')),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _approvalFilter = value);
+                    _loadRecords();
+                  },
                 ),
               ),
             ],
           ),
-        ),
-        const SizedBox(height: 6),
-        _attendanceFilterDropdown<int?>(
-          label: 'All activities',
-          value: _filterActivityId,
-          items: [
-            const DropdownMenuItem<int?>(
-                value: null, child: Text('All activities')),
-            ..._activities.map((a) => DropdownMenuItem<int?>(
-                value: a.id,
-                child: Text(a.name,
-                    maxLines: 1, overflow: TextOverflow.ellipsis))),
-          ],
-          onChanged: (value) {
-            setState(() => _filterActivityId = value);
-            _loadRecords();
-          },
-        ),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            Expanded(
-              child: _attendanceFilterDropdown<String?>(
-                label: 'All statuses',
-                value: _filterStatus,
-                items: const [
-                  DropdownMenuItem<String?>(
-                      value: null, child: Text('All statuses')),
-                  DropdownMenuItem<String?>(
-                      value: 'PRESENT', child: Text('Present')),
-                  DropdownMenuItem<String?>(
-                      value: 'ABSENT', child: Text('Absent')),
-                  DropdownMenuItem<String?>(
-                      value: 'LEAVE', child: Text('Leave')),
-                  DropdownMenuItem<String?>(
-                      value: 'NOT_CONFIRM', child: Text('Not Confirm')),
-                ],
-                onChanged: (value) {
-                  setState(() => _filterStatus = value);
-                  _loadRecords();
-                },
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _attendanceFilterDropdown<String?>(
-                label: 'All reviews',
-                value: _approvalFilter,
-                items: const [
-                  DropdownMenuItem<String?>(
-                      value: null, child: Text('All reviews')),
-                  DropdownMenuItem<String?>(
-                      value: 'PENDING', child: Text('Pending')),
-                  DropdownMenuItem<String?>(
-                      value: 'APPROVED', child: Text('Approved')),
-                  DropdownMenuItem<String?>(
-                      value: 'REJECTED', child: Text('Rejected')),
-                ],
-                onChanged: (value) {
-                  setState(() => _approvalFilter = value);
-                  _loadRecords();
-                },
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            Expanded(
-              child: _attendanceDateFilter(
-                label: 'From date',
-                value: _filterDateFrom,
-                onPressed: () => _pickFilterDate(true),
-              ),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: _attendanceDateFilter(
-                label: 'To date',
-                value: _filterDateTo,
-                onPressed: () => _pickFilterDate(false),
-              ),
-            ),
-            const SizedBox(width: 2),
-            Tooltip(
-              message: _studentAttendanceActiveFilterCount == 0
-                  ? 'No active student filters'
-                  : 'Clear $_studentAttendanceActiveFilterCount active filters',
-              child: IconButton(
-                key: const ValueKey('clear-student-attendance-filters'),
-                onPressed: _studentAttendanceActiveFilterCount > 0
-                    ? _clearStudentAttendanceFilters
-                    : null,
-                icon: Badge(
-                  isLabelVisible: _studentAttendanceActiveFilterCount > 0,
-                  label: Text('$_studentAttendanceActiveFilterCount'),
-                  child: const Icon(Icons.filter_alt_off_outlined),
+          const SizedBox(height: 8),
+          LayoutBuilder(
+            builder: (context, constraints) => Row(
+              children: [
+                Expanded(
+                  child: _attendanceDateFilter(
+                    label: 'From date',
+                    value: _filterDateFrom,
+                    onPressed: () => _pickFilterDate(true),
+                  ),
                 ),
-                visualDensity: VisualDensity.compact,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _attendanceDateFilter(
+                    label: 'To date',
+                    value: _filterDateTo,
+                    onPressed: () => _pickFilterDate(false),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                _attendanceClearFiltersButton(
+                  compact: constraints.maxWidth < 340,
+                  buttonKey: const ValueKey('clear-student-attendance-filters'),
+                  activeFilterCount: _studentAttendanceActiveFilterCount,
+                  onPressed: _clearStudentAttendanceFilters,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 46,
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(0, 46),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+              onPressed: pendingCount == 0 || _approvingAll || _recordsLoading
+                  ? null
+                  : _approveAllPending,
+              icon: _approvingAll
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.done_all_rounded, size: 19),
+              label: Text(
+                _approvingAll
+                    ? 'Approving?'
+                    : 'Approve filtered pending ($pendingCount)',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelLarge,
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        SizedBox(
-          height: 48,
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: pendingCount == 0 || _approvingAll || _recordsLoading
-                ? null
-                : _approveAllPending,
-            icon: _approvingAll
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.done_all),
-            label: Text(_approvingAll
-                ? 'Approving…'
-                : 'Approve filtered pending ($pendingCount)'),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -524,134 +804,99 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        SizedBox(
-          height: 56,
-          child: Row(
+        _attendanceToolbarHeader(
+          searchLabel: 'Search coach attendance',
+          searchHint: 'Coach or date',
+          query: _coachSearch,
+          onSearchChanged: _onCoachAttendanceSearchChanged,
+          activeFilterCount: _coachAttendanceActiveFilterCount,
+          filterGroupLabel: 'coach attendance',
+          filtersExpanded: _coachFiltersExpanded,
+          onToggleFilters: () => setState(
+            () => _coachFiltersExpanded = !_coachFiltersExpanded,
+          ),
+          filtersButtonKey: const ValueKey('toggle-coach-attendance-filters'),
+          visibilityButtonKey: const ValueKey('toggle-coach-attendance'),
+          visibilityTooltip: 'Hide coach attendance records',
+          onToggleVisibility: _toggleCoachAttendanceRecords,
+        ),
+        if (_coachFiltersExpanded) ...[
+          const SizedBox(height: 8),
+          Row(
             children: [
               Expanded(
-                child: TextField(
-                  decoration: InputDecoration(
-                    labelText: 'Search coach attendance',
-                    hintText: 'Coach or date',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _coachSearch.isEmpty
-                        ? null
-                        : IconButton(
-                            onPressed: () =>
-                                _onCoachAttendanceSearchChanged(''),
-                            tooltip: 'Clear search',
-                            icon: const Icon(Icons.clear),
-                          ),
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                  ),
-                  onChanged: _onCoachAttendanceSearchChanged,
+                child: _attendanceFilterDropdown<int?>(
+                  label: 'All coaches',
+                  value: _coachFilterId,
+                  items: [
+                    const DropdownMenuItem<int?>(
+                        value: null, child: Text('All coaches')),
+                    ..._coaches.map((coach) => DropdownMenuItem<int?>(
+                        value: coach.id,
+                        child: Text(coach.name,
+                            maxLines: 1, overflow: TextOverflow.ellipsis))),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _coachFilterId = value);
+                    _loadCoachRecords();
+                  },
                 ),
               ),
               const SizedBox(width: 8),
-              Tooltip(
-                message: 'Hide coach attendance records',
-                child: TextButton.icon(
-                  key: const ValueKey('toggle-coach-attendance'),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  onPressed: _toggleCoachAttendanceRecords,
-                  icon: const Icon(Icons.visibility_off_outlined, size: 20),
-                  label: const Text('Hide'),
+              Expanded(
+                child: _attendanceFilterDropdown<String?>(
+                  label: 'All statuses',
+                  value: _coachStatusFilter,
+                  items: const [
+                    DropdownMenuItem<String?>(
+                        value: null, child: Text('All statuses')),
+                    DropdownMenuItem<String?>(
+                        value: 'PRESENT', child: Text('Present')),
+                    DropdownMenuItem<String?>(
+                        value: 'ABSENT', child: Text('Absent')),
+                    DropdownMenuItem<String?>(
+                        value: 'LEAVE', child: Text('Leave')),
+                    DropdownMenuItem<String?>(
+                        value: 'NOT_CONFIRM', child: Text('Not Confirm')),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _coachStatusFilter = value);
+                    _loadCoachRecords();
+                  },
                 ),
               ),
             ],
           ),
-        ),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            Expanded(
-              child: _attendanceFilterDropdown<int?>(
-                label: 'All coaches',
-                value: _coachFilterId,
-                items: [
-                  const DropdownMenuItem<int?>(
-                      value: null, child: Text('All coaches')),
-                  ..._coaches.map((coach) => DropdownMenuItem<int?>(
-                      value: coach.id,
-                      child: Text(coach.name,
-                          maxLines: 1, overflow: TextOverflow.ellipsis))),
-                ],
-                onChanged: (value) {
-                  setState(() => _coachFilterId = value);
-                  _loadCoachRecords();
-                },
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _attendanceFilterDropdown<String?>(
-                label: 'All statuses',
-                value: _coachStatusFilter,
-                items: const [
-                  DropdownMenuItem<String?>(
-                      value: null, child: Text('All statuses')),
-                  DropdownMenuItem<String?>(
-                      value: 'PRESENT', child: Text('Present')),
-                  DropdownMenuItem<String?>(
-                      value: 'ABSENT', child: Text('Absent')),
-                  DropdownMenuItem<String?>(
-                      value: 'LEAVE', child: Text('Leave')),
-                  DropdownMenuItem<String?>(
-                      value: 'NOT_CONFIRM', child: Text('Not Confirm')),
-                ],
-                onChanged: (value) {
-                  setState(() => _coachStatusFilter = value);
-                  _loadCoachRecords();
-                },
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            Expanded(
-              child: _attendanceDateFilter(
-                label: 'From date',
-                value: _coachFilterDateFrom,
-                onPressed: () => _pickCoachFilterDate(true),
-              ),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: _attendanceDateFilter(
-                label: 'To date',
-                value: _coachFilterDateTo,
-                onPressed: () => _pickCoachFilterDate(false),
-              ),
-            ),
-            const SizedBox(width: 2),
-            Tooltip(
-              message: _coachAttendanceActiveFilterCount == 0
-                  ? 'No active coach filters'
-                  : 'Clear $_coachAttendanceActiveFilterCount active filters',
-              child: IconButton(
-                key: const ValueKey('clear-coach-attendance-filters'),
-                onPressed: _coachAttendanceActiveFilterCount > 0
-                    ? _clearCoachAttendanceFilters
-                    : null,
-                icon: Badge(
-                  isLabelVisible: _coachAttendanceActiveFilterCount > 0,
-                  label: Text('$_coachAttendanceActiveFilterCount'),
-                  child: const Icon(Icons.filter_alt_off_outlined),
+          const SizedBox(height: 8),
+          LayoutBuilder(
+            builder: (context, constraints) => Row(
+              children: [
+                Expanded(
+                  child: _attendanceDateFilter(
+                    label: 'From date',
+                    value: _coachFilterDateFrom,
+                    onPressed: () => _pickCoachFilterDate(true),
+                  ),
                 ),
-                visualDensity: VisualDensity.compact,
-              ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _attendanceDateFilter(
+                    label: 'To date',
+                    value: _coachFilterDateTo,
+                    onPressed: () => _pickCoachFilterDate(false),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                _attendanceClearFiltersButton(
+                  compact: constraints.maxWidth < 340,
+                  buttonKey: const ValueKey('clear-coach-attendance-filters'),
+                  activeFilterCount: _coachAttendanceActiveFilterCount,
+                  onPressed: _clearCoachAttendanceFilters,
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ],
     );
   }
@@ -974,35 +1219,69 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
         _calendarDateKey(_calendarSelectedDate!) == key;
     return GestureDetector(
       onTap: () => setState(() => _calendarSelectedDate = day),
-      child: Container(
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.brandLight : AppColors.bg,
-          border: Border.all(
-            color: isToday || isSelected
-                ? AppColors.brandOrange
-                : AppColors.textMuted.withOpacity(0.25),
-            width: isToday || isSelected ? 1.4 : 1,
-          ),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('${day.day}',
-                style:
-                    const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 2),
-            Row(children: markerColors.map(_calendarDot).toList()),
-            if (students.isNotEmpty || coaches.isNotEmpty)
-              Text(
-                  students.length + coaches.length > 99
-                      ? '99+'
-                      : '${students.length + coaches.length}',
-                  style:
-                      const TextStyle(fontSize: 9, color: AppColors.textMuted)),
-          ],
-        ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compactCell =
+              constraints.maxWidth < 36 || constraints.maxHeight < 36;
+          return Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: isSelected ? AppColors.brandLight : AppColors.bg,
+              border: Border.all(
+                color: isToday || isSelected
+                    ? AppColors.brandOrange
+                    : AppColors.textMuted.withOpacity(0.25),
+                width: isToday || isSelected ? 1.4 : 1,
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: compactCell
+                ? SizedBox.expand(
+                    child: Stack(
+                      children: [
+                        Align(
+                          alignment: Alignment.topLeft,
+                          child: Text(
+                            '${day.day}',
+                            style: const TextStyle(
+                                fontSize: 10, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        if (markerColors.isNotEmpty)
+                          Align(
+                            alignment: Alignment.bottomRight,
+                            child: Container(
+                              width: 5,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                color: markerColors.first,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('${day.day}',
+                          style: const TextStyle(
+                              fontSize: 11, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 2),
+                      Row(children: markerColors.map(_calendarDot).toList()),
+                      if (students.isNotEmpty || coaches.isNotEmpty)
+                        Text(
+                          students.length + coaches.length > 99
+                              ? '99+'
+                              : '${students.length + coaches.length}',
+                          style: const TextStyle(
+                              fontSize: 9, color: AppColors.textMuted),
+                        ),
+                    ],
+                  ),
+          );
+        },
       ),
     );
   }
@@ -2005,39 +2284,50 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 4,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
-                                    Expanded(
-                                        child: Text(r.studentName,
-                                            style: const TextStyle(
-                                                fontWeight: FontWeight.bold))),
-                                    Wrap(
-                                      spacing: 4,
-                                      children: [
-                                        Chip(
-                                          label: Text(r.status,
-                                              style: const TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.white)),
-                                          backgroundColor: r.status == 'PRESENT'
-                                              ? AppColors.success
-                                              : r.status == 'ABSENT'
-                                                  ? AppColors.danger
-                                                  : AppColors.warning,
-                                          visualDensity: VisualDensity.compact,
-                                        ),
-                                        Chip(
-                                          label: Text(r.approvalStatus,
-                                              style: const TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.white)),
-                                          backgroundColor:
-                                              _approvalColor(r.approvalStatus),
-                                          visualDensity: VisualDensity.compact,
-                                        ),
-                                      ],
+                                    Text(
+                                      r.studentName,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                    ),
+                                    Chip(
+                                      label: Text(r.status,
+                                          style: const TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.white)),
+                                      backgroundColor: r.status == 'PRESENT'
+                                          ? AppColors.success
+                                          : r.status == 'ABSENT'
+                                              ? AppColors.danger
+                                              : AppColors.warning,
+                                      visualDensity: VisualDensity.compact,
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 4),
+                                    ),
+                                    Chip(
+                                      label: Text(r.approvalStatus,
+                                          style: const TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.white)),
+                                      backgroundColor:
+                                          _approvalColor(r.approvalStatus),
+                                      visualDensity: VisualDensity.compact,
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 4),
                                     ),
                                   ],
                                 ),

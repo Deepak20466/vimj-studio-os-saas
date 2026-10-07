@@ -283,6 +283,21 @@ void main() {
               'Student, activity, coach, date, or status',
     );
     expect(studentSearch, findsOneWidget);
+    final studentFiltersButton =
+        find.byKey(const ValueKey('toggle-student-attendance-filters'));
+    expect(find.text('Filters'), findsOneWidget);
+    expect(find.text('All activities'), findsNothing);
+    expect(find.textContaining('Approve filtered pending'), findsNothing);
+
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -520));
+    await tester.pumpAndSettle();
+    expect(studentSearch, findsOneWidget);
+    expect(find.text('Filters'), findsOneWidget);
+    expect(find.text('All activities'), findsNothing);
+
+    await tester.ensureVisible(studentFiltersButton);
+    await tester.tap(studentFiltersButton);
+    await tester.pumpAndSettle();
     expect(find.text('All activities'), findsOneWidget);
     expect(find.text('All statuses'), findsOneWidget);
     expect(find.text('All reviews'), findsOneWidget);
@@ -298,14 +313,18 @@ void main() {
 
     await tester.enterText(studentSearch, 'Maya');
     await tester.pump();
-    expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('clear-student-attendance-filters')),
-        matching: find.text('1'),
-      ),
-      findsOneWidget,
-    );
-    expect(find.byTooltip('Clear 1 active filters'), findsOneWidget);
+    expect(find.text('Filters (1)'), findsOneWidget);
+    expect(find.byTooltip('Clear 1 active filter'), findsOneWidget);
+
+    await tester.ensureVisible(studentFiltersButton);
+    await tester.tap(studentFiltersButton);
+    await tester.pumpAndSettle();
+    expect(find.text('All activities'), findsNothing);
+    expect(find.text('Filters (1)'), findsOneWidget);
+    await tester.tap(studentFiltersButton);
+    await tester.pumpAndSettle();
+    expect(find.text('All activities'), findsOneWidget);
+    expect(find.byTooltip('Clear search'), findsOneWidget);
   });
 
   testWidgets('Coach attendance filters remain in one sticky toolbar',
@@ -330,6 +349,20 @@ void main() {
           widget is TextField && widget.decoration?.hintText == 'Coach or date',
     );
     expect(coachSearch, findsOneWidget);
+    final coachFiltersButton =
+        find.byKey(const ValueKey('toggle-coach-attendance-filters'));
+    expect(find.text('Filters'), findsOneWidget);
+    expect(find.text('All coaches'), findsNothing);
+
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -520));
+    await tester.pumpAndSettle();
+    expect(coachSearch, findsOneWidget);
+    expect(find.text('Filters'), findsOneWidget);
+    expect(find.text('All coaches'), findsNothing);
+
+    await tester.ensureVisible(coachFiltersButton);
+    await tester.tap(coachFiltersButton);
+    await tester.pumpAndSettle();
     expect(find.text('All coaches'), findsOneWidget);
     expect(find.text('All statuses'), findsOneWidget);
 
@@ -341,14 +374,68 @@ void main() {
 
     await tester.enterText(coachSearch, 'Coach One');
     await tester.pump();
+    expect(find.text('Filters (1)'), findsOneWidget);
+    expect(find.byTooltip('Clear 1 active filter'), findsOneWidget);
+
+    await tester.ensureVisible(coachFiltersButton);
+    await tester.tap(coachFiltersButton);
+    await tester.pumpAndSettle();
+    expect(find.text('All coaches'), findsNothing);
+    expect(find.text('Filters (1)'), findsOneWidget);
+    await tester.tap(coachFiltersButton);
+    await tester.pumpAndSettle();
+    expect(find.text('All coaches'), findsOneWidget);
+    expect(find.byTooltip('Clear search'), findsOneWidget);
+  });
+
+  testWidgets('Attendance toolbars fit a narrow phone viewport',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(320, 740));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    _SearchApi().install();
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: const Scaffold(body: AdminAttendanceTab()),
+    ));
+    await tester.pumpAndSettle();
+
+    final studentFiltersButton =
+        find.byKey(const ValueKey('toggle-student-attendance-filters'));
+    await tester.scrollUntilVisible(
+      studentFiltersButton,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(studentFiltersButton, findsOneWidget);
+    expect(find.text('All activities'), findsNothing);
+    await tester.tap(studentFiltersButton);
+    await tester.pumpAndSettle();
+    expect(find.text('All activities'), findsOneWidget);
+    expect(find.textContaining('Approve filtered pending'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    final coachFiltersButton =
+        find.byKey(const ValueKey('toggle-coach-attendance-filters'));
+    await tester.scrollUntilVisible(
+      coachFiltersButton,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(coachFiltersButton, findsOneWidget);
+    expect(find.text('All coaches'), findsNothing);
+    await tester.tap(coachFiltersButton);
+    await tester.pumpAndSettle();
+    expect(find.text('All coaches'), findsOneWidget);
     expect(
       find.descendant(
-        of: find.byKey(const ValueKey('clear-coach-attendance-filters')),
-        matching: find.text('1'),
+        of: find.byKey(const ValueKey('coach-search-toolbar')),
+        matching: find.text('All statuses'),
       ),
       findsOneWidget,
     );
-    expect(find.byTooltip('Clear 1 active filters'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Admin Attendance has one sticky manual entry action',
