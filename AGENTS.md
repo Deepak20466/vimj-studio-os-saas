@@ -336,3 +336,19 @@ following additional updates:
   assets match GitHub's published digests, pass `apksigner verify`, and use the
   persistent signing certificate SHA-256
   `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
+
+## 2026-10-07 Admin Attendance List Visibility Persistence
+
+- Admin mobile Attendance saves the Student Attendance and Coach Attendance
+  Hide/Show choices separately in local preferences. Each list restores its
+  last visibility choice when the Attendance screen is reopened or the app is
+  restarted.
+- Release target: mobile version `1.26.14+50`, tag `mobile-v1.26.14`, through
+  `.github/workflows/release-mobile.yml`. GitHub Actions must use the existing
+  persistent signing key; never commit or share the key.
+- Verify the Flutter tests, Dart analysis, and split-ABI Android build before
+  publishing. Record the workflow run and published APK checksums here.
+- Local verification on 2026-10-07: all 21 Flutter tests passed; Flutter
+  analysis exited successfully with 0 errors/warnings and 174 informational
+  lints; local split-ABI release compilation succeeded for armeabi-v7a,
+  arm64-v8a, and x86_64.

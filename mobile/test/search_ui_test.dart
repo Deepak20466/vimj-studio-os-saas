@@ -163,11 +163,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(studentSearch, findsNothing);
 
-    await tester
-        .tap(find.byKey(const ValueKey('toggle-all-student-attendance')));
-    await tester.pumpAndSettle();
-    expect(studentSearch, findsOneWidget);
-
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey('coach-attendance-section')),
       400,
@@ -181,6 +176,49 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('toggle-coach-attendance')));
     await tester.pumpAndSettle();
     expect(coachEmptyState, findsNothing);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: const Scaffold(body: AdminAttendanceTab()),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('All Attendance Records'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(studentSearch, findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('toggle-all-student-attendance')),
+        matching: find.text('Show'),
+      ),
+      findsOneWidget,
+    );
+
+    await tester
+        .tap(find.byKey(const ValueKey('toggle-all-student-attendance')));
+    await tester.pumpAndSettle();
+    expect(studentSearch, findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('coach-attendance-section')),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(coachEmptyState, findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('toggle-coach-attendance')),
+        matching: find.text('Show'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Coach attendance searches the selected day details',
