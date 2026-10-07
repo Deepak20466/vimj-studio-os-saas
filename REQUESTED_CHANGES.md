@@ -44,23 +44,63 @@ Final release checks (2026-10-02):
 - Verified all three APK signatures and the SHA-256 values above; the ARM64 signing certificate matches mobile-v1.21.0.
 - Recommended download for most Android phones: app-arm64-v8a-release.apk from the release linked above.
 
-Coach student-photo removal (2026-10-06):
-- Added a confirmed Delete Photo action to each coach student menu on mobile and a Remove Photo action beside Capture Photo on coach web.
-- Added the authenticated student-photo DELETE API. Admins can remove any student's photo; coaches can remove photos only for students on their assigned activity rosters. Removing a photo preserves the student, attendance, and fee records.
-- Regression coverage checks successful removal, missing-photo handling, and that a coach cannot remove a photo outside their roster.
-- Android update: version 1.26.3+39. GitHub Actions run 37462527351 completed successfully and published all three ABI APKs at https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.26.3.
-- Verified the deployed backend OpenAPI includes `DELETE /students/{student_id}/photo`. Backend regression suite (8 tests), frontend lint and production build, Flutter analysis, Flutter widget test, and local split-ABI release build passed.
+## 2026-10-07 Admin Attendance Visibility Controls
 
-## 2026-10-07 Admin Attendance Layout and Login Responsiveness
-
-- Student and Coach attendance list visibility controls sit beside their search fields. Collapsed lists retain a visible Show control, a count badge for matching records, and a section-specific tooltip.
-- The shared mobile login already starts /health warm-up in the background, keeps its bounded timeout and retry, and opens the dashboard shell immediately after authentication. Render free-tier cold starts remain host-controlled.
-- Release target: mobile version 1.26.16+52, tag mobile-v1.26.16, using .github/workflows/release-mobile.yml and the persistent Android signing key.
-- Verification: all 24 Flutter tests passed; Dart analysis had 0 errors/warnings and 174 informational lints; local split-ABI release compilation passed for armeabi-v7a, arm64-v8a, and x86_64.
-- Published from commit `7596400e03a5ed5a9ee4b8d5f5d0875cf7528d1b` by GitHub Actions run `37666207039`:
+- In the Flutter Admin Attendance screen, the Student Attendance “All Attendance
+  Records” and Coach Attendance Hide controls now sit beside their search fields,
+  making them visible before the lists. When a list is collapsed, its title keeps
+  a visible Show control.
+- Search text, filters, records, and the existing per-admin visibility
+  preferences retain their behavior.
+- Each compact Show/Hide control has a section-specific tooltip for clarity and
+  accessibility.
+- Collapsed sections show a compact count of records matching the retained
+  search and filters; the count is hidden while its list is loading.
+- Login starts the shared `/health` warm-up while credentials are entered and
+  opens the Admin/Coach dashboard shell immediately after authentication. The
+  existing bounded timeout and actionable cold-start message remain. Render's
+  free-tier wake delay is controlled by the host.
+- Release target: mobile version `1.26.16+52`, tag `mobile-v1.26.16`, through
+  `.github/workflows/release-mobile.yml` using the persistent signing key.
+  Never commit or share the signing key.
+- Verification: all 24 Flutter tests passed; Dart analysis completed with 0
+  errors/warnings and 174 informational lints; local split-ABI Android release
+  compilation succeeded for armeabi-v7a, arm64-v8a, and x86_64.
+- Published from commit `7596400e03a5ed5a9ee4b8d5f5d0875cf7528d1b` by GitHub
+  Actions run `37666207039`:
   https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.26.16
-- Published APK SHA-256: arm64-v8a `61746e803fa335ce9f86e41e971d7cf5f6f01eed435d2d2702e989ab378f2cf1`,
+- Published APK SHA-256: arm64-v8a
+  `61746e803fa335ce9f86e41e971d7cf5f6f01eed435d2d2702e989ab378f2cf1`,
   armeabi-v7a `8e1a49165478e5365cccdb08556122ff70ed9ef2f047adc02270212f003b2938`,
   x86_64 `91d5670c4077002d10a127968cff009074447040216aef9a2d2ca3b3e1714267`.
-  All assets match GitHub published digests and pass `apksigner verify`. All use
-  certificate SHA-256 `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
+  All assets match GitHub's published digests and pass `apksigner verify`; all
+  use the persistent signing certificate SHA-256
+  `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
+
+## 2026-10-08 Sticky Search Across Mobile Dashboards
+
+- Search bars for scrolling lists across the Admin and Coach mobile dashboards
+  stay visible while their matching list scrolls, then release when that
+  section ends. Search bars already fixed above their lists remain visible.
+- Admin Attendance keeps the Student Attendance and Coach Attendance
+  Hide/Show controls beside their searches. The calendar's selected-day search
+  also stays with its student attendance section.
+- The shared mobile startup begins the API health warm-up before reading the
+  saved session, overlapping startup work to make login/dashboard entry feel
+  faster. The existing bounded timeout and actionable cold-start messaging
+  remain.
+- Release: version `1.26.17+53`, tag `mobile-v1.26.17`; feature commit
+  `db051543491464ce868ee87d7c7f56d44fbd604b`.
+- Verification: all 24 Flutter tests passed; Flutter analysis completed with
+  no errors or warnings (196 informational notices); local split-ABI Android
+  release compilation succeeded for armeabi-v7a, arm64-v8a, and x86_64.
+- GitHub Actions run `37670879596` completed successfully and published the
+  signed APKs: https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.26.17
+- Published APK SHA-256: arm64-v8a
+  `d3c77398c46f426e510bb084bb62d1479be602d0040c1463004aca08a3bdd712`,
+  armeabi-v7a
+  `da94c736a73f90e5b71250526f01d3654cf7fe4422cf0cb6494732a6fe281fea`,
+  x86_64 `4c7f6e7f47e8f4062d2d05a1230884e9f86977ffbd2a6ad9716d0f4d2ce8bc92`.
+  All match GitHub's asset digests, pass `apksigner verify`, and use the
+  persistent signing certificate SHA-256
+  `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
