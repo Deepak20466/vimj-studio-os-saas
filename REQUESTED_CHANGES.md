@@ -159,5 +159,15 @@ Final release checks (2026-10-02):
 - Verification: all 12 backend regression tests and all 27 Flutter tests passed.
   Flutter analysis completed with no errors or warnings (192 informational
   notices); local split-ABI Android release compilation passed for
-  armeabi-v7a, arm64-v8a, and x86_64. GitHub Actions will sign the published
-  APKs with the persistent release key.
+  armeabi-v7a, arm64-v8a, and x86_64. Production OpenAPI confirms search and
+  pagination parameters are live on the attendance and capped list APIs.
+- Published from commit `d4d0799ab6ae5a6d3362c12c386bd3cb505a384e` by GitHub
+  Actions run `37678234806`:
+  https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.26.19
+- Published APK SHA-256: arm64-v8a
+  `36faf3b8554a1b88678e3781c4452cbe3c817bc56e4b8124c5e2f28b799b95c7`,
+  armeabi-v7a `0be98fd778b7a516f4f3286416de7387734f406eb1587af7106f84ee963a4d91`,
+  x86_64 `fd8eb153156f5cf24a2bf537bc0fc13db7a5ef3fa75de3f747634e00328edcb0`.
+  All match GitHub's published digests, pass `apksigner verify`, and use the
+  persistent signing certificate SHA-256
+  `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
