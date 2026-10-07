@@ -269,3 +269,13 @@ following additional updates:
   x86_64. The full Flutter test run had 14 passes and one failure in the Admin
   Attendance search test (`search_ui_test.dart`), where the search helper found
   multiple matching fields on its second query.
+- Published successfully from commit `77b17bb` by GitHub Actions run
+  `37642662955`: https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.26.11
+- Release APK SHA-256: arm64-v8a
+  `b83590b3bda51668add3a50fb1bd9ff366fced39c0609e245e64309be604d785`, armeabi-v7a
+  `d138cc158e656aef9d989adbe63b7d4b926c5535684e62830601135ddc7885f7`, x86_64
+  `19f53f1e45452daa1214c7e749888b074ac7d5a2c7152ab4c4da4a09c5c48594`.
+- The three release files match GitHub's published asset digests and pass
+  `apksigner verify`. Their signing certificate SHA-256
+  (`7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`) matches
+  the arm64 APK from `mobile-v1.26.10`.
