@@ -264,11 +264,12 @@ following additional updates:
   `.github/workflows/release-mobile.yml`. GitHub Actions must use the existing
   persistent signing key; never commit or share the key.
 - Verification: pending-fee report tests (2 passed), Admin/Coach dashboard
-  smoke tests (2 passed), targeted Dart analysis (no errors), and local
-  split-ABI Android release compilation passed for armeabi-v7a, arm64-v8a, and
-  x86_64. The full Flutter test run had 14 passes and one failure in the Admin
-  Attendance search test (`search_ui_test.dart`), where the search helper found
-  multiple matching fields on its second query.
+  smoke tests (2 passed), Admin/Coach/session-photo search tests (3 passed),
+  targeted Dart analysis (no errors), and local split-ABI Android release
+  compilation passed for armeabi-v7a, arm64-v8a, and x86_64. The complete
+  Flutter test suite now passes all 15 tests. The Admin Attendance search test
+  selects the calendar search field by its unique hint text and checks the
+  selected-day empty-state message.
 - Published successfully from commit `77b17bb` by GitHub Actions run
   `37642662955`: https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.26.11
 - Release APK SHA-256: arm64-v8a

@@ -82,12 +82,18 @@ class _SearchApi {
       };
 }
 
-Future<void> _enterSearch(WidgetTester tester, String query) async {
+Future<void> _enterSearch(
+  WidgetTester tester,
+  String query, {
+  String? hintText,
+}) async {
   final searchField = find.byWidgetPredicate(
     (widget) =>
         widget is TextField &&
-        widget.decoration?.labelText == 'Search attendance',
+        widget.decoration?.labelText == 'Search attendance' &&
+        (hintText == null || widget.decoration?.hintText == hintText),
   );
+  expect(searchField, findsOneWidget);
   await tester.ensureVisible(searchField);
   await tester.enterText(searchField, query);
   await tester.pump();
@@ -111,11 +117,20 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    await _enterSearch(tester, 'maya yoga');
-    expect(find.text('Maya Sharma'), findsOneWidget);
+    await _enterSearch(
+      tester,
+      'maya yoga',
+      hintText: 'Student, activity, coach, status, or approval',
+    );
+    expect(find.text('Maya Sharma'), findsWidgets);
 
-    await _enterSearch(tester, 'maya ballet');
-    expect(find.text('No results found.'), findsOneWidget);
+    await _enterSearch(
+      tester,
+      'maya ballet',
+      hintText: 'Student, activity, coach, status, or approval',
+    );
+    expect(find.text('No student attendance matches these filters.'),
+        findsOneWidget);
   });
 
   testWidgets('Coach attendance searches the selected day details',
