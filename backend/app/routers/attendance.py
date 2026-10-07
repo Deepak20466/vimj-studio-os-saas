@@ -16,7 +16,10 @@ from app.models.attendance import (
     CoachAttendanceStatus,
     AttendanceApprovalStatus,
 )
+from app.models.admin_attendance_visibility import AdminAttendanceVisibility
 from app.schemas.attendance import (
+    AdminAttendanceListVisibilityOut,
+    AdminAttendanceListVisibilityUpdate,
     MarkStudentAttendanceRequest,
     ManualAttendanceRequest,
     StudentAttendanceOut,
@@ -35,6 +38,53 @@ from app.services.audit import log_action
 from app.services.notifications import notify_and_push
 
 router = APIRouter(prefix="/attendance", tags=["attendance"])
+
+
+@router.get("/list-visibility", response_model=AdminAttendanceListVisibilityOut)
+def get_admin_attendance_list_visibility(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    preference = (
+        db.query(AdminAttendanceVisibility)
+        .filter(AdminAttendanceVisibility.user_id == current_user.id)
+        .first()
+    )
+    if preference is None:
+        return {
+            "show_student_attendance_records": True,
+            "show_coach_attendance_records": True,
+            "configured": False,
+        }
+    return {
+        "show_student_attendance_records": preference.show_student_attendance_records,
+        "show_coach_attendance_records": preference.show_coach_attendance_records,
+        "configured": True,
+    }
+
+
+@router.put("/list-visibility", response_model=AdminAttendanceListVisibilityOut)
+def update_admin_attendance_list_visibility(
+    payload: AdminAttendanceListVisibilityUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    preference = (
+        db.query(AdminAttendanceVisibility)
+        .filter(AdminAttendanceVisibility.user_id == current_user.id)
+        .first()
+    )
+    if preference is None:
+        preference = AdminAttendanceVisibility(user_id=current_user.id)
+        db.add(preference)
+    preference.show_student_attendance_records = payload.show_student_attendance_records
+    preference.show_coach_attendance_records = payload.show_coach_attendance_records
+    db.commit()
+    return {
+        "show_student_attendance_records": preference.show_student_attendance_records,
+        "show_coach_attendance_records": preference.show_coach_attendance_records,
+        "configured": True,
+    }
 
 
 def _resolve_marking_coach(db: Session, class_session: ClassSession, current_user: User) -> int:

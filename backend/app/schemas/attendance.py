@@ -7,6 +7,17 @@ from pydantic import BaseModel
 from app.models.attendance import AttendanceStatus, CoachAttendanceStatus, AttendanceApprovalStatus
 
 
+class AdminAttendanceListVisibilityOut(BaseModel):
+    show_student_attendance_records: bool
+    show_coach_attendance_records: bool
+    configured: bool = True
+
+
+class AdminAttendanceListVisibilityUpdate(BaseModel):
+    show_student_attendance_records: bool
+    show_coach_attendance_records: bool
+
+
 class MarkStudentAttendanceRequest(BaseModel):
     student_id: int
     class_id: int

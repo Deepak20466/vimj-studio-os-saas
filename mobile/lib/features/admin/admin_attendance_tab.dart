@@ -5,17 +5,14 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/api_client.dart';
+import '../../core/admin_attendance_visibility_store.dart';
 import '../../core/app_theme.dart';
 import '../../core/dismissed_items.dart';
 import '../../core/models.dart';
 import '../../core/search_utils.dart';
 
 const _missingAttendanceDismissKey = 'missing_attendance';
-const _showStudentAttendanceRecordsKey =
-    'admin_show_all_student_attendance_records';
-const _showCoachAttendanceRecordsKey = 'admin_show_coach_attendance_records';
 
 class AdminAttendanceTab extends StatefulWidget {
   const AdminAttendanceTab({super.key});
@@ -29,6 +26,10 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
   bool _recordsLoading = true;
   bool _showAllAttendanceRecords = true;
   bool _studentVisibilityChanged = false;
+  final _attendanceVisibilityStore = AdminAttendanceVisibilityStore();
+  late final Future<void> _attendanceVisibilityLoad;
+  Future<void> _attendanceVisibilityLocalSaveQueue = Future<void>.value();
+  Future<void> _attendanceVisibilitySaveQueue = Future<void>.value();
   List<DailyMissingRow> _missing = [];
   List<AdminAttendanceRecord> _records = [];
   List<Activity> _activities = [];
@@ -191,7 +192,7 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
   @override
   void initState() {
     super.initState();
-    unawaited(_loadAttendanceListVisibility());
+    _attendanceVisibilityLoad = _loadAttendanceListVisibility();
     _load();
     _loadRecords();
     _loadCoachRecords();
@@ -200,16 +201,14 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
 
   Future<void> _loadAttendanceListVisibility() async {
     try {
-      final preferences = await SharedPreferences.getInstance();
+      final visibility = await _attendanceVisibilityStore.load();
       if (!mounted) return;
       setState(() {
         if (!_studentVisibilityChanged) {
-          _showAllAttendanceRecords =
-              preferences.getBool(_showStudentAttendanceRecordsKey) ?? true;
+          _showAllAttendanceRecords = visibility.showStudentAttendanceRecords;
         }
         if (!_coachVisibilityChanged) {
-          _showCoachAttendanceRecords =
-              preferences.getBool(_showCoachAttendanceRecordsKey) ?? true;
+          _showCoachAttendanceRecords = visibility.showCoachAttendanceRecords;
         }
       });
     } catch (_) {
@@ -223,8 +222,7 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
       _studentVisibilityChanged = true;
       _showAllAttendanceRecords = visible;
     });
-    unawaited(_saveAttendanceListVisibility(
-        _showStudentAttendanceRecordsKey, visible));
+    _queueAttendanceVisibilitySave();
   }
 
   void _toggleCoachAttendanceRecords() {
@@ -233,17 +231,28 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
       _coachVisibilityChanged = true;
       _showCoachAttendanceRecords = visible;
     });
-    unawaited(
-        _saveAttendanceListVisibility(_showCoachAttendanceRecordsKey, visible));
+    _queueAttendanceVisibilitySave();
   }
 
-  Future<void> _saveAttendanceListVisibility(String key, bool visible) async {
-    try {
-      final preferences = await SharedPreferences.getInstance();
-      await preferences.setBool(key, visible);
-    } catch (_) {
-      // The controls continue working for this visit if saving is unavailable.
-    }
+  void _queueAttendanceVisibilitySave() {
+    final snapshot = AdminAttendanceListVisibility(
+      showStudentAttendanceRecords: _showAllAttendanceRecords,
+      showCoachAttendanceRecords: _showCoachAttendanceRecords,
+    );
+    _attendanceVisibilityLocalSaveQueue = _attendanceVisibilityLocalSaveQueue
+        .then((_) => _attendanceVisibilityStore.cacheLocal(snapshot))
+        .catchError((Object _) {});
+    _attendanceVisibilitySaveQueue =
+        _attendanceVisibilitySaveQueue.then((_) async {
+      await _attendanceVisibilityLocalSaveQueue;
+      await _attendanceVisibilityLoad;
+      await _attendanceVisibilityStore.syncRemote(
+        AdminAttendanceListVisibility(
+          showStudentAttendanceRecords: _showAllAttendanceRecords,
+          showCoachAttendanceRecords: _showCoachAttendanceRecords,
+        ),
+      );
+    }).catchError((Object _) {});
   }
 
   Future<void> _load() async {

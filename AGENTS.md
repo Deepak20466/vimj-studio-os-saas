@@ -362,3 +362,21 @@ following additional updates:
   All assets match GitHub's published digests and pass `apksigner verify`; all
   use signing certificate SHA-256
   `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
+
+## 2026-10-07 Admin Attendance Visibility Account Sync
+
+- Admin Attendance list visibility is stored per admin account in the backend,
+  so it follows the account across devices and reinstalls. First-time users
+  still see both lists expanded; existing local choices migrate to the account.
+- Mobile keeps a device-local fallback and queues failed preference writes for
+  retry when Attendance is opened again. Visibility preferences do not affect
+  coach accounts or attendance records.
+- Backend migration `0019` creates the account-scoped preference table. Render's
+  existing build command applies Alembic migrations before starting the API.
+- Release target: mobile version `1.26.15+51`, tag `mobile-v1.26.15`, through
+  `.github/workflows/release-mobile.yml`, using the existing persistent Android
+  signing key. Never commit or share the signing key.
+- Verification on 2026-10-07: all 24 Flutter tests passed; backend regression
+  tests passed (10); Flutter analysis completed with 0 errors/warnings and 174
+  informational lints; backend Python compilation passed. Record production
+  migration, workflow run, APK checksums, and signing verification after release.

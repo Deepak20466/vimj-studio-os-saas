@@ -18,6 +18,7 @@ from app.models.academy import AcademySettings
 from app.models.fee_reminder_draft import FeeReminderDraft, ReminderDraftStatus
 from app.models.notification import Notification
 from app.models.leave import CoachLeave, LeaveStatus
+from app.models.admin_attendance_visibility import AdminAttendanceVisibility
 
 __all__ = [
     "User",
@@ -46,4 +47,5 @@ __all__ = [
     "Notification",
     "CoachLeave",
     "LeaveStatus",
+    "AdminAttendanceVisibility",
 ]

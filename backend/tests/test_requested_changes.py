@@ -12,7 +12,7 @@ from sqlalchemy.pool import StaticPool
 from PIL import Image
 from app.database import Base, get_db
 from app.models import User, UserRole, Activity, CoachActivity, StudentEnrollment, ClassSession, StudentAttendance, AttendanceStatus, StudentFee, FeeStatus, CoachAttendance, CoachAttendanceStatus
-from app.routers import fees, students, receipts, reports, activities, coaches
+from app.routers import fees, students, receipts, reports, activities, coaches, attendance
 from app.security import require_admin, require_coach, require_admin_or_coach, get_current_user
 from app.models.user import UserDetails
 
@@ -32,7 +32,7 @@ class RequestedChanges(unittest.TestCase):
         self.cls = ClassSession(activity_id=self.yoga.id, coach_id=self.coach.id, date=date(2026,9,10), start_time=time(9), end_time=time(10))
         self.db.add(self.cls); self.db.commit()
         self.app = FastAPI()
-        for router in [fees.router, students.router, receipts.router, reports.router, activities.router, coaches.router]: self.app.include_router(router)
+        for router in [fees.router, students.router, receipts.router, reports.router, activities.router, coaches.router, attendance.router]: self.app.include_router(router)
         self.app.dependency_overrides[get_db] = lambda: self.db
         self.app.dependency_overrides[require_admin] = lambda: self.admin
         self.app.dependency_overrides[require_coach] = lambda: self.coach
@@ -193,5 +193,44 @@ class RequestedChanges(unittest.TestCase):
         self.assertEqual(self.client.get(f"/students/{self.s1.id}/photo").status_code, 404)
         self.assertEqual(self.client.delete(f"/students/{self.s1.id}/photo").status_code, 404)
         self.assertIsNotNone(self.db.query(User).filter_by(id=self.s1.id).first())
+
+    def test_admin_attendance_visibility_is_saved_per_admin(self):
+        default = self.client.get('/attendance/list-visibility')
+        self.assertEqual(default.status_code, 200, default.text)
+        self.assertEqual(default.json(), {
+            'show_student_attendance_records': True,
+            'show_coach_attendance_records': True,
+            'configured': False,
+        })
+
+        saved = self.client.put('/attendance/list-visibility', json={
+            'show_student_attendance_records': False,
+            'show_coach_attendance_records': True,
+        })
+        self.assertEqual(saved.status_code, 200, saved.text)
+        self.assertEqual(saved.json(), {
+            'show_student_attendance_records': False,
+            'show_coach_attendance_records': True,
+            'configured': True,
+        })
+        self.assertEqual(self.client.get('/attendance/list-visibility').json(), saved.json())
+
+        other_admin = User(
+            name="Second Admin",
+            email="second-admin@example.com",
+            role=UserRole.ADMIN,
+            password_hash="unused",
+        )
+        self.db.add(other_admin)
+        self.db.commit()
+        self.app.dependency_overrides[require_admin] = lambda: other_admin
+        other_defaults = self.client.get('/attendance/list-visibility')
+        self.assertEqual(other_defaults.status_code, 200, other_defaults.text)
+        self.assertEqual(other_defaults.json()['configured'], False)
+        self.assertTrue(other_defaults.json()['show_student_attendance_records'])
+
+        self.app.dependency_overrides.pop(require_admin)
+        self.app.dependency_overrides[get_current_user] = lambda: self.coach
+        self.assertEqual(self.client.get('/attendance/list-visibility').status_code, 403)
 
 if __name__ == '__main__': unittest.main()
