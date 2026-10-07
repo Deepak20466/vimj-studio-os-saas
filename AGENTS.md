@@ -291,3 +291,13 @@ following additional updates:
 - Release target: mobile version `1.26.12+48`, tag `mobile-v1.26.12`, built and
   published through `.github/workflows/release-mobile.yml` using the existing
   persistent signing key. Never commit or share the key.
+- Published from commit `fd6f615` by GitHub Actions run `37646142198`:
+  https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.26.12
+- Release APK SHA-256: arm64-v8a
+  `6c8baddd61dd85f01710ade50b16ad4412fa0db6662ca15b353152b9abf0455a`,
+  armeabi-v7a
+  `0d886088c2fd9e92301a1a6b321165ca74c137c96c96add3860eee0a7ca528cc`, x86_64
+  `cea12b06d2b4ba9bf1ccc1b4651dc7fa448ab7ac67fe1e074a5f38b5cfcef085`. All
+  assets match GitHub's published digests and pass `apksigner verify`; their
+  signing certificate SHA-256 is
+  `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
