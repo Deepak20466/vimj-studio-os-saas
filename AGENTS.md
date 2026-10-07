@@ -221,3 +221,21 @@ following additional updates:
 - Verification: Flutter analysis completed with 0 errors/warnings (174 informational
   lints), and the local split-ABI release build succeeded for armeabi-v7a, arm64-v8a,
   and x86_64.
+
+## 2026-10-07 Requested Mobile Fixes
+
+- Keep this request scoped to Flutter mobile plus this agent notes file. Do not change
+  web, backend, or other Admin Attendance behavior.
+- Admin Attendance's Fees Pending PDF should use the month selected in its attendance
+  calendar, so prior-month pending balances can be exported from the same section.
+- Harden the shared Admin/Coach mobile login and API path for transient production
+  gateway/network failures. The Render free-tier cold start can still delay a first
+  request; mobile changes must keep the existing bounded login timeout and background
+  warm-up behavior.
+- The shared client retries one HTTP 502/503/504 response for safe GET requests and
+  login, including raw PDF downloads; failed health probes are not cached as a successful
+  warm-up, and timeout/connection failures use actionable API errors.
+- Release target: mobile version `1.26.10+46`, tag `mobile-v1.26.10`, using the existing
+  signed split-ABI GitHub Actions workflow. Never commit or share the signing key.
+- Local Android split-ABI release compilation passed for armeabi-v7a, arm64-v8a, and
+  x86_64. GitHub Actions will produce the persistent-key signed release APK assets.

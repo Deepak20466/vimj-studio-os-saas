@@ -71,19 +71,24 @@ class ApiClient {
     }
 
     late final Future<void> tracked;
-    tracked = _performWarmUp().whenComplete(() {
-      _lastWarmUpCompletedAt = DateTime.now();
+    tracked = _performWarmUp().then((succeeded) {
+      // Only suppress another ping when the health endpoint actually responded.
+      // A failed probe should be retried on the next login attempt.
+      if (succeeded) _lastWarmUpCompletedAt = DateTime.now();
+    }).whenComplete(() {
       if (identical(_warmUpFuture, tracked)) _warmUpFuture = null;
     });
     _warmUpFuture = tracked;
     return tracked;
   }
 
-  Future<void> _performWarmUp() async {
+  Future<bool> _performWarmUp() async {
     try {
-      await _http.get(_uri('/health')).timeout(_loginTimeout);
+      final response = await _http.get(_uri('/health')).timeout(_loginTimeout);
+      return response.statusCode >= 200 && response.statusCode < 300;
     } catch (_) {
       // A warm-up failure must not affect the actual login attempt.
+      return false;
     }
   }
 
@@ -140,6 +145,7 @@ class ApiClient {
     Object? body,
     bool auth = true,
     bool isRetry = false,
+    bool retriedTransient = false,
   }) async {
     final uri = _uri(path, query);
     final headers = await _headers(auth: auth);
@@ -177,13 +183,35 @@ class ApiClient {
       }
       throw ApiException(0,
           'The server did not respond in time. Check your connection and try again.');
+    } on http.ClientException {
+      throw ApiException(0,
+          'Could not connect to the server. Check your connection and try again.');
+    }
+
+    // Render can briefly return a gateway error while its free-tier instance is
+    // starting. Retry safe reads and login once so that transient startup errors
+    // do not immediately surface as a server failure.
+    if (!retriedTransient &&
+        (method == 'GET' || path == '/auth/login') &&
+        const {502, 503, 504}.contains(response.statusCode)) {
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      return _request(method, path,
+          query: query,
+          body: body,
+          auth: auth,
+          isRetry: isRetry,
+          retriedTransient: true);
     }
 
     if (response.statusCode == 401 && auth && !isRetry) {
       final refreshed = await _tryRefresh();
       if (refreshed) {
         return _request(method, path,
-            query: query, body: body, auth: auth, isRetry: true);
+            query: query,
+            body: body,
+            auth: auth,
+            isRetry: true,
+            retriedTransient: retriedTransient);
       }
       await AuthStorage.clear();
       throw ApiException(401, 'Session expired. Please log in again.');
@@ -221,14 +249,35 @@ class ApiClient {
       _request('DELETE', path, auth: auth);
 
   /// For endpoints that return a raw file (CSV/PDF export, receipt PDF) rather than JSON.
-  Future<List<int>> getBytes(String path, {Map<String, dynamic>? query}) async {
+  Future<List<int>> getBytes(String path, {Map<String, dynamic>? query}) =>
+      _getBytes(path, query: query);
+
+  Future<List<int>> _getBytes(String path,
+      {Map<String, dynamic>? query, bool retriedTransient = false}) async {
     final uri = _uri(path, query);
     final headers = await _headers();
-    final response =
-        await _http.get(uri, headers: headers).timeout(_requestTimeout);
+    late final http.Response response;
+    try {
+      response =
+          await _http.get(uri, headers: headers).timeout(_requestTimeout);
+    } on TimeoutException {
+      throw ApiException(0,
+          'The server did not respond in time. Check your connection and try again.');
+    } on http.ClientException {
+      throw ApiException(0,
+          'Could not connect to the server. Check your connection and try again.');
+    }
+    if (!retriedTransient &&
+        const {502, 503, 504}.contains(response.statusCode)) {
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      return _getBytes(path, query: query, retriedTransient: true);
+    }
     if (response.statusCode == 401) {
       final refreshed = await _tryRefresh();
-      if (refreshed) return getBytes(path, query: query);
+      if (refreshed) {
+        return _getBytes(path,
+            query: query, retriedTransient: retriedTransient);
+      }
       await AuthStorage.clear();
       throw ApiException(401, 'Session expired. Please log in again.');
     }

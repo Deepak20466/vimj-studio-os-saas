@@ -1176,7 +1176,8 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                         onPressed: () => _exportReport('fees_paid'),
                         child: const Text('Fees Paid PDF')),
                     OutlinedButton(
-                        onPressed: () => _exportReport('fees_pending'),
+                        onPressed: () => _exportReport('fees_pending',
+                            date: _calendarMonth, includeDay: false),
                         child: const Text('Fees Pending PDF')),
                   ]),
                   const Padding(
