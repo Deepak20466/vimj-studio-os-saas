@@ -475,6 +475,16 @@ following additional updates:
 - Release target: mobile version `1.26.25+61`, tag `mobile-v1.26.25`, through
   `.github/workflows/release-mobile.yml` using the persistent Android signing
   key. Never commit or share the signing key.
+- Published from commit `402aaeaf20606c17003ad91448eab0451c4a1093` by GitHub
+  Actions run `37700539906`:
+  https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.26.25
+- Published APK SHA-256: arm64-v8a
+  `5e05437bf96bdf363fc09b26c1ad81b352fa96c1c1f7cac9a40581859454b9ba`,
+  armeabi-v7a `6c7e9528b60025d70e3bbba1235756f636897a4a2bcd2e0e64c409bc3baee818`,
+  x86_64 `1aca3ba91fcedad8ab1c5505533372cc902026f8fc529463ea682bde22aec1e2`.
+  All assets match GitHub's published digests and pass `apksigner verify`; all
+  use the persistent signing certificate SHA-256
+  `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
 
 ## 2026-10-08 Remove Duplicate Admin Calendar Searches
 
