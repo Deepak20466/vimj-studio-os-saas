@@ -536,28 +536,41 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
     );
   }
 
-  Widget _attendanceTodayBadge() {
+  Widget _attendanceDateBadge(DateTime date) {
     final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.calendar_today_outlined,
-              size: 13, color: theme.colorScheme.onSecondaryContainer),
-          const SizedBox(width: 4),
-          Text(
-            'Today',
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSecondaryContainer,
-              fontWeight: FontWeight.w700,
+    final now = DateTime.now();
+    final label = DateUtils.isSameDay(date, now)
+        ? 'Updated Today'
+        : DateUtils.isSameDay(date, now.subtract(const Duration(days: 1)))
+            ? 'Updated Yesterday'
+            : 'Updated ${DateFormat('MMM d').format(date)}';
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 150),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.secondaryContainer,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.calendar_today_outlined,
+                size: 13, color: theme.colorScheme.onSecondaryContainer),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSecondaryContainer,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1499,10 +1512,8 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
               const SizedBox(width: 8),
               Text('Coach Attendance',
                   style: Theme.of(context).textTheme.titleSmall),
-              if (DateUtils.isSameDay(selected, DateTime.now())) ...[
-                const SizedBox(width: 8),
-                _attendanceTodayBadge(),
-              ],
+              const SizedBox(width: 8),
+              _attendanceDateBadge(selected),
             ],
           ),
           const SizedBox(height: 6),
@@ -1605,10 +1616,8 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
                       ),
                     ),
                   ),
-                  if (DateUtils.isSameDay(selected, DateTime.now())) ...[
-                    _attendanceTodayBadge(),
-                    const SizedBox(width: 4),
-                  ],
+                  const SizedBox(width: 6),
+                  Flexible(child: _attendanceDateBadge(selected)),
                   TextButton.icon(
                     key: const ValueKey('toggle-calendar-student-attendance'),
                     onPressed: () => setState(() =>
