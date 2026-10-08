@@ -1,6 +1,6 @@
 databases:
   - name: vimj-db
-    plan: free
+    plan: 0.1c-256mb
     databaseName: vimj_attendance
     user: vimj_user
 
