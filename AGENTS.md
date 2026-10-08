@@ -640,7 +640,7 @@ following additional updates:
   the persistent signing certificate SHA-256
   `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
 
-## 2026-10-08 Mobile Login Waits for API Readiness (Pending Release)
+## 2026-10-08 Mobile Login Waits for API Readiness
 
 - Before sending `/auth/login`, the mobile app waits for `/health` to respond
   successfully. If the production host is still starting, it retries safe
@@ -655,9 +655,17 @@ following additional updates:
 - Release target: mobile version `1.26.31+67`, tag `mobile-v1.26.31`, through
   `.github/workflows/release-mobile.yml` using the existing persistent Android
   signing key. Never commit or share the signing key.
-- Before publishing, verify the Flutter suite, Dart analysis, backend regression
-  tests, and split-ABI Android release build. Record publication details here.
-- Local verification on 2026-10-08: backend regression tests passed (12); all
-  Flutter tests passed (34); Flutter analysis exited successfully with no
-  errors or warnings (194 informational notices); local split-ABI release
-  compilation succeeded for armeabi-v7a, arm64-v8a, and x86_64.
+- Verification: all Flutter tests passed (34); Flutter analysis completed with
+  no errors or warnings (194 informational notices); backend regression tests
+  passed (12); local split-ABI Android release compilation succeeded for
+  armeabi-v7a, arm64-v8a, and x86_64.
+- Published from commit `f71c5bd1f418aed12773b211e6582fe35c211d23` by GitHub
+  Actions run `37785120806`:
+  https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.26.31
+- Published APK SHA-256: arm64-v8a
+  `c25e290218a79ee9280ea46c5e29019f06f6b1b638782ff3202de304b6e242e5`,
+  armeabi-v7a `ca8f4b7c920a2cc8ee06e2028d0ab7f45a09ea4ee547a79d79bdcb09d65cc041`,
+  x86_64 `1473a7751b980f06ccf371ac97f6edea8ba7d4a6d9c28d030d578a335e054016`.
+  All assets match GitHub's published digests, pass `apksigner verify`, and use
+  the persistent signing certificate SHA-256
+  `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
