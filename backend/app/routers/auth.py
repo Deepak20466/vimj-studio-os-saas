@@ -1,7 +1,7 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -33,7 +33,12 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit(settings.LOGIN_RATE_LIMIT)
-def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)):
+def login(
+    request: Request,
+    response: Response,
+    payload: LoginRequest,
+    db: Session = Depends(get_db),
+):
     user = db.query(User).filter(User.email == payload.email).first()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
@@ -118,6 +123,7 @@ def logout(current_user: User = Depends(get_current_user), db: Session = Depends
 @limiter.limit(settings.LOGIN_RATE_LIMIT)
 def forgot_password(
     request: Request,
+    response: Response,
     payload: ForgotPasswordRequest,
     db: Session = Depends(get_db),
     x_recovery_secret: str | None = Header(default=None),

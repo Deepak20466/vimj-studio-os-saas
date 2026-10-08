@@ -37,6 +37,17 @@ class DatabaseConnectionTests(unittest.TestCase):
         finally:
             engine.dispose()
 
+    def test_supabase_shared_session_url_is_routed_to_transaction_pooler(self):
+        engine = database.create_database_engine(
+            "postgres://vimj:secret@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require"
+        )
+        try:
+            self.assertEqual(engine.url.port, 6543)
+            self.assertEqual(engine.url.query["sslmode"], "require")
+            self.assertIsInstance(engine.pool, NullPool)
+        finally:
+            engine.dispose()
+
     def test_request_session_is_closed_when_dependency_finishes(self):
         session = MagicMock()
         with patch.object(database, "SessionLocal", return_value=session):

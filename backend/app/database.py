@@ -10,7 +10,20 @@ def normalize_database_url(database_url: str) -> str:
     # Managed Postgres providers commonly hand out "postgres://" URLs, a
     # scheme SQLAlchemy dropped support for in 1.4+.
     if database_url.startswith("postgres://"):
-        return database_url.replace("postgres://", "postgresql+psycopg2://", 1)
+        database_url = database_url.replace("postgres://", "postgresql+psycopg2://", 1)
+
+    parsed_url = make_url(database_url)
+    host = (parsed_url.host or "").lower()
+    if (
+        parsed_url.get_backend_name() == "postgresql"
+        and host.endswith(".pooler.supabase.com")
+        and (parsed_url.port or 5432) == 5432
+    ):
+        # Supabase's shared-pooler port 5432 is session mode and caps client
+        # connections at the configured pool_size. This app needs no
+        # session-scoped database features, so route it through transaction
+        # mode to avoid that per-client session cap.
+        return parsed_url.set(port=6543).render_as_string(hide_password=False)
     return database_url
 
 
