@@ -34,12 +34,17 @@ void main() {
   });
 
   test('login retries a transient server error once', () async {
-    var attempts = 0;
+    var loginAttempts = 0;
+    var healthAttempts = 0;
     ApiClient.instance.setClientForTesting(MockClient((request) async {
-      attempts++;
+      if (request.url.path == '/health') {
+        healthAttempts++;
+        return http.Response(jsonEncode({'status': 'ok'}), 200);
+      }
+      loginAttempts++;
       return http.Response(
         jsonEncode({'access_token': 'token'}),
-        attempts == 1 ? 503 : 200,
+        loginAttempts == 1 ? 503 : 200,
         headers: const {'content-type': 'application/json'},
       );
     }));
@@ -50,15 +55,19 @@ void main() {
       auth: false,
     );
 
-    expect(attempts, 2);
+    expect(healthAttempts, 2);
+    expect(loginAttempts, 2);
     expect(result, {'access_token': 'token'});
   });
 
   test('login retries a transient request timeout once', () async {
-    var attempts = 0;
+    var loginAttempts = 0;
     ApiClient.instance.setClientForTesting(MockClient((request) async {
-      attempts++;
-      if (attempts == 1) throw TimeoutException('temporary timeout');
+      if (request.url.path == '/health') {
+        return http.Response(jsonEncode({'status': 'ok'}), 200);
+      }
+      loginAttempts++;
+      if (loginAttempts == 1) throw TimeoutException('temporary timeout');
       return http.Response(
         jsonEncode({'access_token': 'token'}),
         200,
@@ -72,23 +81,26 @@ void main() {
       auth: false,
     );
 
-    expect(attempts, 2);
+    expect(loginAttempts, 2);
     expect(result, {'access_token': 'token'});
   });
 
-  test('login retry does not wait for a stalled health warm-up', () async {
-    final healthResponse = Completer<http.Response>();
+  test('login waits for health readiness instead of retrying sign-in on 503',
+      () async {
+    var healthAttempts = 0;
     var loginAttempts = 0;
     ApiClient.instance.setClientForTesting(MockClient((request) async {
-      if (request.url.path == '/health') return healthResponse.future;
+      if (request.url.path == '/health') {
+        healthAttempts++;
+        return http.Response(
+          jsonEncode({'status': healthAttempts > 1 ? 'ok' : 'starting'}),
+          healthAttempts > 1 ? 200 : 503,
+        );
+      }
       loginAttempts++;
-      return http.Response(
-        jsonEncode({'access_token': 'token'}),
-        loginAttempts == 1 ? 503 : 200,
-        headers: const {'content-type': 'application/json'},
-      );
+      return http.Response(jsonEncode({'access_token': 'token'}), 200,
+          headers: const {'content-type': 'application/json'});
     }));
-    unawaited(ApiClient.instance.warmUp());
 
     final result = await ApiClient.instance.post(
       '/auth/login',
@@ -96,7 +108,8 @@ void main() {
       auth: false,
     );
 
-    expect(loginAttempts, 2);
+    expect(healthAttempts, 2);
+    expect(loginAttempts, 1);
     expect(result, {'access_token': 'token'});
   });
 

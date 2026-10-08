@@ -27,7 +27,7 @@ class ApiClient {
   static final ApiClient instance = ApiClient._();
 
   http.Client _http = http.Client();
-  Future<void>? _warmUpFuture;
+  Future<bool>? _warmUpFuture;
   DateTime? _lastWarmUpCompletedAt;
   // Shared by every concurrent caller that hits a 401 at the same time (e.g. a screen
   // that fires several parallel GETs via Future.wait right as the access token expires).
@@ -65,21 +65,26 @@ class ApiClient {
 
   /// Best-effort, non-authenticated ping used by the login screen to wake the
   /// production host while the user is entering credentials.
-  Future<void> warmUp() {
+  Future<void> warmUp() async {
+    await _probeHealth();
+  }
+
+  Future<bool> _probeHealth() {
     final pending = _warmUpFuture;
     if (pending != null) return pending;
     final lastCompletedAt = _lastWarmUpCompletedAt;
     if (lastCompletedAt != null &&
         DateTime.now().difference(lastCompletedAt) <
             const Duration(minutes: 5)) {
-      return Future.value();
+      return Future.value(true);
     }
 
-    late final Future<void> tracked;
+    late final Future<bool> tracked;
     tracked = _performWarmUp().then((succeeded) {
       // Only suppress another ping when the health endpoint actually responded.
       // A failed probe should be retried on the next login attempt.
       if (succeeded) _lastWarmUpCompletedAt = DateTime.now();
+      return succeeded;
     }).whenComplete(() {
       if (identical(_warmUpFuture, tracked)) _warmUpFuture = null;
     });
@@ -162,6 +167,44 @@ class ApiClient {
       refreshToken: decoded['refresh_token'] as String?,
     );
     return true;
+  }
+
+  /// Keep the login POST away from the authentication rate limiter while a
+  /// sleeping production service is waking. Health probes are safe to repeat;
+  /// sign-in attempts are not. The caller's login timer bounds the whole wait.
+  Future<void> _waitForServerReady(Stopwatch? loginTimer) async {
+    var retryDelay = const Duration(seconds: 2);
+    while (true) {
+      final remaining = _remainingLoginTimeout(loginTimer);
+      var ready = false;
+      try {
+        ready = await _probeHealth().timeout(remaining);
+      } on TimeoutException {
+        _remainingLoginTimeout(loginTimer);
+      }
+      if (ready) return;
+
+      final remainingAfterProbe = _remainingLoginTimeout(loginTimer);
+      final delay =
+          retryDelay < remainingAfterProbe ? retryDelay : remainingAfterProbe;
+      try {
+        await Future<void>.delayed(delay).timeout(remainingAfterProbe);
+      } on TimeoutException {
+        _remainingLoginTimeout(loginTimer);
+      }
+      retryDelay = Duration(
+        seconds: (retryDelay.inSeconds * 1.5).ceil().clamp(2, 8).toInt(),
+      );
+    }
+  }
+
+  Future<void> _waitForLoginRecovery(Stopwatch? loginTimer) async {
+    // A request failure can happen during a deploy/restart even if an earlier
+    // health check succeeded. Re-check readiness before spending the one safe
+    // login retry, keeping all waits within the same 75-second budget.
+    _lastWarmUpCompletedAt = null;
+    await _waitForServerReady(loginTimer);
+    await _waitForLoginRetry(loginTimer);
   }
 
   Future<http.Response> _sendRefresh(AuthSession session,
@@ -283,11 +326,16 @@ class ApiClient {
     bool auth = true,
     bool isRetry = false,
     bool retriedTransient = false,
+    bool loginReady = false,
     Stopwatch? loginTimer,
   }) async {
     final requestLoginTimer =
         loginTimer ?? (path == '/auth/login' ? (Stopwatch()..start()) : null);
     final uri = _uri(path, query);
+    if (path == '/auth/login' && !loginReady) {
+      await _waitForServerReady(requestLoginTimer);
+      loginReady = true;
+    }
     final headers = await _headers(auth: auth);
     final encodedBody = body != null ? jsonEncode(body) : null;
     final timeout = path == '/auth/login'
@@ -322,13 +370,14 @@ class ApiClient {
     } on TimeoutException {
       if (path == '/auth/login') {
         if (!retriedTransient) {
-          await _waitForLoginRetry(requestLoginTimer);
+          await _waitForLoginRecovery(requestLoginTimer);
           return _request(method, path,
               query: query,
               body: body,
               auth: auth,
               isRetry: isRetry,
               retriedTransient: true,
+              loginReady: loginReady,
               loginTimer: requestLoginTimer);
         }
         throw ApiException(0, _loginTimeoutMessage);
@@ -338,7 +387,7 @@ class ApiClient {
     } on http.ClientException {
       if (!retriedTransient && (method == 'GET' || path == '/auth/login')) {
         if (path == '/auth/login') {
-          await _waitForLoginRetry(requestLoginTimer);
+          await _waitForLoginRecovery(requestLoginTimer);
         } else {
           await Future<void>.delayed(const Duration(milliseconds: 400));
         }
@@ -348,6 +397,7 @@ class ApiClient {
             auth: auth,
             isRetry: isRetry,
             retriedTransient: true,
+            loginReady: loginReady,
             loginTimer: requestLoginTimer);
       }
       throw ApiException(0,
@@ -362,7 +412,7 @@ class ApiClient {
         (method == 'GET' || path == '/auth/login') &&
         transientServerError) {
       if (path == '/auth/login') {
-        await _waitForLoginRetry(requestLoginTimer);
+        await _waitForLoginRecovery(requestLoginTimer);
       } else {
         await Future<void>.delayed(const Duration(milliseconds: 400));
       }
@@ -372,6 +422,7 @@ class ApiClient {
           auth: auth,
           isRetry: isRetry,
           retriedTransient: true,
+          loginReady: loginReady,
           loginTimer: requestLoginTimer);
     }
 
@@ -382,7 +433,8 @@ class ApiClient {
           body: body,
           auth: auth,
           isRetry: true,
-          retriedTransient: retriedTransient);
+          retriedTransient: retriedTransient,
+          loginReady: loginReady);
     }
 
     if (response.statusCode >= 200 && response.statusCode < 300) {

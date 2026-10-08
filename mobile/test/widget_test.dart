@@ -25,6 +25,8 @@ class _AttendanceApi {
     requests.add(request);
     final path = request.url.path;
 
+    if (path == '/health') return _json({'status': 'ok'});
+
     if (path == '/auth/login') {
       final body = jsonDecode(request.body) as Map<String, dynamic>;
       final role =

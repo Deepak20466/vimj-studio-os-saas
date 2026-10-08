@@ -601,7 +601,7 @@ following additional updates:
   use the persistent signing certificate SHA-256
   `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
 
-## 2026-10-08 Mobile Sign-In Rate Limit and Session Recovery (Pending Release)
+## 2026-10-08 Mobile Sign-In Rate Limit and Session Recovery
 
 - A temporary refresh-token timeout, connection error, or server error must not
   clear the saved session or report that the user was logged out. Retry refresh
@@ -639,3 +639,25 @@ following additional updates:
   All assets match GitHub's published digests, pass `apksigner verify`, and use
   the persistent signing certificate SHA-256
   `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
+
+## 2026-10-08 Mobile Login Waits for API Readiness (Pending Release)
+
+- Before sending `/auth/login`, the mobile app waits for `/health` to respond
+  successfully. If the production host is still starting, it retries safe
+  health probes with bounded backoff under the existing 75-second login limit.
+- If login itself encounters a transient timeout, connection error, or 5xx,
+  the app checks API readiness again before its single login retry. Health
+  probes do not consume password-attempt rate limits; 429 handling remains.
+- This covers Render free-tier cold starts without repeating password
+  submissions. Genuine server or network outages can still exhaust the bounded
+  wait and show an actionable timeout message. No backend or schema change is
+  required.
+- Release target: mobile version `1.26.31+67`, tag `mobile-v1.26.31`, through
+  `.github/workflows/release-mobile.yml` using the existing persistent Android
+  signing key. Never commit or share the signing key.
+- Before publishing, verify the Flutter suite, Dart analysis, backend regression
+  tests, and split-ABI Android release build. Record publication details here.
+- Local verification on 2026-10-08: backend regression tests passed (12); all
+  Flutter tests passed (34); Flutter analysis exited successfully with no
+  errors or warnings (194 informational notices); local split-ABI release
+  compilation succeeded for armeabi-v7a, arm64-v8a, and x86_64.
