@@ -15,7 +15,8 @@ const _loginTimeoutMessage =
 class ApiException implements Exception {
   final int statusCode;
   final String message;
-  ApiException(this.statusCode, this.message);
+  final Duration? retryAfter;
+  ApiException(this.statusCode, this.message, {this.retryAfter});
 
   @override
   String toString() => message;
@@ -120,26 +121,158 @@ class ApiClient {
   }
 
   Future<bool> _performRefresh() async {
+    final session = await AuthStorage.load();
+    if (session == null) return false;
+
+    final response = await _sendRefresh(session);
+    if (response.statusCode == 401) return false;
+    if (response.statusCode != 200) {
+      throw ApiException(
+        response.statusCode,
+        _responseMessage(
+          response,
+          fallback: 'Could not renew your session. Please try again shortly.',
+          unavailable:
+              'The server is temporarily unavailable. Your saved session is safe; please try again shortly.',
+          login: false,
+        ),
+        retryAfter: _retryAfter(response),
+      );
+    }
+
+    final dynamic decoded;
     try {
-      final session = await AuthStorage.load();
-      if (session == null) return false;
-      final response = await _http
+      decoded = await _decode(response);
+    } catch (_) {
+      throw ApiException(
+        0,
+        'The server returned an invalid session response. Your saved session is safe; please try again.',
+      );
+    }
+    if (decoded is! Map<String, dynamic> ||
+        decoded['access_token'] is! String) {
+      throw ApiException(
+        0,
+        'The server returned an invalid session response. Your saved session is safe; please try again.',
+      );
+    }
+
+    await AuthStorage.updateAccessToken(
+      decoded['access_token'] as String,
+      refreshToken: decoded['refresh_token'] as String?,
+    );
+    return true;
+  }
+
+  Future<http.Response> _sendRefresh(AuthSession session,
+      {bool retriedTransient = false}) async {
+    late final http.Response response;
+    try {
+      response = await _http
           .post(
             _uri('/auth/refresh'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({'refresh_token': session.refreshToken}),
           )
           .timeout(_requestTimeout);
-      if (response.statusCode != 200) return false;
-      final data = await _decode(response) as Map<String, dynamic>;
-      await AuthStorage.updateAccessToken(
-        data['access_token'] as String,
-        refreshToken: data['refresh_token'] as String?,
+    } on TimeoutException {
+      if (!retriedTransient) {
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        return _sendRefresh(session, retriedTransient: true);
+      }
+      throw ApiException(
+        0,
+        'The server did not respond while renewing your session. Your saved session is safe; please try again shortly.',
       );
-      return true;
-    } catch (_) {
-      return false;
+    } on http.ClientException {
+      if (!retriedTransient) {
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        return _sendRefresh(session, retriedTransient: true);
+      }
+      throw ApiException(
+        0,
+        'Could not connect while renewing your session. Your saved session is safe; check your connection and try again.',
+      );
     }
+
+    final transientServerError =
+        response.statusCode >= 500 && response.statusCode < 600;
+    if (!retriedTransient && transientServerError) {
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      return _sendRefresh(session, retriedTransient: true);
+    }
+    return response;
+  }
+
+  Future<void> _refreshOrThrowSessionExpired() async {
+    if (await _tryRefresh()) return;
+    await AuthStorage.clear();
+    throw ApiException(401, 'Session expired. Please log in again.');
+  }
+
+  Duration? _retryAfter(http.Response response) {
+    final value = response.headers['retry-after']?.trim();
+    if (value == null || value.isEmpty) return null;
+    final seconds = int.tryParse(value);
+    if (seconds != null) {
+      return Duration(seconds: seconds > 0 ? seconds : 1);
+    }
+    final retryAt = DateTime.tryParse(value);
+    if (retryAt == null) return null;
+    final remaining = retryAt.toUtc().difference(DateTime.now().toUtc());
+    return remaining > Duration.zero ? remaining : const Duration(seconds: 1);
+  }
+
+  String _responseMessage(
+    http.Response response, {
+    required String fallback,
+    required String unavailable,
+    required bool login,
+  }) {
+    if (response.statusCode == 429) {
+      final delay = _retryAfter(response);
+      final wait = delay == null ? null : _describeDelay(delay);
+      if (login) {
+        return wait == null
+            ? 'Too many sign-in attempts. Please wait before trying again.'
+            : 'Too many sign-in attempts. Please wait $wait before trying again.';
+      }
+      return wait == null
+          ? 'Too many requests. Please wait before trying again.'
+          : 'Too many requests. Please wait $wait before trying again.';
+    }
+
+    var message = fallback;
+    try {
+      final data = jsonDecode(response.body);
+      if (data is Map) {
+        final detail = data['detail'] ?? data['error'] ?? data['message'];
+        if (detail != null) {
+          message = detail is String ? detail : jsonEncode(detail);
+        }
+      }
+    } catch (_) {
+      // Keep the fallback when the gateway body is not JSON.
+    }
+    if (response.statusCode >= 500 &&
+        response.statusCode < 600 &&
+        message == fallback) {
+      return unavailable;
+    }
+    return message;
+  }
+
+  String _describeDelay(Duration delay) {
+    final seconds = delay.inSeconds.ceil();
+    if (seconds < 60) {
+      return '$seconds ${seconds == 1 ? 'second' : 'seconds'}';
+    }
+    final minutes = (seconds + 59) ~/ 60;
+    if (minutes < 60) {
+      return '$minutes ${minutes == 1 ? 'minute' : 'minutes'}';
+    }
+    final hours = (minutes + 59) ~/ 60;
+    return '$hours ${hours == 1 ? 'hour' : 'hours'}';
   }
 
   Future<dynamic> _request(
@@ -243,41 +376,29 @@ class ApiClient {
     }
 
     if (response.statusCode == 401 && auth && !isRetry) {
-      final refreshed = await _tryRefresh();
-      if (refreshed) {
-        return _request(method, path,
-            query: query,
-            body: body,
-            auth: auth,
-            isRetry: true,
-            retriedTransient: retriedTransient);
-      }
-      await AuthStorage.clear();
-      throw ApiException(401, 'Session expired. Please log in again.');
+      await _refreshOrThrowSessionExpired();
+      return _request(method, path,
+          query: query,
+          body: body,
+          auth: auth,
+          isRetry: true,
+          retriedTransient: retriedTransient);
     }
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return _decode(response);
     }
 
-    String message = 'Request failed (${response.statusCode})';
-    try {
-      final data = await _decode(response);
-      if (data is Map && data['detail'] != null) {
-        final detail = data['detail'];
-        message = detail is String ? detail : jsonEncode(detail);
-      }
-    } catch (_) {
-      // keep default message
-    }
-    if (response.statusCode >= 500 &&
-        response.statusCode < 600 &&
-        message == 'Request failed (${response.statusCode})') {
-      message = path == '/auth/login'
+    final message = _responseMessage(
+      response,
+      fallback: 'Request failed (${response.statusCode})',
+      unavailable: path == '/auth/login'
           ? 'The server is temporarily unavailable. Please try signing in again shortly.'
-          : 'The server is temporarily unavailable. Please try again shortly.';
-    }
-    throw ApiException(response.statusCode, message);
+          : 'The server is temporarily unavailable. Please try again shortly.',
+      login: path == '/auth/login',
+    );
+    throw ApiException(response.statusCode, message,
+        retryAfter: _retryAfter(response));
   }
 
   Duration _remainingLoginTimeout(Stopwatch? timer) {
@@ -401,13 +522,21 @@ class ApiClient {
       return _getBytes(path, query: query, retriedTransient: true);
     }
     if (response.statusCode == 401) {
-      final refreshed = await _tryRefresh();
-      if (refreshed) {
-        return _getBytes(path,
-            query: query, retriedTransient: retriedTransient);
-      }
-      await AuthStorage.clear();
-      throw ApiException(401, 'Session expired. Please log in again.');
+      await _refreshOrThrowSessionExpired();
+      return _getBytes(path, query: query, retriedTransient: retriedTransient);
+    }
+    if (response.statusCode == 429) {
+      final retryAfter = _retryAfter(response);
+      throw ApiException(
+        429,
+        _responseMessage(
+          response,
+          fallback: 'Download failed (429)',
+          unavailable: 'The server is temporarily unavailable.',
+          login: false,
+        ),
+        retryAfter: retryAfter,
+      );
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       String message = 'Download failed (${response.statusCode})';

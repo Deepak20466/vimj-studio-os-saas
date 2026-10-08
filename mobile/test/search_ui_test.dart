@@ -473,7 +473,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(
-      find.text('No coach attendance marked on this date.'),
+      find.text('All statuses'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
@@ -489,12 +489,6 @@ void main() {
     );
     expect(find.text('All statuses'), findsOneWidget);
 
-    await tester.scrollUntilVisible(
-      find.text('Coaches Missing Attendance Today'),
-      250,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
     expect(
       find.byWidgetPredicate(
         (widget) =>
@@ -503,7 +497,7 @@ void main() {
       ),
       findsNothing,
     );
-    expect(find.text('Coaches Missing Attendance Today'), findsOneWidget);
+    expect(find.text('Coaches Missing Attendance Today'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

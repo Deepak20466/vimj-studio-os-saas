@@ -600,3 +600,30 @@ following additional updates:
   All assets match GitHub's published digests and pass `apksigner verify`; all
   use the persistent signing certificate SHA-256
   `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
+
+## 2026-10-08 Mobile Sign-In Rate Limit and Session Recovery (Pending Release)
+
+- A temporary refresh-token timeout, connection error, or server error must not
+  clear the saved session or report that the user was logged out. Retry refresh
+  once for transient failures and preserve the session if the retry also fails.
+- Login HTTP 429 responses use the server's `Retry-After` metadata to show a
+  plain-language wait message and temporarily disable repeated sign-in attempts.
+  SlowAPI rate-limit responses must include reset headers; the 5-attempts per
+  15-minutes limit remains in force.
+- Scope: Flutter mobile authentication, backend rate-limit response headers,
+  and a small Admin Attendance calendar border correction required for the
+  existing Flutter test suite on the current SDK. No database migration is
+  required.
+- Release target: mobile version `1.26.30+66`, tag `mobile-v1.26.30`, using
+  `.github/workflows/release-mobile.yml` and the existing persistent signing
+  key. Never commit or share the signing key.
+- Before publishing, verify the Flutter suite, Dart analysis, backend regression
+  tests, and split-ABI Android release build. Record publication details here.
+- Local verification on 2026-10-08: backend regression tests passed (12); all
+  Flutter tests passed (34); Flutter analysis exited successfully with no
+  errors or warnings (194 informational notices); local split-ABI release
+  compilation succeeded for armeabi-v7a, arm64-v8a, and x86_64.
+- The calendar detail toolbar uses a uniform rounded border with a separate
+  theme-colored accent, avoiding Flutter's invalid mixed-color rounded-border
+  paint assertion. The existing test now reflects the current compact empty
+  state when no coaches are missing.

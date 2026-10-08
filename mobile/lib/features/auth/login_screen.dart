@@ -23,6 +23,9 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _error;
   String? _loadingMessage;
   Timer? _loadingMessageTimer;
+  Timer? _cooldownTimer;
+  DateTime? _cooldownUntil;
+  Duration? _cooldownRemaining;
 
   @override
   void initState() {
@@ -61,6 +64,9 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } on ApiException catch (e) {
       setState(() => _error = e.message);
+      if (e.statusCode == 429 && e.retryAfter != null) {
+        _startLoginCooldown(e.retryAfter!);
+      }
     } on Exception catch (e) {
       final message = e.toString().replaceFirst('Exception: ', '').trim();
       setState(() => _error = message.isEmpty
@@ -77,9 +83,49 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  void _startLoginCooldown(Duration duration) {
+    _cooldownTimer?.cancel();
+    _cooldownUntil = DateTime.now().add(duration);
+    _updateLoginCooldown();
+    if (_cooldownUntil != null) {
+      _cooldownTimer = Timer.periodic(
+          const Duration(seconds: 1), (_) => _updateLoginCooldown());
+    }
+  }
+
+  void _updateLoginCooldown() {
+    final until = _cooldownUntil;
+    if (!mounted || until == null) return;
+    final remaining = until.difference(DateTime.now());
+    if (remaining <= Duration.zero) {
+      _cooldownTimer?.cancel();
+      _cooldownTimer = null;
+      _cooldownUntil = null;
+      setState(() => _cooldownRemaining = null);
+      return;
+    }
+    setState(() => _cooldownRemaining = remaining);
+  }
+
+  String _formatCooldown(Duration remaining) {
+    final seconds = remaining.inSeconds;
+    final minutes = seconds ~/ 60;
+    final restSeconds = seconds % 60;
+    if (minutes >= 60) {
+      final hours = minutes ~/ 60;
+      final restMinutes = minutes % 60;
+      return '${hours}h ${restMinutes}m';
+    }
+    if (minutes > 0) {
+      return '${minutes}m ${restSeconds.toString().padLeft(2, '0')}s';
+    }
+    return '${seconds}s';
+  }
+
   @override
   void dispose() {
     _loadingMessageTimer?.cancel();
+    _cooldownTimer?.cancel();
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
     super.dispose();
@@ -236,14 +282,18 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 12),
                       ElevatedButton(
-                        onPressed: _loading ? null : _submit,
+                        onPressed: _loading || _cooldownRemaining != null
+                            ? null
+                            : _submit,
                         child: _loading
                             ? const SizedBox(
                                 height: 20,
                                 width: 20,
                                 child: CircularProgressIndicator(
                                     strokeWidth: 2, color: Colors.white))
-                            : const Text('Sign in'),
+                            : Text(_cooldownRemaining == null
+                                ? 'Sign in'
+                                : 'Try again in ${_formatCooldown(_cooldownRemaining!)}'),
                       ),
                       if (_loadingMessage != null) ...[
                         const SizedBox(height: 12),

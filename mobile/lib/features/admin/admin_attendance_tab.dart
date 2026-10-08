@@ -1510,10 +1510,16 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
               Icon(Icons.badge_outlined,
                   size: 18, color: Theme.of(context).colorScheme.primary),
               const SizedBox(width: 8),
-              Text('Coach Attendance',
-                  style: Theme.of(context).textTheme.titleSmall),
+              Expanded(
+                child: Text(
+                  'Coach Attendance',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
               const SizedBox(width: 8),
-              _attendanceDateBadge(selected),
+              Flexible(child: _attendanceDateBadge(selected)),
             ],
           ),
           const SizedBox(height: 6),
@@ -1585,20 +1591,16 @@ class _AdminAttendanceTabState extends State<AdminAttendanceTab> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.fromLTRB(10, 4, 10, 6),
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
-          border: Border(
-            top: BorderSide(color: theme.colorScheme.primary, width: 2),
-            left: BorderSide(color: theme.colorScheme.outlineVariant),
-            right: BorderSide(color: theme.colorScheme.outlineVariant),
-            bottom: BorderSide(color: theme.colorScheme.outlineVariant),
-          ),
+          border: Border.all(color: theme.colorScheme.outlineVariant),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Container(height: 2, color: theme.colorScheme.primary),
             SizedBox(
               height: 48,
               child: Row(
