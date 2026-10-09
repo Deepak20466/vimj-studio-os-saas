@@ -33,6 +33,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import warnings
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -65,6 +66,19 @@ def read_recovery_url() -> str:
     if not value:
         raise RuntimeError("recovery database secret is empty")
     return value
+
+def read_hidden_restore_url() -> str:
+    try:
+        # This Python process reads its program from a Bash heredoc, so stdin is
+        # not the interactive terminal. Use the controlling TTY explicitly and
+        # fail closed if getpass would fall back to input that could echo.
+        with open("/dev/tty", "w", encoding="utf-8") as tty, warnings.catch_warnings():
+            warnings.simplefilter("error", getpass.GetPassWarning)
+            return getpass.getpass(
+                "Paste the vimj restore PostgreSQL URL (input hidden): ", stream=tty
+            )
+    except (OSError, getpass.GetPassWarning):
+        raise RuntimeError("hidden connection URL input via /dev/tty is unavailable")
 
 def parse_url(label: str, raw_url: str, expected_ref: str) -> dict[str, object]:
     try:
@@ -172,11 +186,8 @@ def audit_database(label: str, info: dict[str, object], workdir: Path) -> tuple[
 try:
     if recovery_ref.lower() == restore_ref.lower():
         raise RuntimeError("the two Supabase project references must differ")
-    if not sys.stdin.isatty():
-        raise RuntimeError("run from an interactive Cloud Shell terminal for hidden connection URL entry")
-
     recovery_url = read_recovery_url()
-    restore_url = getpass.getpass("Paste the vimj restore PostgreSQL URL (input hidden): ")
+    restore_url = read_hidden_restore_url()
     if not restore_url:
         raise RuntimeError("vimj restore URL was empty")
 
