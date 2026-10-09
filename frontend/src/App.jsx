@@ -22,6 +22,8 @@ import CoachReceipts from "./pages/coach/CoachReceipts";
 import CoachFeeReminders from "./pages/coach/CoachFeeReminders";
 import CoachStudents from "./pages/coach/CoachStudents";
 import CoachSettings from "./pages/coach/CoachSettings";
+import Salary from "./pages/Salary";
+import CoachSalary from "./pages/coach/CoachSalary";
 
 const ADMIN_LINKS = [
   { to: "/", label: "Dashboard", icon: "dashboard" },
@@ -32,6 +34,7 @@ const ADMIN_LINKS = [
   { to: "/reports", label: "Reports", icon: "attendance" },
   { to: "/fees", label: "Fees", icon: "fees" },
   { to: "/leave", label: "Leave", icon: "leave" },
+  { to: "/salary", label: "Salary", icon: "salary" },
   { to: "/settings", label: "Settings", icon: "settings" },
 ];
 
@@ -43,6 +46,7 @@ const COACH_LINKS = [
   { to: "/coach/leave", label: "Leave", icon: "leave" },
   { to: "/coach/receipts", label: "Receipts", icon: "fees" },
   { to: "/coach/fee-reminders", label: "Fee Reminders", icon: "fees" },
+  { to: "/coach/salary", label: "Salary", icon: "salary" },
   { to: "/coach/settings", label: "Settings", icon: "settings" },
 ];
 
@@ -71,6 +75,7 @@ export default function App() {
             <Route path="reports" element={<Reports />} />
             <Route path="fees" element={<Fees />} />
             <Route path="leave" element={<Leave />} />
+            <Route path="salary" element={<Salary />} />
             <Route path="settings" element={<Settings />} />
           </Route>
 
@@ -89,6 +94,7 @@ export default function App() {
             <Route path="leave" element={<CoachLeave />} />
             <Route path="receipts" element={<CoachReceipts />} />
             <Route path="fee-reminders" element={<CoachFeeReminders />} />
+            <Route path="salary" element={<CoachSalary />} />
             <Route path="settings" element={<CoachSettings />} />
           </Route>
         </Routes>

@@ -171,3 +171,14 @@ Final release checks (2026-10-02):
   All match GitHub's published digests, pass `apksigner verify`, and use the
   persistent signing certificate SHA-256
   `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
+
+## 2026-10-09 Cloud Run Recovery and Signed Android Release Preparation
+
+- Use Google Cloud Run project `vimj-academy`, Supabase recovery, Flutter Android, and GitHub Releases. Do not use the blocked Render backend.
+- Native mobile API defaults to a reserved `.invalid` URL; release workflow requires verified HTTPS `VIMJ_API_BASE_URL`. Production signing cannot fall back to the debug key.
+- Restored coach salary model/API/admin and coach web/mobile workflows. Migration `0020` is additive, and production/Supabase migration `0013` is blocked. Salary rows can be transferred only from a verified recovery source into an empty target after exact fingerprint checks and explicit approval.
+- Cloud Run scheduler uses a held PostgreSQL advisory lock, one instance, and always-allocated CPU. Scheduler activation requires confirmation that the previous owner has stopped. API and frontend deployment, CORS revision, and secret bindings are explicitly gated.
+- Release target: mobile `1.26.33+69`, tag `mobile-v1.26.33`. Do not sign/publish until approved Cloud Run Admin/Coach E2E passes.
+- Local verification: backend 33 tests; frontend build/lint passed; Flutter 35 tests; Flutter analysis exit 0 with 194 informational notices; Python compilation passed. Bash syntax passed for all 10 Cloud Shell scripts.
+- Cloud Shell checks were reported complete by the operator, but their output was not supplied in this workspace. This update does not mark their gates as satisfied. No Cloud, database, release, or signing-key operation was performed.
+- Exact commands and approvals: `docs/cloud-run-private-deployment.md`.

@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     TWILIO_SMS_FROM: str = ""
     TWILIO_WHATSAPP_FROM: str = "whatsapp:+14155238886"
     NOTIFICATIONS_ENABLED: bool = False
+    # Preserve scheduled behavior by default. Deployments must either disable
+    # the scheduler or establish the database-wide owner lock and handoff first.
+    SCHEDULER_ENABLED: bool = True
 
     LOGIN_RATE_LIMIT: str = "5/15minutes"
 

@@ -89,43 +89,19 @@ flutter run \
 
 ## Release process
 
-Production backend: **https://vimj-backend.onrender.com** (Render, free tier —
-the service spins down after ~15 min idle and takes 20-40s to wake on the
-next request; a cold-start login looks like a long hang, not a bug). Any APK
-built for distribution off the office LAN must point at this URL, not a LAN
-IP:
+Android and iOS production builds must provide an HTTPS `API_BASE_URL` at build time. The mobile source has no Render production default; an unconfigured native build points to a reserved `.invalid` hostname and cannot connect. Releases must target the verified Cloud Run API configured as the GitHub Actions variable `VIMJ_API_BASE_URL`.
 
-```bash
-flutter build apk --release --split-per-abi \
-  --dart-define=API_BASE_URL=https://vimj-backend.onrender.com \
-  --dart-define=FACILITY_LAT=12.9745723 \
-  --dart-define=FACILITY_LNG=77.5689324 \
-  --dart-define=GEOFENCE_RADIUS_METERS=100
-```
+The next package target is `1.26.33+69`, tag `mobile-v1.26.33`. Do not build or publish it until Cloud Run Admin and Coach end-to-end verification has passed and the production release has been explicitly approved.
 
-Replace the lat/lng above with an exact Google Maps pin for the real facility
-if one becomes available — these are geocoded from the address only, accurate
-to roughly a city block. The lat/lng/radius must match the backend's config
-(`FACILITY_LAT`, `FACILITY_LNG`, `GEOFENCE_RADIUS_METERS`) on Render. Tag the release
-(`mobile-vX.Y.Z`) and publish the three split-ABI APKs as GitHub release
-assets:
+The release workflow verifies the tag/version, Flutter tests, analysis, and HTTPS API configuration when the tag is pushed. After E2E verification, dispatch **Verify, sign, and publish mobile APKs** with:
 
-```bash
-git tag mobile-vX.Y.Z && git push origin mobile-vX.Y.Z
-gh release create mobile-vX.Y.Z \
-  build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
-  build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
-  build/app/outputs/flutter-apk/app-x86_64-release.apk \
-  --repo Deepak20466/attendance-management \
-  --title "mobile-vX.Y.Z" --notes "..."
-```
+- `release_tag`: `mobile-v1.26.33`
+- `production_e2e_verified`: `true`
+- `publish_release`: `true` only when release publication is approved
 
-APKs are debug-signed (see `android/app/build.gradle.kts`) — fine for
-sideloading, not for a Play Store upload. Anyone installing the app must
-grab the APK from the latest GitHub release tag, not an older one; a commit
-landing on `master` does nothing for a phone until a new tagged APK is built
-and installed from it.
+The workflow signs all three ABI APKs with the persistent Android upload key, checks the signing certificate against the established fingerprint, records SHA-256 checksums, and creates the GitHub Release. The `mobile-release` GitHub environment must have its required approval configured. The workflow refuses to overwrite an existing release.
 
+Local release builds fail if the persistent signing configuration is absent. Configure `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD` as GitHub Actions secrets. Keep the keystore and credentials private; never commit or share them.
 ## What's implemented
 
 - **Auth**: login, forgot/reset password, biometric app-unlock on relaunch

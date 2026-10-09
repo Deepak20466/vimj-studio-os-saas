@@ -1,0 +1,23 @@
+FROM python:3.11-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONPATH=/app \
+    ENV=production \
+    SCHEDULER_ENABLED=true
+
+WORKDIR /app
+
+COPY requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+    && useradd --system --uid 10001 --no-create-home appuser
+
+COPY --chown=10001:10001 app ./app
+COPY --chown=10001:10001 gunicorn_conf.py ./gunicorn_conf.py
+
+USER 10001:10001
+EXPOSE 8080
+
+# Cloud Run supplies PORT. Keep migrations out of the container startup path.
+CMD ["sh", "-c", "if [ -z \"${DATABASE_URL:-}\" ] || [ -z \"${JWT_SECRET_KEY:-}\" ] || [ \"$JWT_SECRET_KEY\" = 'dev-secret-change-me' ]; then echo 'Required production secrets are missing or unsafe' >&2; exit 1; fi; exec gunicorn -c gunicorn_conf.py --workers 1 --timeout 120 --bind 0.0.0.0:${PORT:-8080} app.main:app"]

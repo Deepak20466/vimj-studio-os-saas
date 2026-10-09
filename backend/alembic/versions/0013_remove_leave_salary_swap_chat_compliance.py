@@ -11,6 +11,7 @@ Revises: 0012
 Create Date: 2026-09-12
 
 """
+import os
 from typing import Sequence, Union
 
 from alembic import op
@@ -28,6 +29,14 @@ late_status_enum = sa.Enum("NONE", "PENDING", "APPROVED", "REJECTED", name="late
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    host = (bind.engine.url.host or "").lower()
+    if os.environ.get("ENV", "").lower() == "production" or host.endswith((".supabase.com", ".supabase.co")):
+        raise RuntimeError(
+            "Blocked destructive migration 0013 on production/Supabase: preserve the legacy tables and records; "
+            "this historical migration must not drop data or features."
+        )
+
     op.drop_table("class_photos")
     op.drop_table("attendance_submissions")
     op.drop_table("class_skip_reasons")

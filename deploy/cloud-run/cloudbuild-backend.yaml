@@ -1,0 +1,27 @@
+steps:
+  - name: python:3.11-slim
+    dir: backend
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        [[ "${_IMAGE_TAG}" =~ ^[a-f0-9]{40}$ ]] || { echo 'A full commit SHA image tag is required.' >&2; exit 2; }
+        python -m pip install --no-cache-dir -r requirements.txt
+        python -m unittest discover -s tests -v
+        python -m compileall -q app scripts alembic
+  - name: gcr.io/cloud-builders/docker
+    dir: backend
+    args:
+      - build
+      - -f
+      - Dockerfile.cloudrun
+      - -t
+      - ${_IMAGE_REPO}:${_IMAGE_TAG}
+      - .
+images:
+  - ${_IMAGE_REPO}:${_IMAGE_TAG}
+substitutions:
+  _IMAGE_REPO: asia-south1-docker.pkg.dev/vimj-academy/cloud-run-source-deploy/vimj-backend
+  _IMAGE_TAG: required-at-submit
+options:
+  logging: CLOUD_LOGGING_ONLY

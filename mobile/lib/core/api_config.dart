@@ -6,18 +6,19 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 /// - Android emulator reaching a backend on the host machine: http://10.0.2.2:8000
 /// - iOS simulator: http://localhost:8000
 /// - Physical device: http://<your-lan-ip>:8000
-/// - Production: https://api.your-domain.example.com
+/// - Android/iOS production builds: provide API_BASE_URL at build time.
 ///
 /// Override at build time with:
 ///   flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
 class ApiConfig {
   static const String _override = String.fromEnvironment('API_BASE_URL');
-  static const String _productionUrl = 'https://vimj-backend.onrender.com';
+  static const String _unconfiguredProductionUrl =
+      'https://api-base-url-required.invalid';
   // kIsWeb can't be reached from a browser, so it always needs localhost,
   // regardless of the Android-emulator-oriented compiled-in default below.
   static final String baseUrl = _override.isNotEmpty
       ? _override
-      : (kIsWeb ? 'http://localhost:8000' : _productionUrl);
+      : (kIsWeb ? 'http://localhost:8000' : _unconfiguredProductionUrl);
 }
 
 /// Client-side mirror of the backend's facility geofence settings, used only

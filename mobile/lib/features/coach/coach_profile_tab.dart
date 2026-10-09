@@ -3,6 +3,7 @@ import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/auth_api.dart';
 import '../../core/auth_storage.dart';
+import '../../core/models.dart';
 import '../auth/login_screen.dart';
 import '../shared/theme_toggle_tile.dart';
 
@@ -15,6 +16,8 @@ class CoachProfileTab extends StatefulWidget {
 
 class _CoachProfileTabState extends State<CoachProfileTab> {
   Map<String, dynamic>? _me;
+  List<SalaryRecord> _salaryRecords = [];
+  int? _acknowledgingSalaryId;
   bool _loading = true;
 
   final _nameCtrl = TextEditingController();
@@ -49,6 +52,15 @@ class _CoachProfileTabState extends State<CoachProfileTab> {
       _nameCtrl.text = data['name'] as String? ?? '';
       _phoneCtrl.text = data['phone'] as String? ?? '';
       _emailCtrl.text = data['email'] as String? ?? '';
+      if (data['role'] == 'COACH' && data['id'] is int) {
+        final salaryData = await ApiClient.instance
+            .get('/coaches/${data['id']}/salary') as List;
+        _salaryRecords = salaryData
+            .map((row) => SalaryRecord.fromJson(row as Map<String, dynamic>))
+            .toList();
+      } else {
+        _salaryRecords = [];
+      }
     } on ApiException catch (e) {
       if (mounted)
         ScaffoldMessenger.of(context)
@@ -56,6 +68,65 @@ class _CoachProfileTabState extends State<CoachProfileTab> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _acknowledgeSalary(SalaryRecord record) async {
+    setState(() => _acknowledgingSalaryId = record.id);
+    try {
+      await ApiClient.instance
+          .post('/salary/acknowledge', body: {'salary_id': record.id});
+      await _load();
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _acknowledgingSalaryId = null);
+    }
+  }
+
+  Widget _salaryHistoryCard() {
+    if (_me?['role'] != 'COACH') return const SizedBox.shrink();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Salary History',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            if (_salaryRecords.isEmpty)
+              const Text('No salary records yet.')
+            else
+              for (final record in _salaryRecords)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('${record.month}/${record.year} | Rs ${record.amount}'),
+                  subtitle: Text(record.acknowledgedDate == null
+                      ? 'Pending acknowledgment'
+                      : 'Acknowledged'),
+                  trailing: record.acknowledgedDate != null
+                      ? const Icon(Icons.check_circle, color: Colors.green)
+                      : TextButton(
+                          onPressed: _acknowledgingSalaryId == record.id
+                              ? null
+                              : () => _acknowledgeSalary(record),
+                          child: _acknowledgingSalaryId == record.id
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2),
+                                )
+                              : const Text('Acknowledge'),
+                        ),
+                ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _submitProfile() async {
@@ -256,6 +327,10 @@ class _CoachProfileTabState extends State<CoachProfileTab> {
                       ),
                     ),
                   ),
+                  if (_me?['role'] == 'COACH') ...[
+                    const SizedBox(height: 16),
+                    _salaryHistoryCard(),
+                  ],
                   const SizedBox(height: 16),
                   const Card(child: ThemeToggleTile()),
                   const SizedBox(height: 16),

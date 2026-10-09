@@ -4,6 +4,12 @@ FastAPI + PostgreSQL backend implementing all 15 core requirements: attendance t
 geofenced + selfie-verified check-ins, fee/salary reminders, leave & swap workflows,
 RBAC-enforced data isolation, and business analytics/reporting.
 
+> **Production safety:** use the Cloud Run recovery runbook in
+> `docs/cloud-run-private-deployment.md`. Never run `alembic upgrade head` from
+> a build or startup command against production. Historical migration `0013`
+> drops data-bearing tables; it now refuses production/Supabase connections.
+> Local migration commands below are for a disposable development database only.
+
 ## Setup
 
 ```bash
@@ -57,8 +63,11 @@ without a Twilio account during development.
 
 ## Tests
 
-No test suite is checked in yet; `python -c "from app.main import app"` and a manual run
-against a local Postgres/SQLite instance are the fastest way to validate changes.
+Run the backend regression and production-safety suite from this directory:
+
+```bash
+python -m unittest discover -s tests -v
+```
 
 ## API docs
 

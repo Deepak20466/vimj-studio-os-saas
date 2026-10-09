@@ -12,6 +12,8 @@ from app.models.coach_activity import CoachActivity
 from app.schemas.user import UserCreate, UserOut, UserUpdate
 from app.schemas.attendance import CoachAttendanceOut
 from app.schemas.coach_activity import CoachActivitiesSet, CoachActivityOut
+from app.models.salary import CoachSalary
+from app.schemas.salary import SalaryOut
 from app.security import get_current_user, require_admin, require_coach, hash_password
 from app.services.audit import log_action
 
@@ -55,6 +57,22 @@ def list_coaches(
         like = f"%{search}%"
         query = query.filter((User.name.ilike(like)) | (User.email.ilike(like)))
     return query.order_by(User.name).all()
+
+
+@router.get("/{coach_id}/salary", response_model=List[SalaryOut])
+def coach_salary_history(
+    coach_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Keep the established coach profile URL, with admin or self-only access."""
+    _assert_self_or_admin(current_user, coach_id)
+    return (
+        db.query(CoachSalary)
+        .filter(CoachSalary.coach_id == coach_id)
+        .order_by(CoachSalary.year.desc(), CoachSalary.month.desc())
+        .all()
+    )
 
 
 @router.post("", response_model=UserOut, status_code=status.HTTP_201_CREATED)

@@ -1,7 +1,6 @@
 import client from "./client";
 
 export const AuthAPI = {
-  // Render's free backend may need up to ~45 seconds to wake after an idle period.
   // Bound login so the UI can show a retry instead of waiting indefinitely.
   login: (email, password) => client.post("/auth/login", { email, password }, { timeout: 75000 }),
   logout: () => client.post("/auth/logout"),
@@ -82,6 +81,14 @@ export const LeaveAPI = {
   reject: (id, note) => client.put(`/leave/${id}/reject`, { note }),
 };
 
+export const SalaryAPI = {
+  create: (payload) => client.post("/salary", payload),
+  update: (id, payload) => client.put(`/salary/${id}`, payload),
+  remove: (id) => client.delete(`/salary/${id}`),
+  list: (params) => client.get("/salary", { params }),
+  acknowledge: (salary_id) => client.post("/salary/acknowledge", { salary_id }),
+};
+
 export const FeesAPI = {
   unpaid: () => client.get("/fees/unpaid"),
   list: (params) => client.get("/fees", { params }),
@@ -151,6 +158,8 @@ export const CoachSelfAPI = {
   myStudentAttendance: (params) => client.get("/attendance/students", { params }),
   myActivities: (coachId) => client.get(`/coaches/${coachId}/activities`),
   directory: () => client.get("/coaches/directory"),
+  salaryHistory: (coachId) => client.get(`/coaches/${coachId}/salary`),
+  acknowledgeSalary: (salaryId) => client.post("/salary/acknowledge", { salary_id: salaryId }),
 };
 
 export const DashboardAPI = {

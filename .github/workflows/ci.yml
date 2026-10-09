@@ -1,0 +1,114 @@
+name: Validate application changes
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - cloud-run-safety-audit
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend dependencies
+        working-directory: backend
+        run: python -m pip install -r requirements.txt
+      - name: Run backend regression and production-safety tests
+        working-directory: backend
+        run: python -m unittest discover -s tests -v
+      - name: Compile backend modules
+        working-directory: backend
+        run: python -m compileall -q app scripts alembic
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Build and lint frontend
+        working-directory: frontend
+        run: |
+          npm run build
+          npm run lint
+
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Run Flutter tests and analysis
+        working-directory: mobile
+        run: |
+          flutter pub get
+          flutter test
+          flutter analyze --no-fatal-infos
+      - name: Reject the blocked Render API hostname
+        shell: bash
+        run: |
+          if grep -R -n --exclude-dir=.git --exclude=AGENTS.md --exclude=REQUESTED_CHANGES.md \
+            'vimj-backend.onrender.com' mobile/lib mobile/android; then
+            echo 'Blocked Render API hostname remains in mobile runtime source.' >&2
+            exit 1
+          fi
+
+  cloudrun-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build backend image locally without pushing
+        run: docker build -f backend/Dockerfile.cloudrun -t vimj-backend:ci backend
+      - name: Build frontend image locally without pushing
+        run: docker build -f frontend/Dockerfile.cloudrun --build-arg VITE_API_BASE_URL=https://api-base-url-required.invalid -t vimj-frontend:ci frontend
+
+  deployment-assets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate Cloud Shell scripts, embedded Python, and deployment YAML
+        run: |
+          python -m pip install --disable-pip-version-check pyyaml
+          bash -n deploy/cloud-run/*.sh
+          python -m py_compile deploy/cloud-run/*.py backend/scripts/check_database_readonly.py
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          import yaml
+
+          for shell_script in Path("deploy/cloud-run").glob("*.sh"):
+              source = shell_script.read_text(encoding="utf-8")
+              blocks = re.findall(r"<<'PY'\s*\r?\n(.*?)\r?\nPY(?=\r?$)", source, re.DOTALL | re.MULTILINE)
+              for index, block in enumerate(blocks, 1):
+                  compile(block, f"{shell_script} heredoc {index}", "exec")
+
+          for yaml_file in [
+              Path(".github/workflows/ci.yml"),
+              Path(".github/workflows/release-mobile.yml"),
+              Path("deploy/cloud-run/cloudbuild-backend.yaml"),
+              Path("deploy/cloud-run/cloudbuild-frontend.yaml"),
+          ]:
+              yaml.compose(yaml_file.read_text(encoding="utf-8"))
+          PY

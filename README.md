@@ -76,14 +76,9 @@ flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
 
 ## Production deployment
 
-No Docker, per the spec. Currently deployed on Render's free tier:
-- Backend: `https://vimj-backend.onrender.com` (cold starts after ~15min idle take 20-40s —
-  see `render.yaml` and CLAUDE.md's DEPLOYMENT section)
-- Mobile builds ship as sideloaded APKs (`mobile-vX.Y.Z` GitHub releases), not the Play Store
+Production recovery is being prepared for Google Cloud Run (`vimj-academy`) and Supabase. The Cloud Run runbook and approval gates are in `docs/cloud-run-private-deployment.md`. Do not deploy through the legacy Render configuration or run its build command against the production database. Cloud Run production services and Android releases remain gated on verified backup/recovery evidence and explicit approval.
 
-For a non-Render target, see `backend/README.md` for gunicorn + systemd + Nginx, and
-`backend/nginx.conf.example` for reverse-proxying the API and serving the built React app.
-
+Mobile apps are distributed as signed split-ABI APKs through GitHub Releases (`mobile-vX.Y.Z`), not the Play Store. See `mobile/README.md` for the gated Android release workflow.
 ## Where to look for more detail
 
 - **CLAUDE.md** — the living spec: full requirements, API reference, and a dated history of

@@ -1,10 +1,14 @@
 import logging
 from datetime import date, datetime, timedelta
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
+from sqlalchemy.pool import NullPool
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
+from app.config import settings
 from app.database import SessionLocal
 from app.models.attendance import CoachAttendance, CoachAttendanceStatus, StudentAttendance
 from app.models.batch import Batch
@@ -12,14 +16,80 @@ from app.models.class_session import ClassSession
 from app.models.enrollment import StudentEnrollment
 from app.models.fee import StudentFee, FeeStatus
 from app.models.user import User, UserRole
+from app.models.salary import CoachSalary
 from app.services.batches import generate_sessions_for_batch
 from app.services.notifications import notify, notify_and_push, fee_reminder_message
 
 logger = logging.getLogger("vimj.scheduler")
 
 scheduler = BackgroundScheduler(timezone="UTC")
+_SCHEDULER_OWNER_LOCK_KEY = 0x56494D4A
+_scheduler_owner_engine = None
+_scheduler_owner_connection = None
 
 BATCH_AUTO_GENERATE_DAYS_AHEAD = 30
+
+
+def _scheduler_lock_url(database_url: str):
+    url = make_url(database_url)
+    if url.get_backend_name() != "postgresql":
+        raise RuntimeError("The production scheduler requires PostgreSQL advisory locks")
+    if (url.host or "").lower().endswith(".pooler.supabase.com"):
+        if (url.port or 5432) == 6543:
+            url = url.set(port=5432)
+        elif (url.port or 5432) != 5432:
+            raise RuntimeError("The Supabase scheduler lock must use the session pooler on port 5432")
+    return url
+
+
+def _acquire_scheduler_owner_lock() -> bool:
+    """Hold one PostgreSQL session advisory lock across this scheduler process.
+
+    Cloud Run can briefly run old and new revisions during a rollout. The
+    session-pooler connection keeps one revision as the sole scheduler owner;
+    the API's ordinary requests continue using the transaction pooler.
+    """
+    global _scheduler_owner_engine, _scheduler_owner_connection
+    url = _scheduler_lock_url(settings.DATABASE_URL)
+    engine = create_engine(
+        url.render_as_string(hide_password=False),
+        poolclass=NullPool,
+        connect_args={"connect_timeout": 10},
+    )
+    connection = engine.connect()
+    acquired = bool(
+        connection.execute(
+            text("SELECT pg_try_advisory_lock(:lock_key)"),
+            {"lock_key": _SCHEDULER_OWNER_LOCK_KEY},
+        ).scalar()
+    )
+    connection.commit()
+    if not acquired:
+        connection.close()
+        engine.dispose()
+        return False
+    _scheduler_owner_engine = engine
+    _scheduler_owner_connection = connection
+    return True
+
+
+def _release_scheduler_owner_lock() -> None:
+    global _scheduler_owner_engine, _scheduler_owner_connection
+    connection = _scheduler_owner_connection
+    engine = _scheduler_owner_engine
+    _scheduler_owner_connection = None
+    _scheduler_owner_engine = None
+    if connection is not None:
+        try:
+            connection.execute(
+                text("SELECT pg_advisory_unlock(:lock_key)"),
+                {"lock_key": _SCHEDULER_OWNER_LOCK_KEY},
+            )
+            connection.commit()
+        finally:
+            connection.close()
+    if engine is not None:
+        engine.dispose()
 
 
 def job_monthly_fee_reminders():
@@ -45,6 +115,38 @@ def job_monthly_fee_reminders():
             fee.reminder_sent_at = datetime.utcnow()
         db.commit()
         logger.info("Sent %d fee reminders", len(fees))
+    finally:
+        db.close()
+
+
+def job_monthly_salary_notifications():
+    """Notify coaches about unacknowledged salary records on the 10th."""
+    db = SessionLocal()
+    try:
+        today = date.today()
+        salaries = (
+            db.query(CoachSalary)
+            .filter(
+                CoachSalary.month == today.month,
+                CoachSalary.year == today.year,
+                CoachSalary.notified_at.is_(None),
+            )
+            .with_for_update(skip_locked=True)
+            .all()
+        )
+        for salary in salaries:
+            coach = db.query(User).filter(User.id == salary.coach_id).first()
+            if coach:
+                message = (
+                    f"Hi {coach.name}, your VIMJ Studio salary of {salary.amount} for "
+                    f"{today.month}/{today.year} is ready. Please acknowledge receipt in the app."
+                )
+                notify_and_push(
+                    db, coach, message, "Salary credited", "SALARY_CREDITED", link="/coach/salary"
+                )
+                salary.notified_at = datetime.utcnow()
+        db.commit()
+        logger.info("Sent %d salary notifications", len(salaries))
     finally:
         db.close()
 
@@ -389,8 +491,20 @@ def job_auto_generate_batch_sessions():
 
 
 def start_scheduler():
+    if scheduler.running:
+        return
+    if not _acquire_scheduler_owner_lock():
+        logger.warning("Scheduler not started: another VIMJ instance holds the database owner lock")
+        return
+    logger.info("Acquired the PostgreSQL scheduler owner advisory lock")
     scheduler.add_job(
         job_monthly_fee_reminders, CronTrigger(day=10, hour=9, minute=0), id="monthly_fee_reminders", replace_existing=True
+    )
+    scheduler.add_job(
+        job_monthly_salary_notifications,
+        CronTrigger(day=10, hour=9, minute=5),
+        id="monthly_salary_notifications",
+        replace_existing=True,
     )
     scheduler.add_job(
         job_mark_overdue_fees, CronTrigger(hour=0, minute=30), id="mark_overdue_fees", replace_existing=True
@@ -424,5 +538,8 @@ def start_scheduler():
 
 
 def shutdown_scheduler():
-    if scheduler.running:
-        scheduler.shutdown(wait=False)
+    try:
+        if scheduler.running:
+            scheduler.shutdown(wait=False)
+    finally:
+        _release_scheduler_owner_lock()

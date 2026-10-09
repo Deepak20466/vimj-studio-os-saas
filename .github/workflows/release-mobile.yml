@@ -1,4 +1,4 @@
-name: Build and publish mobile APKs
+name: Verify, sign, and publish mobile APKs
 
 on:
   push:
@@ -7,51 +7,158 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Existing GitHub release tag to publish
+        description: Existing mobile release tag to build
         required: true
         type: string
+      production_e2e_verified:
+        description: Confirm the Cloud Run API passed the approved end-to-end checks
+        required: true
+        default: false
+        type: boolean
+      publish_release:
+        description: Publish the signed APKs to GitHub Releases after build verification
+        required: true
+        default: false
+        type: boolean
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  android-release:
+  verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ inputs.release_tag || github.ref }}
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
       - name: Configure Gradle wrapper for hosted runner
         working-directory: mobile/android
-        run: sed -i 's#^distributionUrl=.*#distributionUrl=https\\://services.gradle.org/distributions/gradle-9.3.1-all.zip#' gradle/wrapper/gradle-wrapper.properties
+        run: sed -i 's#^distributionUrl=.*#distributionUrl=https\://services.gradle.org/distributions/gradle-9.3.1-all.zip#' gradle/wrapper/gradle-wrapper.properties
+      - name: Validate the configured Cloud Run API URL
+        env:
+          API_BASE_URL: ${{ vars.VIMJ_API_BASE_URL }}
+        run: |
+          python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+
+          value = os.environ.get("API_BASE_URL", "").strip()
+          parsed = urlparse(value)
+          if parsed.scheme != "https" or not parsed.hostname or parsed.path not in {"", "/"} or parsed.query or parsed.fragment or parsed.username:
+              raise SystemExit("Set the GitHub Actions variable VIMJ_API_BASE_URL to the verified HTTPS Cloud Run API URL.")
+          if parsed.hostname.endswith("onrender.com") or parsed.hostname.endswith(".invalid"):
+              raise SystemExit("The configured mobile API URL must not target Render or a placeholder.")
+          print("Mobile API URL: HTTPS endpoint configured; hostname suppressed")
+          PY
+      - name: Verify release tag matches the mobile package version
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          text = Path("mobile/pubspec.yaml").read_text(encoding="utf-8")
+          match = re.search(r"^version:\s*([0-9]+\.[0-9]+\.[0-9]+)\+[0-9]+\s*$", text, re.MULTILINE)
+          if not match:
+              raise SystemExit("Could not read the mobile package version.")
+          expected = f"mobile-v{match.group(1)}"
+          if os.environ["RELEASE_TAG"] != expected:
+              raise SystemExit(f"Release tag must match pubspec version: {expected}")
+          PY
+      - name: Run Flutter tests and analysis
+        working-directory: mobile
+        run: |
+          flutter pub get
+          flutter test
+          flutter analyze --no-fatal-infos
+
+  signed-build:
+    needs: verify
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.production_e2e_verified == true }}
+    runs-on: ubuntu-latest
+    environment: mobile-signing
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag }}
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Configure Gradle wrapper for hosted runner
+        working-directory: mobile/android
+        run: sed -i 's#^distributionUrl=.*#distributionUrl=https\://services.gradle.org/distributions/gradle-9.3.1-all.zip#' gradle/wrapper/gradle-wrapper.properties
       - name: Decode persistent Android signing key
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           test -n "$ANDROID_KEYSTORE_BASE64"
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > mobile/android/app/vimj-upload-key.jks
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > mobile/android/app/vimj-upload-key.jks
           test -s mobile/android/app/vimj-upload-key.jks
-      - name: Build split APKs
+      - name: Build signed split APKs for the verified Cloud Run API
         working-directory: mobile
         env:
+          API_BASE_URL: ${{ vars.VIMJ_API_BASE_URL }}
           ANDROID_KEYSTORE_PATH: vimj-upload-key.jks
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: flutter build apk --release --split-per-abi
-      - name: Create release if missing
+        run: flutter build apk --release --split-per-abi --dart-define=API_BASE_URL="$API_BASE_URL"
+      - name: Verify signatures and calculate checksums
+        working-directory: mobile
+        run: |
+          set -euo pipefail
+          apk_dir=build/app/outputs/flutter-apk
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          test -n "$sdk_root"
+          apksigner="$(find "$sdk_root/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -x "$apksigner"
+          mapfile -t apks < <(find "$apk_dir" -maxdepth 1 -type f -name '*.apk' | sort)
+          test "${#apks[@]}" -eq 3
+          for apk in "${apks[@]}"; do
+            "$apksigner" verify --verbose "$apk" >/dev/null
+            "$apksigner" verify --print-certs "$apk" | grep -Fi '7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7'
+          done
+          sha256sum "${apks[@]}" > "$apk_dir/SHA256SUMS.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-mobile-apks-${{ inputs.release_tag }}
+          path: |
+            mobile/build/app/outputs/flutter-apk/*.apk
+            mobile/build/app/outputs/flutter-apk/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: signed-build
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.production_e2e_verified == true && inputs.publish_release == true }}
+    runs-on: ubuntu-latest
+    environment: mobile-release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: signed-mobile-apks-${{ inputs.release_tag }}
+          path: release-assets
+      - name: Publish signed APKs as a GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          tag="${RELEASE_TAG:-$GITHUB_REF_NAME}"
-          echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
-          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "Automated Android release build."
-      - name: Upload APKs to release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$RELEASE_TAG" mobile/build/app/outputs/flutter-apk/*.apk --clobber
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; refusing to replace published assets." >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" release-assets/*.apk release-assets/SHA256SUMS.txt \
+            --title "$RELEASE_TAG" --generate-notes

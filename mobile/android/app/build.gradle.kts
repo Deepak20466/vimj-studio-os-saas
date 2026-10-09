@@ -33,16 +33,19 @@ android {
     buildTypes {
         release {
             val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
-            if (!keystorePath.isNullOrBlank()) {
-                signingConfig = signingConfigs.create("release") {
-                    storeFile = file(keystorePath)
-                    storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
-                    keyAlias = System.getenv("ANDROID_KEY_ALIAS")
-                    keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
-                }
-            } else {
-                // Local development can still build without CI signing secrets.
-                signingConfig = signingConfigs.getByName("debug")
+            val storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            val keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+            val keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            if (keystorePath.isNullOrBlank() || storePassword.isNullOrBlank() ||
+                keyAlias.isNullOrBlank() || keyPassword.isNullOrBlank()
+            ) {
+                throw GradleException("Release APKs require the configured persistent Android signing key.")
+            }
+            signingConfig = signingConfigs.create("release") {
+                storeFile = file(keystorePath)
+                this.storePassword = storePassword
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
             }
         }
     }
