@@ -71,6 +71,45 @@ jobs:
             echo 'Blocked Render API hostname remains in mobile runtime source.' >&2
             exit 1
           fi
+      - name: Prepare hosted Gradle wrapper for recovery preview build
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/vimj-production-recovery' }}
+        working-directory: mobile/android
+        run: sed -i 's#^distributionUrl=.*#distributionUrl=https\://services.gradle.org/distributions/gradle-9.3.1-all.zip#' gradle/wrapper/gradle-wrapper.properties
+      - name: Build isolated non-production debug APK
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/vimj-production-recovery' }}
+        working-directory: mobile
+        env:
+          API_BASE_URL: https://api-base-url-required.invalid
+          VIMJ_PREVIEW_APK: 'true'
+        run: flutter build apk --debug --dart-define=API_BASE_URL="$API_BASE_URL"
+      - name: Verify preview APK and record checksum
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/vimj-production-recovery' }}
+        working-directory: mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=build/app/outputs/flutter-apk/app-debug.apk
+          test -s "$apk"
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          test -n "$sdk_root"
+          build_tools="$(find "$sdk_root/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          test -n "$build_tools"
+          "$build_tools/apksigner" verify --verbose "$apk" >/dev/null
+          package_name="$("$build_tools/aapt" dump badging "$apk" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p")"
+          test "$package_name" = 'com.vimjstudio.vimj_attendance.preview'
+          printf 'Package: %s\nAPI: reserved non-production .invalid host\nSigning: Android debug key; not a production release\n' "$package_name" > build/app/outputs/flutter-apk/PREVIEW-INFO.txt
+          sha256sum "$apk" > build/app/outputs/flutter-apk/SHA256SUMS.txt
+      - name: Upload short-lived preview APK artifact
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/vimj-production-recovery' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: vimj-mobile-preview-${{ github.sha }}
+          path: |
+            mobile/build/app/outputs/flutter-apk/app-debug.apk
+            mobile/build/app/outputs/flutter-apk/PREVIEW-INFO.txt
+            mobile/build/app/outputs/flutter-apk/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 7
 
   cloudrun-build:
     runs-on: ubuntu-latest

@@ -31,6 +31,14 @@ android {
     }
 
     buildTypes {
+        debug {
+            // GitHub's recovery-branch preview APK is isolated from the
+            // production package and cannot accidentally update its install.
+            if (System.getenv("VIMJ_PREVIEW_APK") == "true") {
+                applicationIdSuffix = ".preview"
+                versionNameSuffix = "-preview"
+            }
+        }
         release {
             val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
             val storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
