@@ -26,6 +26,8 @@ TWILIO_SMS_FROM_SECRET="${TWILIO_SMS_FROM_SECRET:-}"
 TWILIO_WHATSAPP_FROM_SECRET="${TWILIO_WHATSAPP_FROM_SECRET:-}"
 ADMIN_RECOVERY_SECRET_NAME="${ADMIN_RECOVERY_SECRET_NAME:-}"
 RUNTIME_SERVICE_ACCOUNT="${RUNTIME_SERVICE_ACCOUNT:-}"
+CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL="${CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL:-}"
+CLOUD_SCHEDULER_JOB_NAME="projects/${PROJECT_ID}/locations/${REGION}/jobs/vimj-minute-dispatch"
 
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "Required command is unavailable: $1"; }
@@ -55,6 +57,10 @@ PY
   || die "Set ADMIN_RECOVERY_SECRET_NAME to the existing Secret Manager secret name, or NONE after confirming recovery is disabled."
 [[ -n "$RUNTIME_SERVICE_ACCOUNT" ]] \
   || die "Set RUNTIME_SERVICE_ACCOUNT to the reviewed dedicated Cloud Run service account."
+[[ "$CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.iam\.gserviceaccount\.com$ ]] \
+  || die "Set CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL to the pre-existing dedicated Cloud Scheduler service account."
+[[ "$CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.iam\.gserviceaccount\.com$ ]] \
+  || die "Set CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL to the pre-existing dedicated Cloud Scheduler service account."
 
 ACTIVE_ACCOUNT="$(gcloud auth list --filter='status:ACTIVE' --format='value(account)' 2>/dev/null || true)"
 [[ -n "$ACTIVE_ACCOUNT" ]] || die "No active gcloud account. Run: gcloud auth login"
@@ -108,8 +114,8 @@ import os
 import pathlib
 import sys
 
-if os.environ.get("ENV") != "production" or os.environ.get("SCHEDULER_ENABLED", "").lower() != "true":
-    raise SystemExit("image is missing production mode or the guarded scheduler")
+if os.environ.get("ENV") != "production" or os.environ.get("SCHEDULER_ENABLED", "").lower() != "false":
+    raise SystemExit("image is missing production mode or has an always-on in-process scheduler")
 if "DATABASE_URL" in os.environ or "JWT_SECRET_KEY" in os.environ:
     raise SystemExit("image contains a runtime secret environment variable")
 
@@ -140,7 +146,7 @@ if user != "10001:10001":
     raise SystemExit("ERROR: image does not run as the expected non-root user.")
 if working_dir != "/app" or "gunicorn" not in command or "app.main:app" not in command or "alembic" in command.lower():
     raise SystemExit("ERROR: image startup configuration does not match the reviewed Cloud Run command.")
-print("Image source and startup configuration: PASS (exact Python-source match; non-root; guarded scheduler enabled; no baked secrets)")
+print("Image source and startup configuration: PASS (exact Python-source match; non-root; scale-to-zero scheduler mode; no baked secrets)")
 PY
 
 # Refuse to update an existing service. This workflow is for the first parallel
@@ -308,7 +314,7 @@ try:
         "audit_log", "batches", "classes", "coach_activities", "coach_attendance", "coach_leave",
         "fee_receipts", "fee_reminder_drafts", "notifications", "password_reset_tokens",
         "student_attendance", "student_enrollments", "student_fees", "user_details", "users",
-        "coach_salary",
+        "coach_salary", "scheduler_job_executions",
     }
     preserved_legacy_tables = {
         "attendance_submissions", "chat_messages", "class_photos",
@@ -331,18 +337,18 @@ try:
             if status.database_name != expected_database:
                 raise PreflightError("connected PostgreSQL database does not match the configured production database")
             revisions = list(connection.execute(text("SELECT version_num FROM alembic_version")).scalars())
-            if revisions != ["0020"]:
-                raise PreflightError("database revision is not the expected 0020; no migration will be run")
+            if revisions != ["0021"]:
+                raise PreflightError("database revision is not the expected 0021; no migration will be run")
             actual_tables = set(inspect(connection).get_table_names(schema="public"))
             missing = sorted(expected_tables - actual_tables)
             preserved_legacy = sorted(actual_tables & preserved_legacy_tables)
             extra = sorted(actual_tables - expected_tables - preserved_legacy_tables)
             if missing or extra:
-                raise PreflightError("public table inventory differs from the expected 20-table schema")
+                raise PreflightError("public table inventory differs from the expected 21-table schema")
             print("Secret values: PASS (present, valid format; values not displayed)")
             print("Production Supabase identity and transaction-pooler connection: PASS (read-only transaction)")
             print(f"PostgreSQL server version: {status.server_version}")
-            print(f"Alembic revision: 0020; required current tables: 20/20; historical tables preserved: {len(preserved_legacy)}")
+            print(f"Alembic revision: 0021; required current tables: 21/21; historical tables preserved: {len(preserved_legacy)}")
         finally:
             if transaction.is_active:
                 transaction.rollback()
@@ -356,7 +362,8 @@ except Exception as exc:
     sys.exit(2)
 PY
 
-printf '\nRead-only preflight passed. This creates a public mobile API and a continuously running scheduler; Cloud Run charges apply.\n'
+printf '\nRead-only preflight passed. This creates a public API with zero minimum instances; request-based Cloud Run charges apply during requests.\n'
+printf 'The in-process scheduler stays disabled. One OIDC-authenticated Cloud Scheduler job invokes all 11 jobs only after its separate approval.\n'
 printf 'The script will not create a database, change schema/data, run migrations, rotate credentials, or alter legacy/client routing.\n'
 [[ "${SAFETY_AUDIT_REVIEWED:-}" == "YES" ]] \
   || die "Review the source/backup comparison first; then set SAFETY_AUDIT_REVIEWED=YES and rerun."
@@ -385,7 +392,7 @@ print("Independent backup reference: PASS (checksum, database identity, immutabl
 PY
 [[ "${SALARY_DATA_RECONCILED:-}" == "YES" ]] || die "Reconcile historical coach_salary rows against the verified backup; then set SALARY_DATA_RECONCILED=YES."
 [[ "${SCHEDULER_HANDOFF_APPROVED:-}" == "YES" ]] || die "Confirm the previous scheduler owner is stopped before Cloud Run starts; then set SCHEDULER_HANDOFF_APPROVED=YES."
-[[ "${CLOUD_RUN_COST_APPROVED:-}" == "YES" ]] || die "Approve one always-on Cloud Run instance and its charges; then set CLOUD_RUN_COST_APPROVED=YES."
+[[ "${CLOUD_RUN_COST_APPROVED:-}" == "YES" ]] || die "Approve the public scale-to-zero Cloud Run service and request-based charges; then set CLOUD_RUN_COST_APPROVED=YES."
 [[ "${PUBLIC_MOBILE_API_APPROVED:-}" == "YES" ]] || die "Approve public HTTPS invocation; app-issued JWT and role checks remain required for business routes."
 read -r -p 'Type APPROVE-CLOUD-RUN-PRODUCTION to create the service: ' DEPLOY_CONFIRM
 [[ "$DEPLOY_CONFIRM" == "APPROVE-CLOUD-RUN-PRODUCTION" ]] || die "Deployment was not approved; no Cloud Run service was created."
@@ -404,18 +411,69 @@ gcloud run deploy "$SERVICE" \
   --memory=1Gi \
   --concurrency=8 \
   --timeout=120s \
-  --min=1 \
+  --min=0 \
   --max=1 \
-  --no-cpu-throttling \
   --allow-unauthenticated \
   --service-account="$RUNTIME_SERVICE_ACCOUNT" \
-  --set-env-vars="ENV=production,SCHEDULER_ENABLED=true,NOTIFICATIONS_ENABLED=${NOTIFICATIONS_ENABLED},FRONTEND_ORIGIN=${FRONTEND_ORIGIN},MOBILE_WEB_ORIGIN=${MOBILE_WEB_ORIGIN:-$FRONTEND_ORIGIN}" \
+  --set-env-vars="ENV=production,SCHEDULER_ENABLED=false,NOTIFICATIONS_ENABLED=${NOTIFICATIONS_ENABLED},FRONTEND_ORIGIN=${FRONTEND_ORIGIN},MOBILE_WEB_ORIGIN=${MOBILE_WEB_ORIGIN:-$FRONTEND_ORIGIN},CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL=${CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL},CLOUD_SCHEDULER_JOB_NAME=${CLOUD_SCHEDULER_JOB_NAME}" \
   --set-secrets="$SECRET_BINDINGS" \
   --quiet
 
 SERVICE_URL="$(gcloud run services describe "$SERVICE" --project="$PROJECT_ID" --region="$REGION" \
   --format='value(status.url)')"
 [[ "$SERVICE_URL" == https://* ]] || die "Cloud Run did not return an HTTPS service URL. Do not route clients to this service."
+
+# The OIDC audience is the canonical Cloud Run URL, available after creation.
+gcloud run services update "$SERVICE" \
+  --project="$PROJECT_ID" --region="$REGION" \
+  --update-env-vars="CLOUD_SCHEDULER_OIDC_AUDIENCE=${SERVICE_URL}" \
+  --quiet
+
+SERVICE_CONFIG="$(gcloud run services describe "$SERVICE" --project="$PROJECT_ID" --region="$REGION" --format=json)" \
+  || die "Could not verify the deployed Cloud Run service settings."
+python3 - "$SERVICE_CONFIG" "$SERVICE_URL" "$CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL" "$CLOUD_SCHEDULER_JOB_NAME" <<'PY' \
+  || die "Cloud Run scale-to-zero or Cloud Scheduler identity settings failed verification."
+import json
+import sys
+
+service, expected_url, expected_email, expected_job = sys.argv[1:]
+data = json.loads(service)
+spec = data.get("spec", {})
+template = spec.get("template", {})
+template_metadata = template.get("metadata", {})
+service_metadata = data.get("metadata", {})
+template_spec = template.get("spec", {})
+containers = template_spec.get("containers", [])
+env = {
+    item["name"]: item.get("value", "")
+    for item in (containers[0].get("env", []) if containers else [])
+}
+annotations = {}
+annotations.update(service_metadata.get("annotations", {}))
+annotations.update(template_metadata.get("annotations", {}))
+scaling = {}
+scaling.update(spec.get("scaling", {}))
+scaling.update(template.get("scaling", {}))
+min_values = [
+    scaling.get("minInstanceCount"),
+    annotations.get("autoscaling.knative.dev/minScale"),
+    annotations.get("run.googleapis.com/minScale"),
+]
+if any(value is not None and str(value) not in {"0", ""} for value in min_values):
+    raise SystemExit("Cloud Run must have zero minimum instances.")
+if env.get("SCHEDULER_ENABLED", "").lower() != "false":
+    raise SystemExit("Cloud Run must not run an in-process scheduler.")
+if env.get("CLOUD_SCHEDULER_OIDC_AUDIENCE") != expected_url:
+    raise SystemExit("Cloud Scheduler OIDC audience does not match the canonical service URL.")
+if env.get("CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL", "").lower() != expected_email.lower():
+    raise SystemExit("Cloud Scheduler service account does not match the reviewed identity.")
+if env.get("CLOUD_SCHEDULER_JOB_NAME") != expected_job:
+    raise SystemExit("Cloud Scheduler job name does not match the reviewed resource name.")
+cpu_throttling = annotations.get("run.googleapis.com/cpu-throttling")
+if cpu_throttling == "false":
+    raise SystemExit("Cloud Run CPU is always allocated; request-based CPU is required for cost control.")
+print("Cloud Run configuration: PASS (min instances 0; request-based CPU; scheduler identity pinned)")
+PY
 
 health_http="$(curl --silent --show-error --connect-timeout 10 --max-time 150 \
   --output /dev/null --write-out '%{http_code}' "$SERVICE_URL/health" || true)"
@@ -467,20 +525,18 @@ def payload(entry):
     return " ".join(str(value) for value in (entry.get("textPayload", ""), entry.get("jsonPayload", {})))
 
 started = any("Application startup complete" in payload(entry) for entry in entries)
-has_scheduler_owner = any("Acquired the PostgreSQL scheduler owner advisory lock" in payload(entry) for entry in entries)
-has_scheduler = any("Scheduler started with" in payload(entry) for entry in entries)
 if errors:
     raise SystemExit("ERROR: Cloud Run logs contain error-severity entries; payloads suppressed. Inspect logs in Cloud Console.")
 if not started:
     raise SystemExit("ERROR: no FastAPI startup-complete log was found; inspect Cloud Run logs in Cloud Console.")
-if not has_scheduler_owner or not has_scheduler:
-    raise SystemExit("ERROR: guarded scheduler did not acquire its database owner lock and start; inspect Cloud Run logs.")
-print(f"Cloud Run startup logs: PASS ({len(entries)} entries scanned; API and single-owner scheduler started; no error-severity entries; payloads suppressed)")
+if any("Scheduler started with" in payload(entry) for entry in entries):
+    raise SystemExit("ERROR: an in-process scheduler unexpectedly started on the scale-to-zero service.")
+print(f"Cloud Run startup logs: PASS ({len(entries)} entries scanned; API started without in-process scheduler; no error-severity entries; payloads suppressed)")
 PY
 
 printf '\nDEPLOYMENT VERIFIED\nService: %s\nRegion: %s\nImage: %s\nBackend URL: %s\n' \
   "$SERVICE" "$REGION" "$IMAGE_REF" "$SERVICE_URL"
 printf 'Public HTTPS access is enabled; non-public API operations require app-issued JWTs and role authorization.\n'
-printf 'The scheduler holds a PostgreSQL session advisory lock to prevent a second Cloud Run owner.\n'
+printf "The Cloud Scheduler endpoint verifies Google's OIDC signature, audience, service account, and job name; PostgreSQL locking and a durable run ledger prevent overlaps and replay duplicates.\n"
 printf 'Interactive API docs are disabled in production; local OpenAPI authorization tests run before image build.\n'
 printf 'Set the reviewed GitHub Actions variable VIMJ_API_BASE_URL to this URL before preparing a mobile release.\n'

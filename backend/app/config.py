@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     # Preserve scheduled behavior by default. Deployments must either disable
     # the scheduler or establish the database-wide owner lock and handoff first.
     SCHEDULER_ENABLED: bool = True
+    # Production uses authenticated Cloud Scheduler requests instead of an
+    # in-process scheduler, so the Cloud Run API can scale to zero.
+    CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL: str = ""
+    CLOUD_SCHEDULER_OIDC_AUDIENCE: str = ""
+    CLOUD_SCHEDULER_JOB_NAME: str = ""
 
     LOGIN_RATE_LIMIT: str = "5/15minutes"
 

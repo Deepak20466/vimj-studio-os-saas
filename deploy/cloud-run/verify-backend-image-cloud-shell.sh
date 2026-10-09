@@ -53,8 +53,8 @@ import os
 import pathlib
 import sys
 
-if os.environ.get("ENV") != "production" or os.environ.get("SCHEDULER_ENABLED", "").lower() != "true":
-    raise SystemExit("image lacks production or guarded scheduler settings")
+if os.environ.get("ENV") != "production" or os.environ.get("SCHEDULER_ENABLED", "").lower() != "false":
+    raise SystemExit("image is not configured for production scale-to-zero scheduling")
 if "DATABASE_URL" in os.environ or "JWT_SECRET_KEY" in os.environ:
     raise SystemExit("image contains a runtime secret environment variable")
 root = pathlib.Path("/app")

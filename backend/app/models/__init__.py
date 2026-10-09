@@ -20,6 +20,7 @@ from app.models.notification import Notification
 from app.models.leave import CoachLeave, LeaveStatus
 from app.models.admin_attendance_visibility import AdminAttendanceVisibility
 from app.models.salary import CoachSalary
+from app.models.scheduler_job_execution import SchedulerJobExecution
 
 __all__ = [
     "User",
@@ -50,4 +51,5 @@ __all__ = [
     "LeaveStatus",
     "AdminAttendanceVisibility",
     "CoachSalary",
+    "SchedulerJobExecution",
 ]

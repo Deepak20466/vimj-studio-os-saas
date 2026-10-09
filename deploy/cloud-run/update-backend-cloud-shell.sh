@@ -77,15 +77,17 @@ for name in ("DATABASE_URL", "JWT_SECRET_KEY"):
     reference = env.get(name, {}).get("valueFrom", {}).get("secretKeyRef", {})
     if not reference.get("name") or not str(reference.get("key", "")).isdigit():
         raise SystemExit(f"ERROR: existing {name} is not bound to a pinned Secret Manager version.")
-if env.get("ENV", {}).get("value") != "production" or env.get("SCHEDULER_ENABLED", {}).get("value", "").lower() != "true":
-    raise SystemExit("ERROR: existing API is not in reviewed production/scheduler mode.")
+if env.get("ENV", {}).get("value") != "production" or env.get("SCHEDULER_ENABLED", {}).get("value", "").lower() != "false":
+    raise SystemExit("ERROR: existing API is not in reviewed scale-to-zero mode.")
+if not env.get("CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL", {}).get("value") or not env.get("CLOUD_SCHEDULER_OIDC_AUDIENCE", {}).get("value"):
+    raise SystemExit("ERROR: existing API lacks the authenticated Cloud Scheduler identity.")
 public_invoker = any(
     binding.get("role") == "roles/run.invoker" and "allUsers" in binding.get("members", [])
     for binding in policy.get("bindings", [])
 )
 if not public_invoker:
     raise SystemExit("ERROR: existing API is not publicly invokable for native HTTPS clients.")
-print("Existing service configuration: PASS (pinned secrets, production mode, guarded scheduler, public HTTPS invocation)")
+print("Existing service configuration: PASS (pinned secrets, production scale-to-zero mode, Cloud Scheduler identity, public HTTPS invocation)")
 PY
 [[ "$?" -eq 0 ]] || die "The existing backend service configuration did not pass review."
 
@@ -98,11 +100,11 @@ docker pull "$CURRENT_IMAGE" >/dev/null
 docker run --rm --network=none --read-only --user=10001:10001 --entrypoint python3 "$CURRENT_IMAGE" -c '
 import pathlib
 root = pathlib.Path("/app/app")
-scheduler = (root / "services" / "scheduler.py").read_text(encoding="utf-8")
-if "_acquire_scheduler_owner_lock" not in scheduler or "pg_try_advisory_lock" not in scheduler:
-    raise SystemExit("existing revision lacks the cross-revision PostgreSQL scheduler lock")
-print("Existing image scheduler lock: PASS")
-' || die "The existing revision lacks the cross-revision scheduler lock; pause and reconcile scheduler ownership before updating."
+scheduler = (root / "services" / "cloud_scheduler.py").read_text(encoding="utf-8")
+if "verify_oauth2_token" not in scheduler or "pg_try_advisory_lock" not in scheduler or "SchedulerJobExecution" not in scheduler:
+    raise SystemExit("existing revision lacks authenticated Cloud Scheduler locking and replay protection")
+print("Existing image Cloud Scheduler authentication/locking: PASS")
+' || die "The existing revision lacks the authenticated Cloud Scheduler dispatcher; reconcile scheduler ownership before updating."
 
 service_url="$(gcloud run services describe "$SERVICE" --project="$PROJECT_ID" --region="$REGION" --format='value(status.url)')"
 [[ "$service_url" == https://* ]] || die "Existing backend URL is not HTTPS."

@@ -37,6 +37,7 @@ BASE_EXPECTED_TABLES = {
     "users",
 }
 SALARY_TABLE = "coach_salary"
+SCHEDULER_TABLE = "scheduler_job_executions"
 PRESERVED_LEGACY_TABLES = {
     "attendance_submissions",
     "chat_messages",
@@ -97,12 +98,14 @@ def main() -> int:
                 expected_tables = set(BASE_EXPECTED_TABLES)
                 if revisions == ["0020"]:
                     expected_tables.add(SALARY_TABLE)
+                elif revisions == ["0021"]:
+                    expected_tables.update({SALARY_TABLE, SCHEDULER_TABLE})
                 elif revisions == ["0019"] and SALARY_TABLE in tables:
                     # A legacy table may survive at the pre-restoration revision.
                     # Keep it visible for data reconciliation; never drop it here.
                     expected_tables.add(SALARY_TABLE)
                 elif revisions != ["0019"]:
-                    raise RuntimeError("database revision is neither 0019 nor 0020")
+                    raise RuntimeError("database revision is not one of the reviewed 0019, 0020, or 0021 states")
                 estimates = dict(
                     connection.execute(
                         text(

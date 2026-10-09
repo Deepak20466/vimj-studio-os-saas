@@ -1,10 +1,10 @@
 # VIMJ Academy Cloud Run recovery and release runbook
 
-This runbook is the current deployment path for `vimj-academy` in `asia-south1`. It targets Cloud Run, the verified Supabase recovery database, Flutter Android, and GitHub Releases. It does not use the blocked Render backend. All scripts are approval-gated; none has been run against Google Cloud or Supabase from this workspace.
+This runbook is the current deployment path for `vimj-academy` in `asia-south1`. It targets Cloud Run, the verified Supabase recovery database, Flutter Android, and GitHub Releases. It does not use the suspended Render backend. The API and website use request-based Cloud Run billing with zero minimum instances. One OIDC-authenticated Cloud Scheduler job sends a minute tick to the API; the API dispatches the existing 11 jobs in `Asia/Kolkata`, so no worker stays alive between requests. All production operations remain approval-gated; none has been run against Google Cloud or Supabase from this workspace.
 
 ## Required command environment
 
-Run commands from a clean checkout of the reviewed `cloud-run-safety-audit` commit in Google Cloud Shell. Do not paste database URLs, passwords, JWT secrets, Twilio credentials, reset tokens, or keystore material into command arguments, terminal output, or Git. Set only the non-secret Supabase host/user/database/project-reference values obtained from the Supabase dashboard. Use the transaction pooler on port 6543 for the API and the session pooler on port 5432 for backup and salary transfers.
+Run commands from a clean checkout of the reviewed `vimj-production-recovery` commit in Google Cloud Shell. Do not paste database URLs, passwords, JWT secrets, Twilio credentials, reset tokens, or keystore material into command arguments, terminal output, or Git. Set only the non-secret Supabase host/user/database/project-reference values obtained from the Supabase dashboard. Use the transaction pooler on port 6543 for API traffic and the session pooler on port 5432 for advisory locks, backup, and salary transfers.
 
 ```bash
 gcloud auth login
@@ -46,7 +46,7 @@ The script resolves project IDs and numbers through Resource Manager, then reque
 
 ## Restore salary rows only when the audit proves they are missing
 
-`0013` historically dropped payroll and other tables. The current source restores salary APIs, schemas, admin/coach UI, and salary reminders. Migration `0020` is additive; it will preserve a compatible existing table and refuses to drop salary history on downgrade. It must not run until the verified database comparison shows whether payroll rows already exist or need recovery.
+`0013` historically dropped payroll and other tables. The current source restores salary APIs, schemas, admin/coach UI, and salary reminders. Migration `0020` is additive; it preserves a compatible existing table and refuses to drop salary history on downgrade. Do not run it until the verified database comparison resolves salary history. The project owner reports that no salary records were ever entered; still verify the recovered and target ledgers before migration. If both are empty, set `SALARY_RECOVERY_STATUS=CONFIRMED_EMPTY` and do not run the salary row-transfer helper.
 
 Before running migration `0020`, set `SALARY_RECOVERY_STATUS` from the audited evidence:
 
@@ -84,6 +84,23 @@ python3 deploy/cloud-run/restore-salary-rows-cloud-shell.py
 
 Enter the source session-pooler URL only at the hidden prompt. The script requires revision `0020`, exact compatible salary columns, no duplicate coach/month/year records, and an empty target ledger before it asks for `APPROVE-RESTORE-SALARY-ROWS`. It performs one atomic data-only restore, aligns the ID sequence, then compares exact row-set SHA-256 fingerprints. If the target is non-empty and differs, it stops for manual reconciliation. It never deletes target rows.
 
+After the salary schema and any verified salary-row reconciliation are complete, add the durable scheduler execution ledger. This is an additive schema-only change; it does not alter existing business rows. It requires the same independent backup, exact database identity, read-only preflight, explicit approval, and typed confirmation:
+
+```bash
+export BACKUP_VERIFIED=YES
+export BACKUP_URI='REPLACE_WITH_VERIFIED_BACKUP_URI'
+export BACKUP_SHA256='REPLACE_WITH_VERIFIED_64_CHARACTER_SHA256'
+export SCHEDULER_SCHEMA_APPROVED=YES
+export DATABASE_URL_SECRET='vimj-prod-database-url'
+export DATABASE_URL_SECRET_VERSION='REPLACE_WITH_REVIEWED_NUMERIC_SECRET_VERSION'
+export EXPECTED_SUPABASE_HOST='REPLACE_WITH_TARGET_POOLER_HOST'
+export EXPECTED_SUPABASE_USER='REPLACE_WITH_TARGET_DATABASE_USERNAME'
+export EXPECTED_DATABASE_NAME='postgres'
+python3 deploy/cloud-run/apply-scheduler-ledger-cloud-shell.py
+```
+
+The helper refuses any starting revision other than `0020`, verifies the immutable CMEK backup object and downloaded checksum, then applies only `0021`. It verifies the resulting revision and `scheduler_job_executions` table in a read-only postflight. It never drops or updates business tables.
+
 ## Build and verify immutable images
 
 Cloud Build uploads source and pushes an image, so each build requires its explicit approval variable and typed confirmation. The build script never uses Cloud Build substitutions for secrets.
@@ -110,7 +127,7 @@ Both build commands ask for `APPROVE-CLOUD-BUILD-BACKEND` or `APPROVE-CLOUD-BUIL
 
 ## Deploy API and website only after explicit approval
 
-The backend deployment requires the read-only inventory at schema revision `0020`, all 20 required current tables, review of any recognized historical tables that remain present, verified salary reconciliation, pinned Secret Manager versions, direct secret-scoped Accessor grants, a dedicated runtime service account, confirmed old-scheduler shutdown, and separate public API/cost approvals. It enables the PostgreSQL advisory-lock scheduler only after the owner handoff is approved. It deploys public HTTPS invocation because Flutter clients cannot use Cloud Run IAM identity tokens; business endpoints remain protected by app JWT and Admin/Coach authorization. Production docs/OpenAPI are disabled. No database migration or secret rotation runs during deployment.
+The backend deployment requires the read-only inventory at schema revision `0021`, all 21 required current tables, review of recognized historical tables, verified salary reconciliation, pinned Secret Manager versions, direct secret-scoped Accessor grants, an existing dedicated runtime service account, and separate public API/cost approvals. It sets minimum instances to zero, caps the service at one instance, and leaves CPU request-based. The in-process APScheduler is disabled in production. The service is publicly invokable for mobile/web clients; business endpoints remain protected by app JWT and Admin/Coach authorization. The internal scheduler route separately validates Google's OIDC signature, expected audience, service-account email, and job name. Production docs/OpenAPI are disabled. No database migration or secret rotation runs during deployment.
 
 Before running the script, set the following reviewed, non-secret environment values. `ADMIN_RECOVERY_SECRET_NAME` must be the existing secret name or `NONE` only after confirming that break-glass recovery is disabled. If notifications are enabled, set all four existing Twilio secret names; do not create replacement credentials.
 
@@ -124,6 +141,7 @@ export MOBILE_WEB_ORIGIN="$FRONTEND_ORIGIN"
 export NOTIFICATIONS_ENABLED='REPLACE_WITH_REVIEWED_TRUE_OR_FALSE'
 export ADMIN_RECOVERY_SECRET_NAME='REPLACE_WITH_SECRET_NAME_OR_NONE'
 export RUNTIME_SERVICE_ACCOUNT='REPLACE_WITH_DEDICATED_RUNTIME_SERVICE_ACCOUNT_EMAIL'
+export CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL='REPLACE_WITH_EXISTING_SCHEDULER_SERVICE_ACCOUNT_EMAIL'
 export SAFETY_AUDIT_REVIEWED=YES
 export BACKUP_URI='REPLACE_WITH_VERIFIED_BACKUP_URI'
 export BACKUP_SHA256='REPLACE_WITH_VERIFIED_64_CHARACTER_SHA256'
@@ -134,7 +152,7 @@ export PUBLIC_MOBILE_API_APPROVED=YES
 bash deploy/cloud-run/deploy-backend-cloud-shell.sh
 ```
 
-Type `APPROVE-CLOUD-RUN-PRODUCTION` only after approving public API access, the always-on scheduler/cost, and the verified handoff. If the website origin is not known at initial API creation, use a reviewed temporary HTTPS origin; do not direct users to either service before the final CORS step and E2E verification.
+Type `APPROVE-CLOUD-RUN-PRODUCTION` only after approving the public API and request-based charges. The service URL is then pinned as the OIDC audience. This step does not create or activate Cloud Scheduler. Do not direct users to either service before the frontend CORS step and E2E verification.
 
 Deploy the frontend from the matching full commit image SHA after verifying its compiled API origin:
 
@@ -157,9 +175,24 @@ export CLOUD_RUN_CORS_CHANGE_APPROVED=YES
 bash deploy/cloud-run/update-backend-cors-cloud-shell.sh
 ```
 
-Type `APPROVE-UPDATE-CLOUD-RUN-CORS`. This creates a new backend revision using the existing immutable image digest; the advisory lock prevents overlapping Cloud Run revisions from simultaneously owning scheduled jobs.
+Type `APPROVE-UPDATE-CLOUD-RUN-CORS`. This creates a new backend revision using the existing immutable image digest. The Cloud Scheduler job is still inactive at this stage.
 
-For later code releases, submit new immutable images with the same clean-checkout build commands, then update only the image on each existing service. The backend update checks that the current revision already contains the PostgreSQL scheduler lock; if it does not, it stops for an explicit scheduler handoff. The scripts verify pinned production secrets/public policy, the matching frontend API origin, and the independent backup reference before asking for separate approvals. They preserve service settings and do not run migrations.
+After the backend/frontend read-only E2E checks pass, activate the single minute dispatcher. Confirm the old Render scheduler is suspended, API/notification behavior has been reviewed, and the pre-existing service account has the Cloud Scheduler service-agent Token Creator grant. The setup script will not create accounts, grant IAM, enable APIs, or replace an existing job.
+
+```bash
+export CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL='REPLACE_WITH_EXISTING_SCHEDULER_SERVICE_ACCOUNT_EMAIL'
+export SCHEDULER_HANDOFF_APPROVED=YES
+export PRODUCTION_API_E2E_PASSED=YES
+export CLOUD_SCHEDULER_COST_APPROVED=YES
+export SCHEDULED_NOTIFICATIONS_APPROVED=YES
+bash deploy/cloud-run/setup-cloud-scheduler-cloud-shell.sh
+```
+
+Type `APPROVE-ENABLE-CLOUD-SCHEDULER-JOBS` to create `vimj-minute-dispatch`. It runs every minute with timezone `Asia/Kolkata` and an OIDC token from the selected service account. The endpoint reads Cloud Scheduler's RFC3339 `X-CloudScheduler-ScheduleTime` header, normalizes it to the represented minute, and dispatches due jobs. Six jobs run every minute; the others run at 00:15 (batch session generation), 00:30 (overdue fees), 09:00 on the 10th (fee reminders), 09:05 on the 10th (salary notifications), and 21:00 daily (end-of-day report), all local time. A PostgreSQL session advisory lock serializes ticks, and the `scheduler_job_executions` ledger skips completed slots and retries failed or interrupted slots on a later tick. The HTTP attempt deadline is 25 seconds with one retry and a 30-second retry window, so a failed request cannot hold the every-minute schedule in a long retry loop. Notification providers are external side effects; an abrupt process failure mid-job can still leave delivery status uncertain, so scheduler activation requires approval of the existing at-least-once notification behavior.
+
+One Scheduler resource is used instead of 11 because each tick evaluates all 11 CronTrigger definitions. Cloud Run has no warm-instance floor or always-allocated CPU; the minute request still wakes it for the required scheduled checks. Cloud Run request usage and any Scheduler charges depend on the project's shared free-tier usage and billing account.
+
+For later code releases, submit new immutable images with the same clean-checkout build commands, then update only the image on each existing service. The backend update checks that the current revision contains the authenticated dispatcher and preserves the pinned service-account/audience configuration. The scripts verify pinned production secrets/public policy, the matching frontend API origin, and the independent backup reference before asking for separate approvals. They preserve service settings and do not run migrations.
 
 ```bash
 export IMAGE_TAG="$BUILD_COMMIT"
@@ -180,7 +213,7 @@ Type `APPROVE-UPDATE-CLOUD-RUN-BACKEND` and `APPROVE-UPDATE-CLOUD-RUN-FRONTEND` 
 
 ## End-to-end checks and Android release gate
 
-Before release, complete HTTPS Admin and Coach smoke checks against the deployed API/site using approved test accounts: login, `/auth/me`, student/coach roster reads, attendance/reports/fees/receipts, salary history, and session-photo viewing. Do not create, edit, approve, delete, acknowledge, or upload production records as a test. Confirm unauthenticated business API requests return 401, app docs/OpenAPI are unavailable in production, CORS matches the deployed frontend, and logs report the scheduler owner lock. Save the verification evidence and confirm no old scheduler owner is still active.
+Before release, complete HTTPS Admin and Coach smoke checks against the deployed API/site using approved test accounts: login, `/auth/me`, student/coach roster reads, attendance/reports/fees/receipts, salary history, and session-photo viewing. Do not create, edit, approve, delete, acknowledge, or upload production records as a test. Confirm unauthenticated business API requests return 401, app docs/OpenAPI are unavailable in production, CORS matches the deployed frontend, and the scheduled tick returns 200 with the expected completed/skipped job names. Confirm the execution ledger advances and no old scheduler remains active. Use staging fixtures and mocked Twilio sends for scheduled-reminder behavior; production ticks may send messages to live recipients.
 
 The mobile API origin must be HTTPS and is passed at build time as `VIMJ_API_BASE_URL`. The default native API host is a reserved `.invalid` URL, so an unconfigured APK cannot silently call an old backend. The next package version is `1.26.33+69`, tag `mobile-v1.26.33`. Merge the reviewed workflow changes onto the repository default branch. Set the repository Actions variable `VIMJ_API_BASE_URL` to the verified Cloud Run HTTPS URL. Configure `mobile-signing` with required reviewers and the existing signing secrets (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`); signing secrets must be scoped to this environment. Configure `mobile-release` with required reviewers. The signing environment approval gates keystore access; the release environment approval gates publication. After E2E and release approval:
 

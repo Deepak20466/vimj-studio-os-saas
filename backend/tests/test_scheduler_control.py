@@ -27,6 +27,22 @@ class SchedulerControlTests(unittest.TestCase):
 
         asyncio.run(exercise_lifespan())
 
+    def test_production_lifespan_never_starts_in_process_scheduler(self):
+        async def exercise_lifespan():
+            with (
+                patch("app.main.settings.ENV", "production"),
+                patch("app.main.settings.SCHEDULER_ENABLED", True),
+                patch("app.main.start_scheduler") as start_scheduler,
+                patch("app.main.shutdown_scheduler") as shutdown_scheduler,
+            ):
+                async with lifespan(MagicMock()):
+                    pass
+
+                start_scheduler.assert_not_called()
+                shutdown_scheduler.assert_called_once_with()
+
+        asyncio.run(exercise_lifespan())
+
     def test_supabase_transaction_pooler_uses_session_pooler_for_owner_lock(self):
         url = scheduler_service._scheduler_lock_url(
             "postgresql+psycopg2://vimj:secret@aws-0-region.pooler.supabase.com:6543/postgres"

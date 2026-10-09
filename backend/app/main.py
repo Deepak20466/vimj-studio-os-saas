@@ -34,7 +34,10 @@ logger = logging.getLogger("vimj.main")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if settings.ENV != "test" and settings.SCHEDULER_ENABLED:
+    # Cloud Run production scheduling is request driven by Cloud Scheduler.
+    # Keep the in-process scheduler for explicit non-production development
+    # use only; it cannot run correctly on a scale-to-zero service.
+    if settings.ENV not in {"test", "production"} and settings.SCHEDULER_ENABLED:
         start_scheduler()
     yield
     shutdown_scheduler()
@@ -99,3 +102,6 @@ def health_check():
 
 from app.routers import reports
 app.include_router(reports.router)
+
+from app.routers import cloud_scheduler
+app.include_router(cloud_scheduler.router)
