@@ -5,3 +5,5 @@ Thumbs.db
 .idea/
 .claude/
 *.log
+__pycache__/
+*.py[cod]

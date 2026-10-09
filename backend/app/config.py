@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL: str = ""
     CLOUD_SCHEDULER_OIDC_AUDIENCE: str = ""
     CLOUD_SCHEDULER_JOB_NAME: str = ""
+    CLOUD_TASKS_QUEUE_NAME: str = ""
+    CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL: str = ""
 
     LOGIN_RATE_LIMIT: str = "5/15minutes"
 

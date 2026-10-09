@@ -6,6 +6,7 @@ on:
     branches:
       - master
       - cloud-run-safety-audit
+      - vimj-production-recovery
 
 permissions:
   contents: read

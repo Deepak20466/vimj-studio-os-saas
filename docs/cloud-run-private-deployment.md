@@ -1,6 +1,6 @@
 # VIMJ Academy Cloud Run recovery and release runbook
 
-This runbook is the current deployment path for `vimj-academy` in `asia-south1`. It targets Cloud Run, the verified Supabase recovery database, Flutter Android, and GitHub Releases. It does not use the suspended Render backend. The API and website use request-based Cloud Run billing with zero minimum instances. One OIDC-authenticated Cloud Scheduler job sends a minute tick to the API; the API dispatches the existing 11 jobs in `Asia/Kolkata`, so no worker stays alive between requests. All production operations remain approval-gated; none has been run against Google Cloud or Supabase from this workspace.
+This runbook is the current deployment path for `vimj-academy` in `asia-south1`. It targets Cloud Run, the verified Supabase recovery database, Flutter Android, and GitHub Releases. It does not use the suspended Render backend. The API and website use request-based Cloud Run billing with zero minimum instances. One OIDC-authenticated Cloud Scheduler job sends a minute tick to the API; the API enqueues due work into an OIDC-authenticated Cloud Tasks queue, which runs the existing 11 jobs in `Asia/Kolkata`. No worker stays alive between requests. All production operations remain approval-gated; none has been run against Google Cloud or Supabase from this workspace.
 
 ## Required command environment
 
@@ -99,7 +99,7 @@ export EXPECTED_DATABASE_NAME='postgres'
 python3 deploy/cloud-run/apply-scheduler-ledger-cloud-shell.py
 ```
 
-The helper refuses any starting revision other than `0020`, verifies the immutable CMEK backup object and downloaded checksum, then applies only `0021`. It verifies the resulting revision and `scheduler_job_executions` table in a read-only postflight. It never drops or updates business tables.
+The helper refuses any starting revision other than `0020`, verifies the immutable CMEK backup object and downloaded checksum, then applies only `0021`. Revision `0021` creates one new scheduler-only table, its index, and an integer task-attempt generation column. It does not alter existing tables or business rows; downgrade refuses to drop the new scheduler state. The helper verifies the resulting revision and table in a read-only postflight.
 
 ## Build and verify immutable images
 
@@ -125,9 +125,26 @@ bash deploy/cloud-run/build-cloud-run-image-cloud-shell.sh frontend
 
 Both build commands ask for `APPROVE-CLOUD-BUILD-BACKEND` or `APPROVE-CLOUD-BUILD-FRONTEND` respectively.
 
+## Configure the scheduled-jobs queue
+
+Before deploying the backend, configure the existing dedicated Cloud Run runtime identity, Cloud Scheduler identity, and task OIDC identity. The task OIDC identity can reuse the Cloud Scheduler service account. Cloud Tasks creates one small task per due job slot so slow notification work does not keep the every-minute Scheduler request open. The queue's maximum concurrency is five, dispatch rate is capped at ten per second, retries stop after five attempts and 30 minutes, and each task request has a 600-second deadline.
+
+This gated setup can create the `vimj-scheduled-jobs` queue and add only queue-scoped `roles/cloudtasks.enqueuer` for the runtime identity plus service-account-scoped `roles/iam.serviceAccountUser` grants for task token creation. It will not enable APIs, create service accounts, delete or replace an existing queue, or add project-wide task permissions. If the queue already exists, its reviewed name, active state, limits, and retry policy must match before IAM is changed.
+
+```bash
+export RUNTIME_SERVICE_ACCOUNT='REPLACE_WITH_EXISTING_DEDICATED_RUNTIME_SERVICE_ACCOUNT_EMAIL'
+export CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL='REPLACE_WITH_EXISTING_SCHEDULER_SERVICE_ACCOUNT_EMAIL'
+export CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL="$CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL"
+export CLOUD_TASKS_COST_APPROVED=YES
+export CLOUD_TASKS_IAM_APPROVED=YES
+bash deploy/cloud-run/setup-cloud-tasks-cloud-shell.sh
+```
+
+Type `APPROVE-CONFIGURE-CLOUD-TASKS` only after approving the queue and these narrowly scoped IAM grants. This queue has no always-on worker; Cloud Tasks is billed per API operation or push attempt, not for an idle queue.
+
 ## Deploy API and website only after explicit approval
 
-The backend deployment requires the read-only inventory at schema revision `0021`, all 21 required current tables, review of recognized historical tables, verified salary reconciliation, pinned Secret Manager versions, direct secret-scoped Accessor grants, an existing dedicated runtime service account, and separate public API/cost approvals. It sets minimum instances to zero, caps the service at one instance, and leaves CPU request-based. The in-process APScheduler is disabled in production. The service is publicly invokable for mobile/web clients; business endpoints remain protected by app JWT and Admin/Coach authorization. The internal scheduler route separately validates Google's OIDC signature, expected audience, service-account email, and job name. Production docs/OpenAPI are disabled. No database migration or secret rotation runs during deployment.
+The backend deployment requires the read-only inventory at schema revision `0021`, all 21 required current tables, review of recognized historical tables, verified salary reconciliation, pinned Secret Manager versions, direct secret-scoped Accessor grants, the existing dedicated runtime/task identities and queue, and separate public API/cost approvals. It sets minimum instances to zero, caps the service at one instance, keeps request-based CPU, and sets a 600-second maximum request timeout for Cloud Tasks. The in-process APScheduler is disabled in production. The service is publicly invokable for mobile/web clients; business endpoints remain protected by app JWT and Admin/Coach authorization. The internal scheduler and task routes separately validate Google's OIDC signature, expected audience, and exact service-account identity. Production docs/OpenAPI are disabled. No database migration or secret rotation runs during deployment.
 
 Before running the script, set the following reviewed, non-secret environment values. `ADMIN_RECOVERY_SECRET_NAME` must be the existing secret name or `NONE` only after confirming that break-glass recovery is disabled. If notifications are enabled, set all four existing Twilio secret names; do not create replacement credentials.
 
@@ -142,6 +159,8 @@ export NOTIFICATIONS_ENABLED='REPLACE_WITH_REVIEWED_TRUE_OR_FALSE'
 export ADMIN_RECOVERY_SECRET_NAME='REPLACE_WITH_SECRET_NAME_OR_NONE'
 export RUNTIME_SERVICE_ACCOUNT='REPLACE_WITH_DEDICATED_RUNTIME_SERVICE_ACCOUNT_EMAIL'
 export CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL='REPLACE_WITH_EXISTING_SCHEDULER_SERVICE_ACCOUNT_EMAIL'
+export CLOUD_TASKS_QUEUE_NAME='projects/vimj-academy/locations/asia-south1/queues/vimj-scheduled-jobs'
+export CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL="$CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL"
 export SAFETY_AUDIT_REVIEWED=YES
 export BACKUP_URI='REPLACE_WITH_VERIFIED_BACKUP_URI'
 export BACKUP_SHA256='REPLACE_WITH_VERIFIED_64_CHARACTER_SHA256'
@@ -181,6 +200,8 @@ After the backend/frontend read-only E2E checks pass, activate the single minute
 
 ```bash
 export CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL='REPLACE_WITH_EXISTING_SCHEDULER_SERVICE_ACCOUNT_EMAIL'
+export CLOUD_TASKS_QUEUE_NAME='projects/vimj-academy/locations/asia-south1/queues/vimj-scheduled-jobs'
+export CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL="$CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL"
 export SCHEDULER_HANDOFF_APPROVED=YES
 export PRODUCTION_API_E2E_PASSED=YES
 export CLOUD_SCHEDULER_COST_APPROVED=YES
@@ -188,9 +209,9 @@ export SCHEDULED_NOTIFICATIONS_APPROVED=YES
 bash deploy/cloud-run/setup-cloud-scheduler-cloud-shell.sh
 ```
 
-Type `APPROVE-ENABLE-CLOUD-SCHEDULER-JOBS` to create `vimj-minute-dispatch`. It runs every minute with timezone `Asia/Kolkata` and an OIDC token from the selected service account. The endpoint reads Cloud Scheduler's RFC3339 `X-CloudScheduler-ScheduleTime` header, normalizes it to the represented minute, and dispatches due jobs. Six jobs run every minute; the others run at 00:15 (batch session generation), 00:30 (overdue fees), 09:00 on the 10th (fee reminders), 09:05 on the 10th (salary notifications), and 21:00 daily (end-of-day report), all local time. A PostgreSQL session advisory lock serializes ticks, and the `scheduler_job_executions` ledger skips completed slots and retries failed or interrupted slots on a later tick. The HTTP attempt deadline is 25 seconds with one retry and a 30-second retry window, so a failed request cannot hold the every-minute schedule in a long retry loop. Notification providers are external side effects; an abrupt process failure mid-job can still leave delivery status uncertain, so scheduler activation requires approval of the existing at-least-once notification behavior.
+Type `APPROVE-ENABLE-CLOUD-SCHEDULER-JOBS` to create `vimj-minute-dispatch`. It runs every minute with timezone `Asia/Kolkata` and an OIDC token from the selected service account. The endpoint reads Cloud Scheduler's RFC3339 `X-CloudScheduler-ScheduleTime` header and quickly enqueues work. Seven jobs run every minute; the others run at 00:15 (batch session generation), 00:30 (overdue fees), 09:00 on the 10th (fee reminders), 09:05 on the 10th (salary notifications), and 21:00 daily (end-of-day report), all local time. The minute request has a 60-second deadline, one retry, and a 30-second retry window. Each queued task uses a deterministic name for its slot/generation, OIDC authentication, a 600-second dispatch deadline, and at most five Cloud Tasks attempts over 30 minutes. PostgreSQL session advisory locks serialize executions of the same job; the `scheduler_job_executions` ledger records task generations, skips completed slots, rejects stale duplicate generations, and re-enqueues failed or abandoned work after the queue retry window. Notification providers are external side effects; an abrupt process failure after a provider accepts a message but before the database records completion can still cause a duplicate on retry. Scheduler activation therefore needs approval of this at-least-once behavior.
 
-One Scheduler resource is used instead of 11 because each tick evaluates all 11 CronTrigger definitions. Cloud Run has no warm-instance floor or always-allocated CPU; the minute request still wakes it for the required scheduled checks. Cloud Run request usage and any Scheduler charges depend on the project's shared free-tier usage and billing account.
+One Scheduler resource is used instead of 11 because each tick evaluates all 11 CronTrigger definitions. The seven minute-based jobs produce about 302,400 task deliveries over a 30-day month, plus 43,200 short tick requests. Cloud Tasks has a shared-account free allowance of 1,000,000 billable operations; a task normally uses one create operation and one delivery attempt, leaving retries as the main factor that can exceed the allowance. Cloud Run has no warm-instance floor or always-allocated CPU. At one average billed second per minute-job task and 0.5 second per minute tick, 1 vCPU/1 GiB produces roughly $3.46/month of Cloud Run usage after the per-account free CPU allowance, plus $0-$0.10 for Cloud Scheduler depending on other jobs in the billing account. At five seconds per task, the same estimate is about $35.42/month. If the Cloud Run free allowance is already consumed elsewhere, those scenarios are about $8.72 and $40.78/month. These estimates exclude user API/frontend traffic, logging, network egress, Cloud Build, Cloud Tasks retries beyond the free allowance, and the Supabase plan; actual CPU time of each current job is not yet measured. Cloud Run request-based rates and free allowances vary by region and billing account, so review billing after a gated canary.
 
 For later code releases, submit new immutable images with the same clean-checkout build commands, then update only the image on each existing service. The backend update checks that the current revision contains the authenticated dispatcher and preserves the pinned service-account/audience configuration. The scripts verify pinned production secrets/public policy, the matching frontend API origin, and the independent backup reference before asking for separate approvals. They preserve service settings and do not run migrations.
 
@@ -213,7 +234,7 @@ Type `APPROVE-UPDATE-CLOUD-RUN-BACKEND` and `APPROVE-UPDATE-CLOUD-RUN-FRONTEND` 
 
 ## End-to-end checks and Android release gate
 
-Before release, complete HTTPS Admin and Coach smoke checks against the deployed API/site using approved test accounts: login, `/auth/me`, student/coach roster reads, attendance/reports/fees/receipts, salary history, and session-photo viewing. Do not create, edit, approve, delete, acknowledge, or upload production records as a test. Confirm unauthenticated business API requests return 401, app docs/OpenAPI are unavailable in production, CORS matches the deployed frontend, and the scheduled tick returns 200 with the expected completed/skipped job names. Confirm the execution ledger advances and no old scheduler remains active. Use staging fixtures and mocked Twilio sends for scheduled-reminder behavior; production ticks may send messages to live recipients.
+Before release, complete HTTPS Admin and Coach smoke checks against the deployed API/site using approved test accounts: login, `/auth/me`, student/coach roster reads, attendance/reports/fees/receipts, salary history, and session-photo viewing. Do not create, edit, approve, delete, acknowledge, or upload production records as a test. Confirm unauthenticated business API requests return 401, app docs/OpenAPI are unavailable in production, CORS matches the deployed frontend, the scheduled tick returns 200 with expected enqueued/skipped slots, and the queue delivers each canary task to the authenticated task route. Confirm the execution ledger advances and no old scheduler remains active. Use staging fixtures and mocked Twilio sends for scheduled-reminder behavior; production activation may send messages to live recipients.
 
 The mobile API origin must be HTTPS and is passed at build time as `VIMJ_API_BASE_URL`. The default native API host is a reserved `.invalid` URL, so an unconfigured APK cannot silently call an old backend. The next package version is `1.26.33+69`, tag `mobile-v1.26.33`. Merge the reviewed workflow changes onto the repository default branch. Set the repository Actions variable `VIMJ_API_BASE_URL` to the verified Cloud Run HTTPS URL. Configure `mobile-signing` with required reviewers and the existing signing secrets (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`); signing secrets must be scoped to this environment. Configure `mobile-release` with required reviewers. The signing environment approval gates keystore access; the release environment approval gates publication. After E2E and release approval:
 

@@ -1,4 +1,5 @@
 import importlib.util
+import ast
 import os
 import unittest
 from pathlib import Path
@@ -18,6 +19,23 @@ SPEC.loader.exec_module(MIGRATION)
 
 
 class SchedulerMigrationTests(unittest.TestCase):
+    def test_0021_only_creates_scheduler_metadata_and_never_mutates_existing_tables(self):
+        source = MIGRATION_PATH.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        migration_calls = {
+            node.func.attr
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "op"
+        }
+        self.assertEqual(MIGRATION.down_revision, "0020")
+        self.assertIn("create_table", migration_calls)
+        self.assertIn("create_index", migration_calls)
+        self.assertFalse(migration_calls & {"add_column", "alter_column", "drop_table", "drop_column"})
+        self.assertIn('sa.Column("attempt", sa.Integer()', source)
+
     def test_supabase_schema_change_requires_explicit_approval(self):
         bind = SimpleNamespace(engine=SimpleNamespace(url=SimpleNamespace(host="db.example.supabase.co")))
         with (

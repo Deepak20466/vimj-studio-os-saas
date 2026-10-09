@@ -76,7 +76,7 @@ flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
 
 ## Production deployment
 
-Production recovery is being prepared for Google Cloud Run (`vimj-academy`) and Supabase. The API and frontend are configured for request-based Cloud Run billing and zero minimum instances; one OIDC-authenticated Cloud Scheduler minute tick dispatches all 11 jobs in `Asia/Kolkata`. The Cloud Run runbook and approval gates are in `docs/cloud-run-private-deployment.md`. Do not deploy through the legacy Render configuration or run its build command against the production database. Cloud Run services, schema changes, scheduler activation, and Android releases remain gated on verified backup/recovery evidence and explicit approval.
+Production recovery is being prepared for Google Cloud Run (`vimj-academy`) and Supabase. The API and frontend use request-based Cloud Run billing and zero minimum instances. One OIDC-authenticated Cloud Scheduler minute tick enqueues due jobs into an OIDC-protected Cloud Tasks queue; all 11 existing jobs keep their `Asia/Kolkata` schedules, durable run ledger, and PostgreSQL locking. The Cloud Run runbook and approval gates are in `docs/cloud-run-private-deployment.md`. Do not deploy through the legacy Render configuration or run its build command against the production database. Cloud Run services, schema changes, scheduler activation, and Android releases remain gated on verified backup/recovery evidence and explicit approval.
 
 Mobile apps are distributed as signed split-ABI APKs through GitHub Releases (`mobile-vX.Y.Z`), not the Play Store. See `mobile/README.md` for the gated Android release workflow.
 ## Where to look for more detail

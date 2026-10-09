@@ -100,6 +100,21 @@ def main() -> int:
                     expected_tables.add(SALARY_TABLE)
                 elif revisions == ["0021"]:
                     expected_tables.update({SALARY_TABLE, SCHEDULER_TABLE})
+                    scheduler_columns = {
+                        column["name"]
+                        for column in inspect(connection).get_columns(SCHEDULER_TABLE, schema="public")
+                    }
+                    required_scheduler_columns = {
+                        "job_name",
+                        "scheduled_for",
+                        "status",
+                        "attempt",
+                        "started_at",
+                        "finished_at",
+                        "error_type",
+                    }
+                    if not required_scheduler_columns.issubset(scheduler_columns):
+                        raise RuntimeError("scheduler execution ledger does not have the reviewed additive schema")
                 elif revisions == ["0019"] and SALARY_TABLE in tables:
                     # A legacy table may survive at the pre-restoration revision.
                     # Keep it visible for data reconciliation; never drop it here.

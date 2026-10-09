@@ -28,6 +28,8 @@ ADMIN_RECOVERY_SECRET_NAME="${ADMIN_RECOVERY_SECRET_NAME:-}"
 RUNTIME_SERVICE_ACCOUNT="${RUNTIME_SERVICE_ACCOUNT:-}"
 CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL="${CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL:-}"
 CLOUD_SCHEDULER_JOB_NAME="projects/${PROJECT_ID}/locations/${REGION}/jobs/vimj-minute-dispatch"
+CLOUD_TASKS_QUEUE_NAME="${CLOUD_TASKS_QUEUE_NAME:-projects/${PROJECT_ID}/locations/${REGION}/queues/vimj-scheduled-jobs}"
+CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL="${CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL:-$CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL}"
 
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "Required command is unavailable: $1"; }
@@ -59,15 +61,17 @@ PY
   || die "Set RUNTIME_SERVICE_ACCOUNT to the reviewed dedicated Cloud Run service account."
 [[ "$CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.iam\.gserviceaccount\.com$ ]] \
   || die "Set CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL to the pre-existing dedicated Cloud Scheduler service account."
-[[ "$CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.iam\.gserviceaccount\.com$ ]] \
-  || die "Set CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL to the pre-existing dedicated Cloud Scheduler service account."
+[[ "$CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.iam\.gserviceaccount\.com$ ]] \
+  || die "Set CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL to the pre-existing task OIDC service account."
+[[ "$CLOUD_TASKS_QUEUE_NAME" == "projects/${PROJECT_ID}/locations/${REGION}/queues/"* ]] \
+  || die "CLOUD_TASKS_QUEUE_NAME must be the reviewed queue in ${PROJECT_ID}/${REGION}."
 
 ACTIVE_ACCOUNT="$(gcloud auth list --filter='status:ACTIVE' --format='value(account)' 2>/dev/null || true)"
 [[ -n "$ACTIVE_ACCOUNT" ]] || die "No active gcloud account. Run: gcloud auth login"
 CURRENT_PROJECT="$(gcloud config get-value project 2>/dev/null || true)"
 [[ "$CURRENT_PROJECT" == "$PROJECT_ID" ]] || die "Set the active project to $PROJECT_ID, then rerun."
 
-for api in run.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com iam.googleapis.com; do
+for api in run.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com iam.googleapis.com cloudtasks.googleapis.com; do
   api_state="$(gcloud services describe "$api" --project="$PROJECT_ID" --format='value(state)' 2>/dev/null || true)"
   [[ "$api_state" == "ENABLED" ]] || die "Required API is not enabled: $api. This script will not enable APIs."
 done
@@ -158,6 +162,61 @@ EXISTING_SERVICE="$(gcloud run services list --project="$PROJECT_ID" --region="$
 gcloud iam service-accounts describe "$RUNTIME_SERVICE_ACCOUNT" --project="$PROJECT_ID" \
   --format='value(email)' >/dev/null \
   || die "Runtime service account does not exist: $RUNTIME_SERVICE_ACCOUNT. Set RUNTIME_SERVICE_ACCOUNT to an existing account."
+gcloud iam service-accounts describe "$CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL" --project="$PROJECT_ID" \
+  --format='value(email)' >/dev/null \
+  || die "Cloud Tasks OIDC service account does not exist: $CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL."
+
+TASKS_QUEUE_ID="${CLOUD_TASKS_QUEUE_NAME##*/}"
+TASKS_QUEUE_CONFIG="$(gcloud tasks queues describe "$TASKS_QUEUE_ID" --project="$PROJECT_ID" --location="$REGION" --format=json)" \
+  || die "The reviewed Cloud Tasks queue does not exist or is inaccessible. Run the separately gated queue setup first."
+PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
+TASKS_AGENT="service-${PROJECT_NUMBER}@gcp-sa-cloudtasks.iam.gserviceaccount.com"
+TASKS_QUEUE_IAM="$(gcloud tasks queues get-iam-policy "$TASKS_QUEUE_ID" --project="$PROJECT_ID" --location="$REGION" --format=json)" \
+  || die "Could not inspect the Cloud Tasks queue IAM policy."
+TASKS_ACCOUNT_IAM="$(gcloud iam service-accounts get-iam-policy "$CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL" --project="$PROJECT_ID" --format=json)" \
+  || die "Could not inspect the Cloud Tasks OIDC account policy."
+python3 - "$TASKS_QUEUE_CONFIG" "$TASKS_QUEUE_IAM" "$TASKS_ACCOUNT_IAM" \
+  "$CLOUD_TASKS_QUEUE_NAME" "$RUNTIME_SERVICE_ACCOUNT" "$TASKS_AGENT" <<'PY' \
+  || die "Cloud Tasks queue, enqueuer, or token-minting IAM configuration failed verification."
+import json
+import sys
+
+queue_json, queue_policy_json, account_policy_json, expected_queue, runtime, tasks_agent = sys.argv[1:]
+queue = json.loads(queue_json)
+if queue.get("name") != expected_queue or queue.get("state") != "RUNNING":
+    raise SystemExit("Cloud Tasks queue must be the reviewed RUNNING queue.")
+limits = queue.get("rateLimits", {})
+retry = queue.get("retryConfig", {})
+if limits.get("maxConcurrentDispatches") != 5 or limits.get("maxDispatchesPerSecond") != 10.0:
+    raise SystemExit("Cloud Tasks queue dispatch limits are not the reviewed bounded values.")
+if retry.get("maxAttempts") != 5 or retry.get("maxRetryDuration") != "1800s":
+    raise SystemExit("Cloud Tasks queue retry policy is not the reviewed bounded policy.")
+runtime_member = "serviceAccount:" + runtime
+queue_policy = json.loads(queue_policy_json)
+if not any(
+    binding.get("role") == "roles/cloudtasks.enqueuer"
+    and runtime_member in binding.get("members", [])
+    and not binding.get("condition")
+    for binding in queue_policy.get("bindings", [])
+):
+    raise SystemExit("Runtime service account lacks queue-scoped Cloud Tasks Enqueuer.")
+account_bindings = json.loads(account_policy_json).get("bindings", [])
+if not any(
+    binding.get("role") == "roles/iam.serviceAccountUser"
+    and runtime_member in binding.get("members", [])
+    and not binding.get("condition")
+    for binding in account_bindings
+):
+    raise SystemExit("Runtime service account cannot attach the Cloud Tasks OIDC identity.")
+if not any(
+    binding.get("role") == "roles/iam.serviceAccountUser"
+    and "serviceAccount:" + tasks_agent in binding.get("members", [])
+    and not binding.get("condition")
+    for binding in account_bindings
+):
+    raise SystemExit("Cloud Tasks service agent cannot mint tokens for the task OIDC identity.")
+print("Cloud Tasks runtime configuration: PASS (queue, bounded retries, queue-scoped enqueue, identity-scoped OIDC grants)")
+PY
 
 enabled_version() {
   local secret_name="$1" resource version
@@ -410,12 +469,12 @@ gcloud run deploy "$SERVICE" \
   --cpu=1 \
   --memory=1Gi \
   --concurrency=8 \
-  --timeout=120s \
+  --timeout=600s \
   --min=0 \
   --max=1 \
   --allow-unauthenticated \
   --service-account="$RUNTIME_SERVICE_ACCOUNT" \
-  --set-env-vars="ENV=production,SCHEDULER_ENABLED=false,NOTIFICATIONS_ENABLED=${NOTIFICATIONS_ENABLED},FRONTEND_ORIGIN=${FRONTEND_ORIGIN},MOBILE_WEB_ORIGIN=${MOBILE_WEB_ORIGIN:-$FRONTEND_ORIGIN},CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL=${CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL},CLOUD_SCHEDULER_JOB_NAME=${CLOUD_SCHEDULER_JOB_NAME}" \
+  --set-env-vars="ENV=production,SCHEDULER_ENABLED=false,NOTIFICATIONS_ENABLED=${NOTIFICATIONS_ENABLED},FRONTEND_ORIGIN=${FRONTEND_ORIGIN},MOBILE_WEB_ORIGIN=${MOBILE_WEB_ORIGIN:-$FRONTEND_ORIGIN},CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL=${CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL},CLOUD_SCHEDULER_JOB_NAME=${CLOUD_SCHEDULER_JOB_NAME},CLOUD_TASKS_QUEUE_NAME=${CLOUD_TASKS_QUEUE_NAME},CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL=${CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL}" \
   --set-secrets="$SECRET_BINDINGS" \
   --quiet
 
@@ -431,12 +490,13 @@ gcloud run services update "$SERVICE" \
 
 SERVICE_CONFIG="$(gcloud run services describe "$SERVICE" --project="$PROJECT_ID" --region="$REGION" --format=json)" \
   || die "Could not verify the deployed Cloud Run service settings."
-python3 - "$SERVICE_CONFIG" "$SERVICE_URL" "$CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL" "$CLOUD_SCHEDULER_JOB_NAME" <<'PY' \
+python3 - "$SERVICE_CONFIG" "$SERVICE_URL" "$CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL" "$CLOUD_SCHEDULER_JOB_NAME" \
+  "$CLOUD_TASKS_QUEUE_NAME" "$CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL" <<'PY' \
   || die "Cloud Run scale-to-zero or Cloud Scheduler identity settings failed verification."
 import json
 import sys
 
-service, expected_url, expected_email, expected_job = sys.argv[1:]
+service, expected_url, expected_email, expected_job, expected_queue, expected_tasks_email = sys.argv[1:]
 data = json.loads(service)
 spec = data.get("spec", {})
 template = spec.get("template", {})
@@ -469,6 +529,12 @@ if env.get("CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL", "").lower() != expected_emai
     raise SystemExit("Cloud Scheduler service account does not match the reviewed identity.")
 if env.get("CLOUD_SCHEDULER_JOB_NAME") != expected_job:
     raise SystemExit("Cloud Scheduler job name does not match the reviewed resource name.")
+if env.get("CLOUD_TASKS_QUEUE_NAME") != expected_queue:
+    raise SystemExit("Cloud Tasks queue does not match the reviewed queue resource.")
+if env.get("CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL", "").lower() != expected_tasks_email.lower():
+    raise SystemExit("Cloud Tasks OIDC service account does not match the reviewed identity.")
+if template_spec.get("timeoutSeconds") != 600:
+    raise SystemExit("Cloud Run timeout must be 600 seconds to match the bounded Cloud Tasks delivery deadline.")
 cpu_throttling = annotations.get("run.googleapis.com/cpu-throttling")
 if cpu_throttling == "false":
     raise SystemExit("Cloud Run CPU is always allocated; request-based CPU is required for cost control.")

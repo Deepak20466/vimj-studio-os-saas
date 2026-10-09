@@ -30,6 +30,7 @@ def upgrade():
         sa.Column("job_name", sa.String(length=100), primary_key=True),
         sa.Column("scheduled_for", sa.DateTime(timezone=True), primary_key=True),
         sa.Column("status", sa.String(length=16), nullable=False),
+        sa.Column("attempt", sa.Integer(), server_default="1", nullable=False),
         sa.Column("started_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("error_type", sa.String(length=100), nullable=True),

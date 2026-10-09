@@ -10,6 +10,8 @@ SERVICE="vimj-backend"
 JOB_ID="vimj-minute-dispatch"
 JOB_NAME="projects/${PROJECT_ID}/locations/${REGION}/jobs/${JOB_ID}"
 SERVICE_ACCOUNT_EMAIL="${CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL:-}"
+CLOUD_TASKS_QUEUE_NAME="${CLOUD_TASKS_QUEUE_NAME:-projects/${PROJECT_ID}/locations/${REGION}/queues/vimj-scheduled-jobs}"
+CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL="${CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL:-$SERVICE_ACCOUNT_EMAIL}"
 
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "Required command is unavailable: $1"; }
@@ -20,8 +22,12 @@ need python3
   || die "Set the active gcloud project to ${PROJECT_ID}."
 [[ "$SERVICE_ACCOUNT_EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.iam\.gserviceaccount\.com$ ]] \
   || die "Set CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL to the reviewed, pre-existing scheduler service account."
+[[ "$CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.iam\.gserviceaccount\.com$ ]] \
+  || die "Set CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL to the reviewed, pre-existing task OIDC service account."
+[[ "$CLOUD_TASKS_QUEUE_NAME" == "projects/${PROJECT_ID}/locations/${REGION}/queues/"* ]] \
+  || die "CLOUD_TASKS_QUEUE_NAME must be the reviewed queue in ${PROJECT_ID}/${REGION}."
 
-for api in cloudscheduler.googleapis.com run.googleapis.com iam.googleapis.com; do
+for api in cloudscheduler.googleapis.com cloudtasks.googleapis.com run.googleapis.com iam.googleapis.com; do
   api_state="$(gcloud services describe "$api" --project="$PROJECT_ID" --format='value(state)' 2>/dev/null || true)"
   [[ "$api_state" == "ENABLED" ]] || die "Required API is not enabled: $api. This script will not enable APIs."
 done
@@ -30,14 +36,18 @@ SERVICE_URL="$(gcloud run services describe "$SERVICE" --project="$PROJECT_ID" -
 [[ "$SERVICE_URL" =~ ^https://[^/]+$ ]] || die "Backend service does not have a canonical HTTPS URL."
 SERVICE_CONFIG="$(gcloud run services describe "$SERVICE" --project="$PROJECT_ID" --region="$REGION" --format=json)" \
   || die "Could not inspect the backend service configuration."
+TASKS_QUEUE_ID="${CLOUD_TASKS_QUEUE_NAME##*/}"
+TASKS_QUEUE_CONFIG="$(gcloud tasks queues describe "$TASKS_QUEUE_ID" --project="$PROJECT_ID" --location="$REGION" --format=json)" \
+  || die "Cloud Tasks queue is missing; run the separately gated queue setup first."
 IAM_POLICY="$(gcloud run services get-iam-policy "$SERVICE" --project="$PROJECT_ID" --region="$REGION" --format=json)" \
   || die "Could not inspect the backend invocation policy."
-python3 - "$SERVICE_CONFIG" "$IAM_POLICY" "$SERVICE_URL" "$SERVICE_ACCOUNT_EMAIL" "$JOB_NAME" <<'PY' \
+python3 - "$SERVICE_CONFIG" "$IAM_POLICY" "$TASKS_QUEUE_CONFIG" "$SERVICE_URL" \
+  "$SERVICE_ACCOUNT_EMAIL" "$JOB_NAME" "$CLOUD_TASKS_QUEUE_NAME" "$CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL" <<'PY' \
   || die "Backend scheduler configuration or public API invocation policy failed verification."
 import json
 import sys
 
-service, policy, expected_url, expected_email, expected_job = sys.argv[1:]
+service, policy, queue_json, expected_url, expected_email, expected_job, expected_queue, expected_tasks_email = sys.argv[1:]
 data = json.loads(service)
 spec = data.get("spec", {})
 template = spec.get("template", {})
@@ -54,6 +64,17 @@ if env.get("CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL", "").lower() != expected_emai
     raise SystemExit("Backend is not configured for the reviewed Cloud Scheduler service account.")
 if env.get("CLOUD_SCHEDULER_JOB_NAME") != expected_job:
     raise SystemExit("Backend job-name allowlist does not match the Cloud Scheduler resource.")
+if env.get("CLOUD_TASKS_QUEUE_NAME") != expected_queue or env.get("CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL", "").lower() != expected_tasks_email.lower():
+    raise SystemExit("Backend Cloud Tasks queue or OIDC service account does not match the reviewed resource.")
+queue = json.loads(queue_json)
+limits = queue.get("rateLimits", {})
+retry = queue.get("retryConfig", {})
+if queue.get("name") != expected_queue or queue.get("state") != "RUNNING":
+    raise SystemExit("Cloud Tasks queue must be the reviewed RUNNING queue.")
+if limits.get("maxConcurrentDispatches") != 5 or limits.get("maxDispatchesPerSecond") != 10.0:
+    raise SystemExit("Cloud Tasks dispatch limits are not the reviewed bounded values.")
+if retry.get("maxAttempts") != 5 or retry.get("maxRetryDuration") != "1800s":
+    raise SystemExit("Cloud Tasks retry policy is not the reviewed bounded policy.")
 public = any(
     binding.get("role") == "roles/run.invoker" and "allUsers" in binding.get("members", [])
     for binding in json.loads(policy).get("bindings", [])
@@ -109,7 +130,7 @@ gcloud scheduler jobs create http "$JOB_ID" \
   --http-method=POST \
   --oidc-service-account-email="$SERVICE_ACCOUNT_EMAIL" \
   --oidc-token-audience="$SERVICE_URL" \
-  --attempt-deadline=25s \
+  --attempt-deadline=60s \
   --max-retry-attempts=1 \
   --max-retry-duration=30s \
   --min-backoff=5s \
@@ -135,9 +156,9 @@ if oidc.get("audience") != sys.argv[2] or oidc.get("serviceAccountEmail", "").lo
 if job.get("state") != "ENABLED":
     raise SystemExit("Cloud Scheduler job is not enabled.")
 retry = job.get("retryConfig", {})
-if retry.get("retryCount") != 1 or retry.get("maxRetryDuration") != "30s":
+if retry.get("retryCount") != 1 or retry.get("maxRetryDuration") != "30s" or job.get("attemptDeadline") != "60s":
     raise SystemExit("Cloud Scheduler retry settings do not match the reviewed short retry window.")
-print("Cloud Scheduler configuration: PASS (enabled, every minute, Asia/Kolkata, OIDC identity pinned)")
+print("Cloud Scheduler configuration: PASS (enabled, every minute, Asia/Kolkata, OIDC identity pinned; tasks enqueued asynchronously)")
 PY
 
 printf 'SCHEDULER_JOB=%s\nBACKEND_URL=%s\nSCHEDULER_SETUP=PASS\n' "$JOB_NAME" "$SERVICE_URL"
