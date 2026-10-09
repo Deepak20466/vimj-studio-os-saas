@@ -33,9 +33,12 @@ if parsed.hostname.endswith("onrender.com") or parsed.hostname.endswith(".invali
     raise SystemExit("The frontend image cannot target Render or a placeholder API.")
 PY
 
+enabled_apis="$(gcloud services list --enabled --project="$PROJECT_ID" --format='value(config.name)' 2>/dev/null)" \
+  || die "Could not verify enabled APIs; this script will not enable APIs."
 for api in run.googleapis.com artifactregistry.googleapis.com; do
-  api_state="$(gcloud services describe "$api" --project="$PROJECT_ID" --format='value(state)' 2>/dev/null || true)"
-  [[ "$api_state" == "ENABLED" ]] || die "Required API is not enabled: $api. This script will not enable APIs."
+  if ! grep -Fxq "$api" <<<"$enabled_apis"; then
+    die "Required API is not enabled or could not be verified: $api. This script will not enable APIs."
+  fi
 done
 
 tag_ref="${IMAGE_PATH}:${IMAGE_TAG}"

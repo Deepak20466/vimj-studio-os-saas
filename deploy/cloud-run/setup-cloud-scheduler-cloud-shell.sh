@@ -27,9 +27,12 @@ need python3
 [[ "$CLOUD_TASKS_QUEUE_NAME" == "projects/${PROJECT_ID}/locations/${REGION}/queues/"* ]] \
   || die "CLOUD_TASKS_QUEUE_NAME must be the reviewed queue in ${PROJECT_ID}/${REGION}."
 
+enabled_apis="$(gcloud services list --enabled --project="$PROJECT_ID" --format='value(config.name)' 2>/dev/null)" \
+  || die "Could not verify enabled APIs; this script will not enable APIs."
 for api in cloudscheduler.googleapis.com cloudtasks.googleapis.com run.googleapis.com iam.googleapis.com; do
-  api_state="$(gcloud services describe "$api" --project="$PROJECT_ID" --format='value(state)' 2>/dev/null || true)"
-  [[ "$api_state" == "ENABLED" ]] || die "Required API is not enabled: $api. This script will not enable APIs."
+  if ! grep -Fxq "$api" <<<"$enabled_apis"; then
+    die "Required API is not enabled or could not be verified: $api. This script will not enable APIs."
+  fi
 done
 
 SERVICE_URL="$(gcloud run services describe "$SERVICE" --project="$PROJECT_ID" --region="$REGION" --format='value(status.url)')"

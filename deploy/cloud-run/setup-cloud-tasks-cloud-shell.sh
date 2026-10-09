@@ -23,9 +23,12 @@ need python3
 [[ "$TASKS_SERVICE_ACCOUNT_EMAIL" =~ ^[A-Za-z0-9._%+-]+@vimj-academy\.iam\.gserviceaccount\.com$ ]] \
   || die "Set CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL to an existing VIMJ service account used for task OIDC tokens."
 
+enabled_apis="$(gcloud services list --enabled --project="$PROJECT_ID" --format='value(config.name)' 2>/dev/null)" \
+  || die "Could not verify enabled APIs; this script will not enable APIs."
 for api in cloudtasks.googleapis.com iam.googleapis.com; do
-  api_state="$(gcloud services describe "$api" --project="$PROJECT_ID" --format='value(state)' 2>/dev/null || true)"
-  [[ "$api_state" == "ENABLED" ]] || die "Required API is not enabled: $api. This script will not enable APIs."
+  if ! grep -Fxq "$api" <<<"$enabled_apis"; then
+    die "Required API is not enabled or could not be verified: $api. This script will not enable APIs."
+  fi
 done
 
 gcloud iam service-accounts describe "$RUNTIME_SERVICE_ACCOUNT" --project="$PROJECT_ID" --format='value(email)' >/dev/null \

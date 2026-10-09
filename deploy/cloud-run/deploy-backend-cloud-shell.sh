@@ -71,9 +71,12 @@ ACTIVE_ACCOUNT="$(gcloud auth list --filter='status:ACTIVE' --format='value(acco
 CURRENT_PROJECT="$(gcloud config get-value project 2>/dev/null || true)"
 [[ "$CURRENT_PROJECT" == "$PROJECT_ID" ]] || die "Set the active project to $PROJECT_ID, then rerun."
 
+enabled_apis="$(gcloud services list --enabled --project="$PROJECT_ID" --format='value(config.name)' 2>/dev/null)" \
+  || die "Could not verify enabled APIs; this script will not enable APIs."
 for api in run.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com iam.googleapis.com cloudtasks.googleapis.com; do
-  api_state="$(gcloud services describe "$api" --project="$PROJECT_ID" --format='value(state)' 2>/dev/null || true)"
-  [[ "$api_state" == "ENABLED" ]] || die "Required API is not enabled: $api. This script will not enable APIs."
+  if ! grep -Fxq "$api" <<<"$enabled_apis"; then
+    die "Required API is not enabled or could not be verified: $api. This script will not enable APIs."
+  fi
 done
 
 gcloud artifacts repositories describe cloud-run-source-deploy \
