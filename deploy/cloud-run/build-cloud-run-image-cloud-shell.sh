@@ -31,8 +31,10 @@ fi
   || die "Commit and push the reviewed source first; Cloud Build refuses a dirty checkout."
 
 for api in cloudbuild.googleapis.com artifactregistry.googleapis.com; do
-  api_state="$(gcloud services describe "$api" --project="$PROJECT_ID" --format='value(state)' 2>/dev/null || true)"
-  [[ "$api_state" == "ENABLED" ]] || die "Required API is not enabled: $api. This script will not enable APIs."
+  if ! gcloud services list --enabled --project="$PROJECT_ID" --format='value(config.name)' \
+      | grep -Fxq "$api"; then
+    die "Required API is not enabled or could not be verified: $api. This script will not enable APIs."
+  fi
 done
 
 SUBSTITUTIONS="_IMAGE_TAG=${BUILD_COMMIT}"
