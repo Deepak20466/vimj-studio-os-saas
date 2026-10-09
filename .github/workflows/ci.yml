@@ -75,20 +75,43 @@ jobs:
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/vimj-production-recovery' }}
         working-directory: mobile/android
         run: sed -i 's#^distributionUrl=.*#distributionUrl=https\://services.gradle.org/distributions/gradle-9.3.1-all.zip#' gradle/wrapper/gradle-wrapper.properties
-      - name: Build isolated non-production debug APK
+      - name: Create temporary non-production preview signing key
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/vimj-production-recovery' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          key_path="$RUNNER_TEMP/vimj-preview-release.jks"
+          password="$(openssl rand -hex 32)"
+          keytool -genkeypair -noprompt -storetype JKS -keystore "$key_path" \
+            -storepass "$password" -keypass "$password" -alias vimj-preview \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname 'CN=VIMJ Non-production Preview, OU=Temporary CI Key'
+          chmod 600 "$key_path"
+          echo "::add-mask::$password"
+          {
+            echo "ANDROID_KEYSTORE_PATH=$key_path"
+            echo "ANDROID_KEYSTORE_PASSWORD=$password"
+            echo 'ANDROID_KEY_ALIAS=vimj-preview'
+            echo "ANDROID_KEY_PASSWORD=$password"
+          } >> "$GITHUB_ENV"
+      - name: Build optimized ARM64 release-mode preview APK
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/vimj-production-recovery' }}
         working-directory: mobile
         env:
           API_BASE_URL: https://api-base-url-required.invalid
           VIMJ_PREVIEW_APK: 'true'
-        run: flutter build apk --debug --dart-define=API_BASE_URL="$API_BASE_URL"
+        run: >-
+          flutter build apk --release --target-platform android-arm64 --split-per-abi
+          --obfuscate --split-debug-info="$RUNNER_TEMP/vimj-preview-symbols"
+          --dart-define=API_BASE_URL="$API_BASE_URL"
       - name: Verify preview APK and record checksum
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/vimj-production-recovery' }}
         working-directory: mobile
         shell: bash
         run: |
           set -euo pipefail
-          apk=build/app/outputs/flutter-apk/app-debug.apk
+          apk=build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           test -s "$apk"
           sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
           test -n "$sdk_root"
@@ -97,19 +120,29 @@ jobs:
           "$build_tools/apksigner" verify --verbose "$apk" >/dev/null
           package_name="$("$build_tools/aapt" dump badging "$apk" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p")"
           test "$package_name" = 'com.vimjstudio.vimj_attendance.preview'
-          printf 'Package: %s\nAPI: reserved non-production .invalid host\nSigning: Android debug key; not a production release\n' "$package_name" > build/app/outputs/flutter-apk/PREVIEW-INFO.txt
+          apk_size="$(stat -c%s "$apk")"
+          printf 'Package: %s\nABI: arm64-v8a\nMode: Flutter release with obfuscation and split debug symbols\nAPI: reserved non-production .invalid host\nSigning: temporary per-run non-production key; not a production release\nAPK size: %s bytes\n' \
+            "$package_name" "$apk_size" > build/app/outputs/flutter-apk/PREVIEW-INFO.txt
           sha256sum "$apk" > build/app/outputs/flutter-apk/SHA256SUMS.txt
+          printf 'Optimized preview APK size: %s bytes\n' "$apk_size"
+          if (( apk_size > 31457280 )); then
+            echo 'Preview APK exceeds the 30 MiB target; build remains available for inspection.'
+          fi
       - name: Upload short-lived preview APK artifact
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/vimj-production-recovery' }}
         uses: actions/upload-artifact@v4
         with:
-          name: vimj-mobile-preview-${{ github.sha }}
+          name: vimj-mobile-preview-arm64-${{ github.sha }}
           path: |
-            mobile/build/app/outputs/flutter-apk/app-debug.apk
+            mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
             mobile/build/app/outputs/flutter-apk/PREVIEW-INFO.txt
             mobile/build/app/outputs/flutter-apk/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 7
+      - name: Delete temporary preview signing key
+        if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/vimj-production-recovery' }}
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/vimj-preview-release.jks" "$RUNNER_TEMP/vimj-preview-symbols"/*
 
   cloudrun-build:
     runs-on: ubuntu-latest

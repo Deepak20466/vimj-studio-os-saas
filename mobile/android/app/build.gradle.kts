@@ -44,6 +44,10 @@ android {
             }
         }
         release {
+            if (System.getenv("VIMJ_PREVIEW_APK") == "true") {
+                applicationIdSuffix = ".preview"
+                versionNameSuffix = "-preview"
+            }
             val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
             val storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
             val keyAlias = System.getenv("ANDROID_KEY_ALIAS")
