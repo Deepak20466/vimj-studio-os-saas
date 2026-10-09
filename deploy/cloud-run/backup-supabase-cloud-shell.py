@@ -21,6 +21,10 @@ from urllib.parse import unquote, urlsplit
 
 
 PROJECT_ID = "vimj-academy"
+_PROJECT_NUMBER_RE = re.compile(r"[0-9]+")
+_KMS_KEY_RE = re.compile(
+    r"projects/[^/]+/locations/[^/]+/keyRings/[^/]+/cryptoKeys/[^/]+"
+)
 
 
 def run(args: list[str], *, capture: bool = True, env=None) -> subprocess.CompletedProcess:
@@ -57,6 +61,68 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def project_metadata_command(project_id: str) -> list[str]:
+    """Return the authoritative Resource Manager project metadata request."""
+    return ["gcloud", "projects", "describe", project_id, "--format=json"]
+
+
+def bucket_metadata_command(bucket: str) -> list[str]:
+    """Request the raw Cloud Storage API bucket representation from gcloud."""
+    return [
+        "gcloud", "storage", "buckets", "describe", f"gs://{bucket}",
+        "--raw", "--format=json",
+    ]
+
+
+def parse_project_number(raw: bytes, expected_project_id: str, label: str) -> str:
+    try:
+        metadata = json.loads(raw)
+    except (TypeError, ValueError):
+        fail(f"Could not parse authoritative {label} project metadata.")
+    if not isinstance(metadata, dict):
+        fail(f"Could not parse authoritative {label} project metadata.")
+    project_id = metadata.get("projectId")
+    project_number = str(metadata.get("projectNumber", ""))
+    if project_id != expected_project_id or not _PROJECT_NUMBER_RE.fullmatch(project_number):
+        fail(f"Could not verify the {label} project ID and project number.")
+    if metadata.get("lifecycleState") != "ACTIVE":
+        fail(f"The {label} Google Cloud project is not confirmed ACTIVE.")
+    return project_number
+
+
+def verify_bucket_metadata(
+    raw: bytes,
+    *,
+    expected_bucket: str,
+    source_project_number: str,
+    backup_project_id: str,
+    backup_project_number: str,
+) -> str:
+    """Verify raw bucket ownership and its default CMEK; return the key name."""
+    try:
+        bucket = json.loads(raw)
+    except (TypeError, ValueError):
+        fail("Could not inspect the backup bucket metadata.")
+    if not isinstance(bucket, dict) or bucket.get("name") != expected_bucket:
+        fail("The Cloud Storage response did not identify the expected backup bucket.")
+
+    bucket_project_number = str(bucket.get("projectNumber", ""))
+    if not _PROJECT_NUMBER_RE.fullmatch(bucket_project_number):
+        fail("Raw Cloud Storage bucket metadata did not include a valid owner project number.")
+    if backup_project_id == PROJECT_ID or backup_project_number == source_project_number:
+        fail("The expected backup project must be distinct from vimj-academy.")
+    if bucket_project_number != backup_project_number:
+        fail("The backup bucket is not owned by the reviewed backup Google Cloud project.")
+    if bucket_project_number == source_project_number:
+        fail("The backup bucket must belong to a different Google Cloud project.")
+
+    encryption = bucket.get("encryption")
+    kms_key = encryption.get("defaultKmsKeyName") if isinstance(encryption, dict) else None
+    if not isinstance(kms_key, str) or not _KMS_KEY_RE.fullmatch(kms_key):
+        fail("The independent bucket must have a valid default Cloud KMS encryption key configured.")
+    return kms_key
+
+
 def main() -> int:
     secret_name = os.environ.get("DATABASE_URL_SECRET", "vimj-prod-database-url")
     secret_version = required("DATABASE_URL_SECRET_VERSION")
@@ -74,25 +140,34 @@ def main() -> int:
     active_project = run(["gcloud", "config", "get-value", "project"])
     if active_project.returncode != 0 or active_project.stdout.decode().strip() != PROJECT_ID:
         fail("Set the active gcloud project to vimj-academy.")
-    project_number = run(["gcloud", "projects", "describe", PROJECT_ID, "--format=value(projectNumber)"])
-    if project_number.returncode != 0:
+    source_project = run(project_metadata_command(PROJECT_ID))
+    if source_project.returncode != 0:
         fail("Could not verify the source Google Cloud project.")
-    source_project_number = project_number.stdout.decode().strip()
+    source_project_number = parse_project_number(source_project.stdout, PROJECT_ID, "source")
+
+    backup_project_id = required("EXPECTED_BACKUP_PROJECT_ID")
+    if backup_project_id == PROJECT_ID:
+        fail("EXPECTED_BACKUP_PROJECT_ID must differ from vimj-academy.")
+    backup_project = run(project_metadata_command(backup_project_id))
+    if backup_project.returncode != 0:
+        fail("Could not verify the expected backup Google Cloud project.")
+    backup_project_number = parse_project_number(
+        backup_project.stdout, backup_project_id, "backup"
+    )
+    if backup_project_number == source_project_number:
+        fail("The backup project number must differ from vimj-academy.")
 
     bucket = bucket_prefix[5:].split("/", 1)[0]
-    bucket_info = run(["gcloud", "storage", "buckets", "describe", f"gs://{bucket}", "--format=json"])
+    bucket_info = run(bucket_metadata_command(bucket))
     if bucket_info.returncode != 0:
         fail("The pre-existing backup bucket is not accessible; this script will not create a bucket.")
-    try:
-        bucket_json = json.loads(bucket_info.stdout)
-    except Exception:
-        fail("Could not inspect the backup bucket metadata.")
-    bucket_project = str(bucket_json.get("projectNumber", ""))
-    kms_key = bucket_json.get("encryption", {}).get("defaultKmsKeyName")
-    if not bucket_project or bucket_project == source_project_number:
-        fail("The backup bucket must belong to a different Google Cloud project.")
-    if not kms_key:
-        fail("The independent bucket must have a default Cloud KMS encryption key configured.")
+    kms_key = verify_bucket_metadata(
+        bucket_info.stdout,
+        expected_bucket=bucket,
+        source_project_number=source_project_number,
+        backup_project_id=backup_project_id,
+        backup_project_number=backup_project_number,
+    )
 
     secret = run(
         [
@@ -220,7 +295,7 @@ def main() -> int:
     print(f"BACKUP_GENERATION={metadata['generation']}")
     print(f"SOURCE_REVISION={source_revision}")
     print(f"POSTGRES_SERVER_VERSION={server_version}")
-    print("BACKUP_VERIFICATION=PASS (custom archive, TOC, cross-project CMEK bucket, readback SHA-256)")
+    print("BACKUP_VERIFICATION=PASS (custom archive, TOC, verified cross-project CMEK bucket, readback SHA-256)")
     return 0
 
 

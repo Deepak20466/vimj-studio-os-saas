@@ -36,12 +36,13 @@ export DATABASE_URL_SECRET_VERSION='REPLACE_WITH_REVIEWED_NUMERIC_SECRET_VERSION
 export EXPECTED_SUPABASE_HOST='REPLACE_WITH_SESSION_OR_TRANSACTION_POOLER_HOST'
 export EXPECTED_SUPABASE_USER='REPLACE_WITH_DATABASE_USERNAME'
 export EXPECTED_DATABASE_NAME='postgres'
+export EXPECTED_BACKUP_PROJECT_ID='teak-backup-491013-m3'
 export BACKUP_BUCKET_URI='gs://REPLACE_WITH_CROSS_PROJECT_CMEK_BUCKET/vimj-recovery'
 export BACKUP_TRANSFER_APPROVED=YES
 python3 deploy/cloud-run/backup-supabase-cloud-shell.py
 ```
 
-Record the script's `BACKUP_URI`, `BACKUP_SHA256`, and object generation. It checks the PostgreSQL archive, decodes its contents, copies to the independent bucket with a create-only generation precondition, downloads the object again, and compares its SHA-256 and size.
+The script resolves project IDs and numbers through Resource Manager, then requests the bucket's raw API representation so it can compare the bucket `projectNumber` with the expected backup project and confirm it differs from `vimj-academy`. It verifies `encryption.defaultKmsKeyName` from that raw bucket response. Record the script's `BACKUP_URI`, `BACKUP_SHA256`, and object generation. It checks the PostgreSQL archive, decodes its contents, copies to the independent bucket with a create-only generation precondition, downloads the object again, and compares its SHA-256 and size.
 
 ## Restore salary rows only when the audit proves they are missing
 
