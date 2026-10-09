@@ -4,6 +4,10 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val releaseTaskRequested = gradle.startParameter.taskNames.any { taskName ->
+    taskName.contains("release", ignoreCase = true)
+}
+
 android {
     namespace = "com.vimjstudio.vimj_attendance"
     compileSdk = flutter.compileSdkVersion
@@ -44,16 +48,18 @@ android {
             val storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
             val keyAlias = System.getenv("ANDROID_KEY_ALIAS")
             val keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
-            if (keystorePath.isNullOrBlank() || storePassword.isNullOrBlank() ||
-                keyAlias.isNullOrBlank() || keyPassword.isNullOrBlank()
-            ) {
+            val hasPersistentKey = !keystorePath.isNullOrBlank() && !storePassword.isNullOrBlank() &&
+                !keyAlias.isNullOrBlank() && !keyPassword.isNullOrBlank()
+            if (!hasPersistentKey && releaseTaskRequested) {
                 throw GradleException("Release APKs require the configured persistent Android signing key.")
             }
-            signingConfig = signingConfigs.create("release") {
-                storeFile = file(keystorePath)
-                this.storePassword = storePassword
-                this.keyAlias = keyAlias
-                this.keyPassword = keyPassword
+            if (hasPersistentKey) {
+                signingConfig = signingConfigs.create("release") {
+                    storeFile = file(keystorePath!!)
+                    this.storePassword = storePassword
+                    this.keyAlias = keyAlias
+                    this.keyPassword = keyPassword
+                }
             }
         }
     }
