@@ -20,6 +20,11 @@ need docker
 need curl
 [[ "$IMAGE_TAG" =~ ^[a-f0-9]{40}$ ]] || die "Set IMAGE_TAG to the full immutable source commit SHA."
 [[ "$API_BASE_URL" =~ ^https://[^,]+$ ]] || die "Set API_BASE_URL to the verified HTTPS Cloud Run API origin."
+backend_url="$(gcloud run services describe vimj-backend --project="$PROJECT_ID" --region="$REGION" \
+  --format='value(status.url)' 2>/dev/null || true)"
+[[ "$backend_url" =~ ^https:// ]] || die "The backend Cloud Run service was not found."
+[[ "$API_BASE_URL" == "$backend_url" ]] \
+  || die "API_BASE_URL must exactly match the deployed backend URL: $backend_url"
 [[ "$(gcloud config get-value project 2>/dev/null || true)" == "$PROJECT_ID" ]] \
   || die "Set the active gcloud project to $PROJECT_ID."
 python3 - "$API_BASE_URL" <<'PY'
@@ -84,6 +89,35 @@ service_url="$(gcloud run services describe "$SERVICE" --project="$PROJECT_ID" -
 http_code="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 20 "$service_url/")" \
   || die "Frontend health request failed."
 [[ "$http_code" == "200" ]] || die "Frontend returned HTTP $http_code instead of 200."
+frontend_config="$(gcloud run services describe "$SERVICE" --project="$PROJECT_ID" --region="$REGION" --format=json)" \
+  || die "Could not verify the frontend Cloud Run settings."
+python3 - "$frontend_config" <<'PY' || die "Frontend did not retain scale-to-zero settings."
+import json
+import sys
+
+data = json.loads(sys.argv[1])
+spec = data.get("spec", {})
+template = spec.get("template", {})
+scaling = {}
+scaling.update(spec.get("scaling", {}))
+scaling.update(template.get("scaling", {}))
+annotations = {}
+annotations.update(data.get("metadata", {}).get("annotations", {}))
+annotations.update(template.get("metadata", {}).get("annotations", {}))
+minimums = [scaling.get("minInstanceCount"), annotations.get("autoscaling.knative.dev/minScale"), annotations.get("run.googleapis.com/minScale")]
+maximums = [scaling.get("maxInstanceCount"), annotations.get("autoscaling.knative.dev/maxScale"), annotations.get("run.googleapis.com/maxScale")]
+if not any(value is not None for value in minimums):
+    raise SystemExit("Frontend minimum-instance setting could not be verified.")
+if any(value is not None and str(value) not in {"0", ""} for value in minimums):
+    raise SystemExit("Frontend minimum instances must be zero.")
+if not any(value is not None for value in maximums):
+    raise SystemExit("Frontend maximum-instance setting could not be verified.")
+if any(value is not None and str(value) != "3" for value in maximums):
+    raise SystemExit("Frontend maximum instances must remain capped at three.")
+if annotations.get("run.googleapis.com/cpu-throttling") == "false":
+    raise SystemExit("Frontend must use request-based CPU allocation.")
+print("Frontend scaling: PASS (min 0, max 3, request-based CPU)")
+PY
 printf 'FRONTEND_URL=%s\n' "$service_url"
 printf 'IMAGE_REF=%s\n' "$image_ref"
 printf 'FRONTEND_DEPLOYMENT=PASS (HTTPS site returned HTTP 200; API URL and image digest verified)\n'

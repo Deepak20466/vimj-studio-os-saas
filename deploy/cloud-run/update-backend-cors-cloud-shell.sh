@@ -21,7 +21,16 @@ need curl
 [[ "$FRONTEND_ORIGIN" =~ ^https://[^,]+$ ]] || die "Set FRONTEND_ORIGIN to the verified HTTPS frontend service origin."
 [[ -z "$MOBILE_WEB_ORIGIN" || "$MOBILE_WEB_ORIGIN" =~ ^https://[^,]+$ ]] \
   || die "MOBILE_WEB_ORIGIN must be empty or a verified HTTPS origin."
-python3 - "$FRONTEND_ORIGIN" "$MOBILE_WEB_ORIGIN" <<'PY'
+frontend_url="$(gcloud run services describe vimj-frontend --project="$PROJECT_ID" --region="$REGION" \
+  --format='value(status.url)' 2>/dev/null || true)"
+[[ "$frontend_url" =~ ^https:// ]] || die "The final Cloud Run frontend service was not found."
+[[ "$FRONTEND_ORIGIN" == "$frontend_url" ]] \
+  || die "FRONTEND_ORIGIN must exactly match the final Cloud Run frontend URL: $frontend_url"
+mobile_origin="$MOBILE_WEB_ORIGIN"
+[[ -n "$mobile_origin" ]] || mobile_origin="$frontend_url"
+[[ "$mobile_origin" == "$frontend_url" ]] \
+  || die "MOBILE_WEB_ORIGIN must be empty or exactly the same final Cloud Run frontend URL."
+python3 - "$FRONTEND_ORIGIN" "$mobile_origin" <<'PY'
 from urllib.parse import urlparse
 import sys
 
@@ -29,7 +38,7 @@ for origin in sys.argv[1:]:
     if not origin:
         continue
     parsed = urlparse(origin)
-    if not parsed.hostname or parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+    if not parsed.hostname or "*" in origin or parsed.path not in {"", "/"} or parsed.query or parsed.fragment or parsed.username:
         raise SystemExit("CORS values must be HTTPS origins without paths, queries, or fragments.")
 PY
 
@@ -44,13 +53,43 @@ service_image="$(gcloud run services describe "$SERVICE" --project="$PROJECT_ID"
 read -r -p 'Type APPROVE-UPDATE-CLOUD-RUN-CORS to add the verified origins: ' CORS_CONFIRM
 [[ "$CORS_CONFIRM" == "APPROVE-UPDATE-CLOUD-RUN-CORS" ]] || die "CORS update cancelled; no revision was created."
 
-mobile_origin="$MOBILE_WEB_ORIGIN"
-[[ -n "$mobile_origin" ]] || mobile_origin="$FRONTEND_ORIGIN"
 gcloud run services update "$SERVICE" \
   --project="$PROJECT_ID" \
   --region="$REGION" \
   --update-env-vars="FRONTEND_ORIGIN=${FRONTEND_ORIGIN},MOBILE_WEB_ORIGIN=${mobile_origin}" \
   --quiet
+
+service_config="$(gcloud run services describe "$SERVICE" --project="$PROJECT_ID" --region="$REGION" --format=json)" \
+  || die "Could not verify the backend CORS revision."
+python3 - "$service_config" "$FRONTEND_ORIGIN" "$mobile_origin" <<'PY' \
+  || die "Backend CORS configuration did not match the exact Cloud Run frontend origin."
+import json
+import sys
+
+data = json.loads(sys.argv[1])
+containers = data.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
+env = {item["name"]: item.get("value", "") for item in (containers[0].get("env", []) if containers else [])}
+expected_frontend, expected_mobile = sys.argv[2:]
+if env.get("FRONTEND_ORIGIN") != expected_frontend or env.get("MOBILE_WEB_ORIGIN") != expected_mobile:
+    raise SystemExit("CORS values do not match the verified frontend origin.")
+if "*" in env.get("FRONTEND_ORIGIN", "") or "*" in env.get("MOBILE_WEB_ORIGIN", ""):
+    raise SystemExit("Wildcard CORS is forbidden.")
+scaling = data.get("spec", {}).get("template", {}).get("scaling", {})
+annotations = {}
+annotations.update(data.get("metadata", {}).get("annotations", {}))
+annotations.update(data.get("spec", {}).get("template", {}).get("metadata", {}).get("annotations", {}))
+minimums = [
+    data.get("spec", {}).get("scaling", {}).get("minInstanceCount"),
+    scaling.get("minInstanceCount"),
+    annotations.get("autoscaling.knative.dev/minScale"),
+    annotations.get("run.googleapis.com/minScale"),
+]
+if not any(value is not None for value in minimums):
+    raise SystemExit("Backend minimum-instance setting could not be verified.")
+if any(value is not None and str(value) not in {"0", ""} for value in minimums):
+    raise SystemExit("Backend must retain scale-to-zero after the CORS update.")
+print("Backend CORS configuration: PASS (exact frontend URL; no wildcard; scale-to-zero retained)")
+PY
 
 code="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 20 "$service_url/health")" \
   || die "Backend health request failed after the CORS revision."

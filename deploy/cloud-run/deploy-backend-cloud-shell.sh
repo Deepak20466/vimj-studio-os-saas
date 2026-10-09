@@ -19,6 +19,7 @@ EXPECTED_SUPABASE_USER="${EXPECTED_SUPABASE_USER:-}"
 EXPECTED_DATABASE_NAME="${EXPECTED_DATABASE_NAME:-}"
 FRONTEND_ORIGIN="${FRONTEND_ORIGIN:-}"
 MOBILE_WEB_ORIGIN="${MOBILE_WEB_ORIGIN:-}"
+CORS_BOOTSTRAP="${CORS_BOOTSTRAP:-true}"
 NOTIFICATIONS_ENABLED="${NOTIFICATIONS_ENABLED:-}"
 TWILIO_ACCOUNT_SID_SECRET="${TWILIO_ACCOUNT_SID_SECRET:-}"
 TWILIO_AUTH_TOKEN_SECRET="${TWILIO_AUTH_TOKEN_SECRET:-}"
@@ -42,15 +43,32 @@ need docker
 [[ -n "$EXPECTED_SUPABASE_USER" ]] || die "Set EXPECTED_SUPABASE_USER from the production Supabase Connect panel."
 [[ -n "$EXPECTED_DATABASE_NAME" ]] || die "Set EXPECTED_DATABASE_NAME from the production Supabase Connect panel."
 [[ "$IMAGE_TAG" =~ ^[a-f0-9]{7,40}$ ]] || die "Set IMAGE_TAG to the immutable Cloud Build commit SHA tag; mutable tags are not accepted."
-[[ "$FRONTEND_ORIGIN" =~ ^https://[^,]+$ ]] || die "Set FRONTEND_ORIGIN to the verified HTTPS Cloud Run frontend origin."
-[[ -z "$MOBILE_WEB_ORIGIN" || "$MOBILE_WEB_ORIGIN" =~ ^https://[^,]+$ ]] || die "MOBILE_WEB_ORIGIN must be empty or a verified HTTPS origin."
-python3 - "$FRONTEND_ORIGIN" "${MOBILE_WEB_ORIGIN:-$FRONTEND_ORIGIN}" <<'PY'
+[[ "$CORS_BOOTSTRAP" == "true" || "$CORS_BOOTSTRAP" == "false" ]] \
+  || die "CORS_BOOTSTRAP must be true or false."
+if [[ "$CORS_BOOTSTRAP" == "true" ]]; then
+  [[ -z "$FRONTEND_ORIGIN" && -z "$MOBILE_WEB_ORIGIN" ]] \
+    || die "CORS bootstrap must start with both browser origins empty; no wildcard or temporary public origin is allowed."
+  [[ "${CORS_BOOTSTRAP_APPROVED:-}" == "YES" ]] \
+    || die "Approve the temporary no-origin CORS bootstrap with CORS_BOOTSTRAP_APPROVED=YES."
+else
+  [[ "$FRONTEND_ORIGIN" =~ ^https://[^,]+$ ]] \
+    || die "Set FRONTEND_ORIGIN to the verified HTTPS Cloud Run frontend origin."
+  [[ -z "$MOBILE_WEB_ORIGIN" || "$MOBILE_WEB_ORIGIN" =~ ^https://[^,]+$ ]] \
+    || die "MOBILE_WEB_ORIGIN must be empty or a verified HTTPS origin."
+fi
+python3 - "$FRONTEND_ORIGIN" "${MOBILE_WEB_ORIGIN:-$FRONTEND_ORIGIN}" "$CORS_BOOTSTRAP" <<'PY'
 from urllib.parse import urlparse
 import sys
 
-for origin in sys.argv[1:]:
+frontend_origin, mobile_origin, bootstrap = sys.argv[1:]
+if bootstrap == "true":
+    if frontend_origin or mobile_origin:
+        raise SystemExit("CORS bootstrap must have no browser origins.")
+    raise SystemExit(0)
+
+for origin in (frontend_origin, mobile_origin):
     parsed = urlparse(origin)
-    if not parsed.hostname or parsed.path not in {"", "/"} or parsed.query or parsed.fragment or parsed.username:
+    if not parsed.hostname or "*" in origin or parsed.path not in {"", "/"} or parsed.query or parsed.fragment or parsed.username:
         raise SystemExit("CORS values must be HTTPS origins without paths, credentials, queries, or fragments.")
 PY
 [[ "$NOTIFICATIONS_ENABLED" == "true" || "$NOTIFICATIONS_ENABLED" == "false" ]] \
@@ -70,6 +88,15 @@ ACTIVE_ACCOUNT="$(gcloud auth list --filter='status:ACTIVE' --format='value(acco
 [[ -n "$ACTIVE_ACCOUNT" ]] || die "No active gcloud account. Run: gcloud auth login"
 CURRENT_PROJECT="$(gcloud config get-value project 2>/dev/null || true)"
 [[ "$CURRENT_PROJECT" == "$PROJECT_ID" ]] || die "Set the active project to $PROJECT_ID, then rerun."
+if [[ "$CORS_BOOTSTRAP" == "false" ]]; then
+  FINAL_FRONTEND_URL="$(gcloud run services describe vimj-frontend --project="$PROJECT_ID" --region="$REGION" \
+    --format='value(status.url)' 2>/dev/null || true)"
+  [[ "$FINAL_FRONTEND_URL" =~ ^https:// ]] || die "Non-bootstrap CORS requires the final frontend Cloud Run service to exist."
+  [[ "$FRONTEND_ORIGIN" == "$FINAL_FRONTEND_URL" ]] \
+    || die "FRONTEND_ORIGIN must exactly match the final Cloud Run frontend URL."
+  [[ "${MOBILE_WEB_ORIGIN:-$FRONTEND_ORIGIN}" == "$FINAL_FRONTEND_URL" ]] \
+    || die "MOBILE_WEB_ORIGIN must be empty or exactly the final Cloud Run frontend URL."
+fi
 
 enabled_apis="$(gcloud services list --enabled --project="$PROJECT_ID" --format='value(config.name)' 2>/dev/null)" \
   || die "Could not verify enabled APIs; this script will not enable APIs."
@@ -458,6 +485,41 @@ PY
 [[ "${PUBLIC_MOBILE_API_APPROVED:-}" == "YES" ]] || die "Approve public HTTPS invocation; app-issued JWT and role checks remain required for business routes."
 read -r -p 'Type APPROVE-CLOUD-RUN-PRODUCTION to create the service: ' DEPLOY_CONFIRM
 [[ "$DEPLOY_CONFIRM" == "APPROVE-CLOUD-RUN-PRODUCTION" ]] || die "Deployment was not approved; no Cloud Run service was created."
+if [[ "$CORS_BOOTSTRAP" == "true" ]]; then
+  read -r -p 'Type APPROVE-CORS-BOOTSTRAP-NO-ORIGINS to deploy with browser CORS denied: ' CORS_CONFIRM
+  [[ "$CORS_CONFIRM" == "APPROVE-CORS-BOOTSTRAP-NO-ORIGINS" ]] \
+    || die "CORS bootstrap cancelled; no Cloud Run service was created."
+fi
+
+# Use a YAML file so deliberately empty bootstrap origins remain empty values
+# instead of being dropped or misparsed by --set-env-vars. umask 077 and the
+# existing EXIT trap keep this temporary configuration private and short-lived.
+ENV_FILE="$PREFLIGHT_DIR/backend-env.yaml"
+python3 - "$ENV_FILE" "$NOTIFICATIONS_ENABLED" "$FRONTEND_ORIGIN" \
+  "${MOBILE_WEB_ORIGIN:-$FRONTEND_ORIGIN}" "$CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL" \
+  "$CLOUD_SCHEDULER_JOB_NAME" "$CLOUD_TASKS_QUEUE_NAME" \
+  "$CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL" <<'PY'
+import json
+import os
+import pathlib
+import sys
+
+path, notifications, frontend, mobile, scheduler_email, scheduler_job, queue, tasks_email = sys.argv[1:]
+values = {
+    "ENV": "production",
+    "SCHEDULER_ENABLED": "false",
+    "NOTIFICATIONS_ENABLED": notifications,
+    "FRONTEND_ORIGIN": frontend,
+    "MOBILE_WEB_ORIGIN": mobile,
+    "CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL": scheduler_email,
+    "CLOUD_SCHEDULER_JOB_NAME": scheduler_job,
+    "CLOUD_TASKS_QUEUE_NAME": queue,
+    "CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL": tasks_email,
+}
+target = pathlib.Path(path)
+target.write_text("".join(f"{key}: {json.dumps(value)}\n" for key, value in values.items()), encoding="utf-8")
+os.chmod(target, 0o600)
+PY
 
 # Check again immediately before the only cloud-resource mutation.
 EXISTING_SERVICE="$(gcloud run services list --project="$PROJECT_ID" --region="$REGION" \
@@ -477,7 +539,7 @@ gcloud run deploy "$SERVICE" \
   --max=1 \
   --allow-unauthenticated \
   --service-account="$RUNTIME_SERVICE_ACCOUNT" \
-  --set-env-vars="ENV=production,SCHEDULER_ENABLED=false,NOTIFICATIONS_ENABLED=${NOTIFICATIONS_ENABLED},FRONTEND_ORIGIN=${FRONTEND_ORIGIN},MOBILE_WEB_ORIGIN=${MOBILE_WEB_ORIGIN:-$FRONTEND_ORIGIN},CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL=${CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL},CLOUD_SCHEDULER_JOB_NAME=${CLOUD_SCHEDULER_JOB_NAME},CLOUD_TASKS_QUEUE_NAME=${CLOUD_TASKS_QUEUE_NAME},CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL=${CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL}" \
+  --env-vars-file="$ENV_FILE" \
   --set-secrets="$SECRET_BINDINGS" \
   --quiet
 
@@ -494,12 +556,13 @@ gcloud run services update "$SERVICE" \
 SERVICE_CONFIG="$(gcloud run services describe "$SERVICE" --project="$PROJECT_ID" --region="$REGION" --format=json)" \
   || die "Could not verify the deployed Cloud Run service settings."
 python3 - "$SERVICE_CONFIG" "$SERVICE_URL" "$CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL" "$CLOUD_SCHEDULER_JOB_NAME" \
-  "$CLOUD_TASKS_QUEUE_NAME" "$CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL" <<'PY' \
-  || die "Cloud Run scale-to-zero or Cloud Scheduler identity settings failed verification."
+  "$CLOUD_TASKS_QUEUE_NAME" "$CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL" "$FRONTEND_ORIGIN" \
+  "${MOBILE_WEB_ORIGIN:-$FRONTEND_ORIGIN}" "$CORS_BOOTSTRAP" <<'PY' \
+  || die "Cloud Run scale-to-zero, CORS mode, or Cloud Scheduler identity settings failed verification."
 import json
 import sys
 
-service, expected_url, expected_email, expected_job, expected_queue, expected_tasks_email = sys.argv[1:]
+service, expected_url, expected_email, expected_job, expected_queue, expected_tasks_email, expected_frontend, expected_mobile, bootstrap = sys.argv[1:]
 data = json.loads(service)
 spec = data.get("spec", {})
 template = spec.get("template", {})
@@ -522,6 +585,8 @@ min_values = [
     annotations.get("autoscaling.knative.dev/minScale"),
     annotations.get("run.googleapis.com/minScale"),
 ]
+if not any(value is not None for value in min_values):
+    raise SystemExit("Cloud Run minimum-instance setting could not be verified.")
 if any(value is not None and str(value) not in {"0", ""} for value in min_values):
     raise SystemExit("Cloud Run must have zero minimum instances.")
 if env.get("SCHEDULER_ENABLED", "").lower() != "false":
@@ -536,12 +601,22 @@ if env.get("CLOUD_TASKS_QUEUE_NAME") != expected_queue:
     raise SystemExit("Cloud Tasks queue does not match the reviewed queue resource.")
 if env.get("CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL", "").lower() != expected_tasks_email.lower():
     raise SystemExit("Cloud Tasks OIDC service account does not match the reviewed identity.")
+frontend_origin = env.get("FRONTEND_ORIGIN", "")
+mobile_origin = env.get("MOBILE_WEB_ORIGIN", "")
+if "*" in frontend_origin or "*" in mobile_origin:
+    raise SystemExit("Wildcard CORS is forbidden.")
+if bootstrap == "true":
+    if frontend_origin or mobile_origin:
+        raise SystemExit("CORS bootstrap must deny all browser origins until the final frontend URL exists.")
+elif frontend_origin != expected_frontend or mobile_origin != expected_mobile:
+    raise SystemExit("Cloud Run CORS origins do not match the reviewed exact HTTPS origins.")
 if template_spec.get("timeoutSeconds") != 600:
     raise SystemExit("Cloud Run timeout must be 600 seconds to match the bounded Cloud Tasks delivery deadline.")
 cpu_throttling = annotations.get("run.googleapis.com/cpu-throttling")
 if cpu_throttling == "false":
     raise SystemExit("Cloud Run CPU is always allocated; request-based CPU is required for cost control.")
 print("Cloud Run configuration: PASS (min instances 0; request-based CPU; scheduler identity pinned)")
+print("Cloud Run CORS: PASS (browser origins denied during bootstrap)" if bootstrap == "true" else "Cloud Run CORS: PASS (exact reviewed HTTPS origins; no wildcard)")
 PY
 
 health_http="$(curl --silent --show-error --connect-timeout 10 --max-time 150 \
@@ -609,3 +684,6 @@ printf 'Public HTTPS access is enabled; non-public API operations require app-is
 printf "The Cloud Scheduler endpoint verifies Google's OIDC signature, audience, service account, and job name; PostgreSQL locking and a durable run ledger prevent overlaps and replay duplicates.\n"
 printf 'Interactive API docs are disabled in production; local OpenAPI authorization tests run before image build.\n'
 printf 'Set the reviewed GitHub Actions variable VIMJ_API_BASE_URL to this URL before preparing a mobile release.\n'
+if [[ "$CORS_BOOTSTRAP" == "true" ]]; then
+  printf 'CORS bootstrap is deny-by-default; deploy the frontend, then update the backend to that exact HTTPS origin before browser E2E.\n'
+fi

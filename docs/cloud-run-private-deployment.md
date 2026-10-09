@@ -1,6 +1,8 @@
 # VIMJ Academy Cloud Run recovery and release runbook
 
-This runbook is the current deployment path for `vimj-academy` in `asia-south1`. It targets Cloud Run, the verified Supabase recovery database, Flutter Android, and GitHub Releases. It does not use the suspended Render backend. The API and website use request-based Cloud Run billing with zero minimum instances. One OIDC-authenticated Cloud Scheduler job sends a minute tick to the API; the API enqueues due work into an OIDC-authenticated Cloud Tasks queue, which runs the existing 11 jobs in `Asia/Kolkata`. No worker stays alive between requests. All production operations remain approval-gated; none has been run against Google Cloud or Supabase from this workspace.
+This runbook is the deployment path for `vimj-academy` in `asia-south1`. It uses the recovered Supabase database, Cloud Run, Flutter Android, and GitHub Releases; the old Render backend remains suspended. Both Cloud Run services use request-based CPU and zero minimum instances. One OIDC-authenticated Cloud Scheduler job sends a minute tick to the API, which enqueues work into an OIDC-authenticated Cloud Tasks queue for the existing 11 `Asia/Kolkata` jobs. No worker stays alive between requests.
+
+**Current verified state (2026-10-10):** backup integrity and recovery database comparison were independently completed by the operator; the recovery project is `zpkplfcqiqlcxtwysxpu` at revision `0020`, and the separate restore project is `ewlclomeuwgnubvfryuj` at `0019`. The independent CMEK GCS backup remains unchanged. GitHub Actions CI run `38002063190` passed, and the immutable backend image from source commit `99fa4f8f81c3fe2a8e63af31f81b85c346da9817` is verified in Artifact Registry at digest `sha256:987116c1a9458156940a43b98a807043cd37fa864c3fd05ede2d13c77fa4b662`; Cloud Build ID was `d9e65aa4-4461-4d47-a7be-9502f484dd02`. CI validated both container build contexts, while the frontend production image still needs the backend URL at build time. No Cloud Run service, queue, Scheduler job, migration, or production database write has been created/applied. The database password is being rotated; do not read or use the old Secret Manager version. Continue only after the owner confirms rotation and the new Secret Manager version. The approved bootstrap begins with empty CORS origins, then sets both to the exact final frontend Cloud Run HTTPS origin. Wildcard CORS and custom domains are not allowed. Free Trial billing must remain unchanged.
 
 ## Required command environment
 
@@ -144,7 +146,7 @@ Type `APPROVE-CONFIGURE-CLOUD-TASKS` only after approving the queue and these na
 
 ## Deploy API and website only after explicit approval
 
-The backend deployment requires the read-only inventory at schema revision `0021`, all 21 required current tables, review of recognized historical tables, verified salary reconciliation, pinned Secret Manager versions, direct secret-scoped Accessor grants, the existing dedicated runtime/task identities and queue, and separate public API/cost approvals. It sets minimum instances to zero, caps the service at one instance, keeps request-based CPU, and sets a 600-second maximum request timeout for Cloud Tasks. The in-process APScheduler is disabled in production. The service is publicly invokable for mobile/web clients; business endpoints remain protected by app JWT and Admin/Coach authorization. The internal scheduler and task routes separately validate Google's OIDC signature, expected audience, and exact service-account identity. Production docs/OpenAPI are disabled. No database migration or secret rotation runs during deployment.
+The backend deployment requires the read-only inventory at schema revision `0021`, all 21 required current tables, review of recognized historical tables, verified salary reconciliation, pinned Secret Manager versions, direct secret-scoped Accessor grants, the existing dedicated runtime/task identities and queue, and separate public API/cost approvals. It sets minimum instances to zero, caps the service at one instance, keeps request-based CPU, and sets a 600-second maximum request timeout for Cloud Tasks. The in-process APScheduler is disabled in production. The service is publicly invokable for mobile/web clients; business endpoints remain protected by app JWT and Admin/Coach authorization. The internal scheduler and task routes separately validate Google's OIDC signature, expected audience, and exact service-account identity. Production docs/OpenAPI are disabled. The migration is a separate gated step and is never run during service deployment.
 
 Before running the script, set the following reviewed, non-secret environment values. `ADMIN_RECOVERY_SECRET_NAME` must be the existing secret name or `NONE` only after confirming that break-glass recovery is disabled. If notifications are enabled, set all four existing Twilio secret names; do not create replacement credentials.
 
@@ -153,8 +155,11 @@ export IMAGE_TAG="$BUILD_COMMIT"
 export EXPECTED_SUPABASE_HOST='REPLACE_WITH_TARGET_POOLER_HOST'
 export EXPECTED_SUPABASE_USER='REPLACE_WITH_TARGET_DATABASE_USERNAME'
 export EXPECTED_DATABASE_NAME='postgres'
-export FRONTEND_ORIGIN='https://REPLACE_WITH_VERIFIED_FRONTEND_ORIGIN'
-export MOBILE_WEB_ORIGIN="$FRONTEND_ORIGIN"
+export CORS_BOOTSTRAP=true
+export CORS_BOOTSTRAP_APPROVED=YES
+# Keep both origins empty for this first backend revision. Browser requests
+# remain denied until the frontend URL exists and the exact-origin step below.
+unset FRONTEND_ORIGIN MOBILE_WEB_ORIGIN
 export NOTIFICATIONS_ENABLED='REPLACE_WITH_REVIEWED_TRUE_OR_FALSE'
 export ADMIN_RECOVERY_SECRET_NAME='REPLACE_WITH_SECRET_NAME_OR_NONE'
 export RUNTIME_SERVICE_ACCOUNT='REPLACE_WITH_DEDICATED_RUNTIME_SERVICE_ACCOUNT_EMAIL'
@@ -171,7 +176,7 @@ export PUBLIC_MOBILE_API_APPROVED=YES
 bash deploy/cloud-run/deploy-backend-cloud-shell.sh
 ```
 
-Type `APPROVE-CLOUD-RUN-PRODUCTION` only after approving the public API and request-based charges. The service URL is then pinned as the OIDC audience. This step does not create or activate Cloud Scheduler. Do not direct users to either service before the frontend CORS step and E2E verification.
+Type `APPROVE-CLOUD-RUN-PRODUCTION` only after approving the public API and request-based charges, then type `APPROVE-CORS-BOOTSTRAP-NO-ORIGINS` for the deny-by-default browser CORS revision. The service URL is pinned as the OIDC audience. No wildcard or temporary public origin is used. This step does not create or activate Cloud Scheduler. Do not direct users to either service before the exact-origin CORS step and E2E verification.
 
 Deploy the frontend from the matching full commit image SHA after verifying its compiled API origin:
 
@@ -185,10 +190,10 @@ bash deploy/cloud-run/deploy-frontend-cloud-shell.sh
 
 Type `APPROVE-CLOUD-RUN-FRONTEND` to create the public website. The script refuses to update an existing frontend service and verifies HTTP 200.
 
-Then set the actual frontend origin reported by the deployment and allow the backend's CORS middleware to accept it:
+After frontend deployment, set the exact HTTPS URL reported by Cloud Run. The updater compares it with the deployed `vimj-frontend` service URL, rejects other origins/wildcards, and verifies the resulting backend revision and scale-to-zero settings:
 
 ```bash
-export FRONTEND_ORIGIN='REPLACE_WITH_FRONTEND_URL_REPORTED_BY_DEPLOYMENT'
+export FRONTEND_ORIGIN="$(gcloud run services describe vimj-frontend --project=vimj-academy --region=asia-south1 --format='value(status.url)')"
 export MOBILE_WEB_ORIGIN="$FRONTEND_ORIGIN"
 export CLOUD_RUN_CORS_CHANGE_APPROVED=YES
 bash deploy/cloud-run/update-backend-cors-cloud-shell.sh
@@ -253,4 +258,4 @@ The tag push runs verification only. The workflow dispatch creates signed split-
 
 ## Local verification already performed
 
-The local backend suite passed (33 tests), frontend production build and lint passed, Flutter tests passed (35), Flutter analysis completed with no errors or warnings (194 informational notices), and Python compilation passed. This workspace does not have Google Cloud credentials, Docker, the production database, GitHub signing secrets, or production test accounts. Therefore Cloud Shell backup/deploy checks, staging/production E2E, Android signed build, and release publication remain unverified and have not been performed.
+The local backend suite passed (33 tests), frontend production build and lint passed, Flutter tests passed (35), Flutter analysis completed with no errors or warnings (194 informational notices), and Python compilation passed. GitHub Actions run `38002063190` also passed the backend, frontend, Flutter, deployment-asset, and container-build jobs. The backend image is in Artifact Registry and was verified against its immutable digest. Cloud Run services, database migration `0021`, Cloud Tasks queue, Scheduler activation, production Admin/Coach E2E, signed Android build, and release publication remain pending. The single prerequisite is confirmation that the Supabase database password has been rotated and the new full URL is stored in the existing Secret Manager secret as a new version; do not read/use the prior exposed version. After that, rerun the exact target/backup verification immediately before migration and stop if any identity, revision, backup generation/hash, billing, or cost gate differs. No local heavy SDK/build was performed.
