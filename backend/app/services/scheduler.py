@@ -108,6 +108,9 @@ def _release_scheduler_owner_lock() -> None:
 
 def job_monthly_fee_reminders(now: datetime | None = None):
     """Runs on the 10th of every month: notify students with unpaid fees for the current period."""
+    if not settings.NOTIFICATIONS_ENABLED:
+        logger.info("Monthly fee reminders skipped because external notifications are disabled")
+        return
     db = SessionLocal()
     try:
         today = _local_now(now).date()

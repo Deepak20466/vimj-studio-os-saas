@@ -31,8 +31,10 @@ def _get_client():
 
 
 def send_sms(to_phone: str, message: str) -> bool:
-    if not settings.NOTIFICATIONS_ENABLED or not to_phone:
-        logger.info("SMS (dry-run) to %s: %s", to_phone, message)
+    if not settings.NOTIFICATIONS_ENABLED:
+        logger.info("SMS delivery skipped because external notifications are disabled")
+        return False
+    if not to_phone:
         return False
     try:
         client = _get_client()
@@ -44,8 +46,10 @@ def send_sms(to_phone: str, message: str) -> bool:
 
 
 def send_whatsapp(to_phone: str, message: str) -> bool:
-    if not settings.NOTIFICATIONS_ENABLED or not to_phone:
-        logger.info("WhatsApp (dry-run) to %s: %s", to_phone, message)
+    if not settings.NOTIFICATIONS_ENABLED:
+        logger.info("WhatsApp delivery skipped because external notifications are disabled")
+        return False
+    if not to_phone:
         return False
     try:
         client = _get_client()
