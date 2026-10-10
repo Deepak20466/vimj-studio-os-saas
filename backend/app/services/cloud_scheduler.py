@@ -327,9 +327,11 @@ def enqueue_cloud_scheduler_tick(scheduled_for: datetime, task_client=None) -> d
                 logger.error("Cloud Task enqueue failed for %s (%s)", job_name, type(exc).__name__)
                 failed.append(job_name)
     finally:
-        if owns_client and client is not None:
-            client.close()
-        _release_advisory_lock(_SCHEDULER_TICK_LOCK_KEY, engine, connection)
+        try:
+            if owns_client and client is not None:
+                client.transport.close()
+        finally:
+            _release_advisory_lock(_SCHEDULER_TICK_LOCK_KEY, engine, connection)
 
     if failed:
         raise SchedulerJobsFailed(failed)

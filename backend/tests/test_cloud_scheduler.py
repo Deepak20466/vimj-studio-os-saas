@@ -220,6 +220,26 @@ class CloudSchedulerTests(unittest.TestCase):
             row = db.query(SchedulerJobExecution).one()
             self.assertEqual((row.status, row.attempt), ("QUEUED", 1))
 
+    def test_dispatch_closes_owned_cloud_tasks_transport_and_releases_lock(self):
+        job = MagicMock()
+        instant = datetime(2026, 10, 10, 3, 30, tzinfo=timezone.utc)
+        client = SimpleNamespace(transport=MagicMock())
+        with (
+            patch.dict(scheduler.SCHEDULER_JOB_DEFINITIONS, {"minute_job": (job, CronTrigger(minute="*", timezone=scheduler.SCHEDULER_TIMEZONE))}, clear=True),
+            patch.object(cloud_scheduler, "SessionLocal", self.session_factory),
+            patch.object(cloud_scheduler, "_due_jobs", return_value=[("minute_job", job)]),
+            patch.object(cloud_scheduler, "_pending_job_runs", return_value=[]),
+            patch.object(cloud_scheduler, "_acquire_tick_lock", return_value=(MagicMock(), MagicMock(), True)),
+            patch.object(cloud_scheduler, "_release_advisory_lock") as release_lock,
+            patch.object(cloud_scheduler.tasks_v2, "CloudTasksClient", return_value=client),
+            patch.object(cloud_scheduler, "_create_job_task"),
+        ):
+            result = cloud_scheduler.enqueue_cloud_scheduler_tick(instant)
+
+        self.assertEqual(result["enqueued"], ["minute_job"])
+        client.transport.close.assert_called_once_with()
+        release_lock.assert_called_once()
+
     def test_failed_task_creation_is_retried_with_a_new_generation(self):
         job = MagicMock()
         trigger = CronTrigger(minute="*", timezone=scheduler.SCHEDULER_TIMEZONE)
