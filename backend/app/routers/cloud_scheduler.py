@@ -1,3 +1,5 @@
+import binascii
+import base64
 import json
 import logging
 
@@ -19,17 +21,63 @@ logger = logging.getLogger("vimj.scheduler_endpoint")
 router = APIRouter(tags=["internal-scheduler"])
 
 
+def _oidc_claim_match_flags(
+    authorization: str | None, service_account: str
+) -> dict[str, bool] | None:
+    """Return non-sensitive diagnostic flags without logging token claims or values."""
+    if not authorization:
+        return None
+    scheme, separator, token = authorization.partition(" ")
+    parts = token.strip().split(".")
+    if not separator or scheme.lower() != "bearer" or len(parts) != 3:
+        return None
+    try:
+        payload_segment = parts[1]
+        payload_bytes = base64.urlsafe_b64decode(
+            payload_segment + "=" * (-len(payload_segment) % 4)
+        )
+        claims = json.loads(payload_bytes)
+    except (ValueError, TypeError, binascii.Error):
+        return None
+    if not isinstance(claims, dict):
+        return None
+    audience = claims.get("aud")
+    expected_audience = settings.CLOUD_SCHEDULER_OIDC_AUDIENCE.strip()
+    audience_matches = (
+        expected_audience in audience
+        if isinstance(audience, list)
+        else audience == expected_audience
+    )
+    return {
+        "issuer_google": claims.get("iss") in ("https://accounts.google.com", "accounts.google.com"),
+        "audience_matches": audience_matches,
+        "service_account_matches": str(claims.get("email", "")).strip().lower() == service_account.strip().lower(),
+        "email_verified": claims.get("email_verified") is True,
+    }
+
+
 def _verify_google_identity(authorization: str | None, service_account: str) -> None:
     try:
         verify_cloud_scheduler_identity(authorization, service_account=service_account)
-    except PermissionError:
+    except PermissionError as exc:
+        logger.warning(
+            "Google service identity denied (%s); OIDC claim checks=%s",
+            str(exc),
+            _oidc_claim_match_flags(authorization, service_account),
+        )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
     except (ValueError, GoogleAuthError) as exc:
         if isinstance(exc, GoogleAuthError):
+            logger.warning("Google service identity verifier unavailable (%s)", type(exc).__name__)
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Google service identity verification is temporarily unavailable",
             )
+        logger.warning(
+            "Google service identity token rejected (%s); OIDC claim checks=%s",
+            type(exc).__name__,
+            _oidc_claim_match_flags(authorization, service_account),
+        )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
     except Exception as exc:
         logger.warning("Google service identity verification failed (%s)", type(exc).__name__)
@@ -47,7 +95,14 @@ def cloud_scheduler_tick(request: Request):
             detail="Cloud Scheduler is not configured",
         )
 
-    if request.headers.get("X-CloudScheduler-JobName") != expected_job_name:
+    actual_job_name = request.headers.get("X-CloudScheduler-JobName")
+    if actual_job_name != expected_job_name:
+        logger.warning(
+            "Scheduler tick rejected: job-name header present=%s matches-configured-name=%s matches-job-id=%s",
+            bool(actual_job_name),
+            actual_job_name == expected_job_name,
+            actual_job_name == expected_job_name.rsplit("/", 1)[-1],
+        )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
     _verify_google_identity(request.headers.get("Authorization"), scheduler_account)
 

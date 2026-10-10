@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -15,7 +16,11 @@ from app.config import settings
 from app.models.scheduler_job_execution import SchedulerJobExecution
 from app.services import cloud_scheduler
 from app.services import scheduler
-from app.routers.cloud_scheduler import cloud_scheduler_run, cloud_scheduler_tick
+from app.routers.cloud_scheduler import (
+    _oidc_claim_match_flags,
+    cloud_scheduler_run,
+    cloud_scheduler_tick,
+)
 
 
 class CloudSchedulerTests(unittest.TestCase):
@@ -89,6 +94,30 @@ class CloudSchedulerTests(unittest.TestCase):
             )
         self.assertEqual(verify.call_count, 2)
         self.assertEqual(verify.call_args.kwargs["audience"], "https://vimj-api.run.app")
+
+    def test_oidc_failure_diagnostics_expose_only_claim_match_flags(self):
+        claims = {
+            "iss": "https://accounts.google.com",
+            "aud": "https://vimj-api.run.app",
+            "email": "scheduler@vimj-academy.iam.gserviceaccount.com",
+            "email_verified": True,
+        }
+        encoded = base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip("=")
+        with patch.object(settings, "CLOUD_SCHEDULER_OIDC_AUDIENCE", "https://vimj-api.run.app"):
+            flags = _oidc_claim_match_flags(
+                f"Bearer header.{encoded}.signature",
+                "scheduler@vimj-academy.iam.gserviceaccount.com",
+            )
+        self.assertEqual(
+            flags,
+            {
+                "issuer_google": True,
+                "audience_matches": True,
+                "service_account_matches": True,
+                "email_verified": True,
+            },
+        )
+        self.assertIsNone(_oidc_claim_match_flags("Bearer malformed", "scheduler@example.com"))
 
     def test_oidc_rejects_missing_or_unexpected_identity(self):
         with (
