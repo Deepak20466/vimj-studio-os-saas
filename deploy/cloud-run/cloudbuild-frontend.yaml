@@ -2,6 +2,7 @@ steps:
   - name: node:24-alpine
     dir: frontend
     entrypoint: sh
+    automapSubstitutions: true
     args:
       - -ceu
       - |
