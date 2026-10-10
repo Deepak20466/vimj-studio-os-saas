@@ -2,14 +2,15 @@ steps:
   - name: node:24-alpine
     dir: frontend
     entrypoint: sh
-    automapSubstitutions: true
     args:
       - -ceu
       - |
-        case "${_IMAGE_TAG}" in *[!a-f0-9]*|'') echo 'A full commit SHA image tag is required.' >&2; exit 2 ;; esac
-        test "${#_IMAGE_TAG}" -eq 40 || { echo 'A full commit SHA image tag is required.' >&2; exit 2; }
-        case "${_API_BASE_URL}" in https://*) ;; *) echo 'An HTTPS API origin is required.' >&2; exit 2 ;; esac
-        case "${_API_BASE_URL}" in *onrender.com*|*.invalid*) echo 'Blocked or placeholder API origin.' >&2; exit 2 ;; esac
+        image_tag='${_IMAGE_TAG}'
+        api_base_url='${_API_BASE_URL}'
+        case "$image_tag" in *[!a-f0-9]*|'') echo 'A full commit SHA image tag is required.' >&2; exit 2 ;; esac
+        test "${#image_tag}" -eq 40 || { echo 'A full commit SHA image tag is required.' >&2; exit 2; }
+        case "$api_base_url" in https://*) ;; *) echo 'An HTTPS API origin is required.' >&2; exit 2 ;; esac
+        case "$api_base_url" in *onrender.com*|*.invalid*) echo 'Blocked or placeholder API origin.' >&2; exit 2 ;; esac
         npm ci
         npm run lint
         npm run build
