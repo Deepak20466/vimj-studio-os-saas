@@ -7,6 +7,14 @@
 - **FastAPI:** SQLAlchemy models and PostgreSQL remain the source of truth. Existing attendance, fee, batch, and enrollment models power the new insights without schema migrations.
 - **Local MCP:** `mcp_server/server.py` runs as a stdio FastMCP process for Claude Desktop. It reads the same database, resolves `VIMJ_MCP_ADMIN_EMAIL` to an active Admin on each call, and writes attendance/reminder audit records as that Admin. It does not expose a network port.
 
+## Production hosting
+
+The React dashboard and FastAPI API run as separate Cloud Run services in `asia-south1`:
+
+- Web: `https://vimj-frontend-eqwnplgd6q-el.a.run.app`, built into a small Nginx container with SPA route fallback.
+- API: `https://vimj-backend-eqwnplgd6q-el.a.run.app`, built from `backend/Dockerfile` on Python 3.12 so the pinned PostgreSQL driver installs from its binary wheel.
+- Database: Supabase PostgreSQL, provided to the API through Secret Manager. The React image embeds the API origin at build time and does not carry database credentials.
+
 ## Admin AI Command Center
 
 `GET /insights/revenue-risk` (also `/api/v1/insights/revenue-risk`) is protected by `require_admin`; Coaches receive HTTP 403. It returns three deterministic predictions:

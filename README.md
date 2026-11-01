@@ -19,6 +19,7 @@ Salary, GPS, Chat, and Compliance remain out of scope and are not reintroduced. 
 ## Live Demo
 
 - **Backend:** https://vimj-backend-eqwnplgd6q-el.a.run.app
+- **Web dashboard:** https://vimj-frontend-eqwnplgd6q-el.a.run.app
 - **Demo admin:** `admin@vimj.com` / `Demo@123`
 - **Video:** [Demo video placeholder](#video-demo-placeholder)
 
