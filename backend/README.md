@@ -1,8 +1,9 @@
-# VIMJ Studio Attendance System — Backend
+# VIMJ Studio OS SaaS — Backend
 
-FastAPI + PostgreSQL backend implementing all 15 core requirements: attendance tracking,
-geofenced + selfie-verified check-ins, fee/salary reminders, leave & swap workflows,
-RBAC-enforced data isolation, and business analytics/reporting.
+FastAPI + PostgreSQL backend for attendance, fees, receipts, leave and swap workflows,
+role-enforced data access, studio reporting, and the Admin-only AI insights API.
+The local MCP server shares the same SQLAlchemy models and applies the configured
+Admin identity to every tool call.
 
 ## Setup
 
@@ -20,7 +21,7 @@ copy .env.example .env         # then edit DATABASE_URL, JWT_SECRET_KEY, etc.
 #   GRANT ALL PRIVILEGES ON DATABASE vimj_attendance TO vimj_user;
 
 alembic upgrade head
-python scripts/seed_admin.py --email admin@vimj.com --password "ChangeMe123!" --name "Admin"
+python scripts/seed_admin.py --email admin@example.com --password "ChangeMe123!" --name "Admin"
 ```
 
 ## Run (development)
@@ -42,14 +43,12 @@ never served as static files — only through the authenticated `/attendance/sel
 
 ## Notifications
 
-SMS/WhatsApp reminders run through Twilio. Set `NOTIFICATIONS_ENABLED=true` and the `TWILIO_*`
-env vars to send for real; otherwise messages are logged (dry-run) so the system is usable
-without a Twilio account during development.
+The Admin dashboard and MCP fee-reminder actions return a queued mock status and do not
+send a WhatsApp/SMS message. They require no paid messaging provider.
 
 ## Scheduled jobs (APScheduler, started in-process with the app)
 
 - Fee reminders: 10th of each month, 09:00
-- Salary acknowledgment notifications: 10th of each month, 09:05
 - Mark unpaid fees overdue: daily at 00:30
 - Coach attendance reminder: every minute, fires 15 min after a class ends if unmarked
 - Missed-attendance admin alert: every minute, fires 10 min after a class ends if attendance still isn't submitted (see FEATURES_ADDED.md 1.8/1.9)
@@ -57,8 +56,8 @@ without a Twilio account during development.
 
 ## Tests
 
-No test suite is checked in yet; `python -c "from app.main import app"` and a manual run
-against a local Postgres/SQLite instance are the fastest way to validate changes.
+Run the focused Admin AI prediction and Coach RBAC tests from this directory with
+`python -m pytest tests/test_insights.py -q`.
 
 ## API docs
 

@@ -1,4 +1,6 @@
-# Features Added — 2026-09-06
+# VIMJ Studio OS SaaS — Feature History
+
+This file retains historical implementation notes. The current supported scope is described in the [main README](README.md); entries below are not a promise that every historical feature remains in the product.
 
 ## 2026-11-01 — Admin AI Command Center (Admin-only) + MCP Server
 
@@ -15,8 +17,8 @@
 - The Admin batch chart sorts highest estimated revenue share first and explains that expenses are not stored, so it cannot report net profit.
 - Coach web dashboard now keeps class rows visible when an individual summary request fails, ignores stale overlapping refresh results, and exposes a retry action. Coach mobile fetches only today's facility-attendance record instead of downloading full history.
 - The Supabase readiness probe reads an existing `users` table row so scheduled health checks generate actual application-table database activity without modifying studio data. Supabase Free can still pause inactive projects under its platform policy; paid Supabase plans are the only guaranteed no-pause option.
-- Mobile release target: `1.26.35+71`.
-This document maps each of the 11 requested features to exactly where it was implemented, for the existing VIMJ Studio Attendance Management System (FastAPI + PostgreSQL backend, React admin/coach web dashboard). Per the confirmed scope, all of this is **web-only** (React admin + the existing React coach pages) — the separate Flutter mobile app is untouched except for two pre-existing broken-asset-path bugs fixed under 1.3.
+- Mobile release target: `1.26.36+72`; the Android and iOS display names now use VIMJ Studio OS SaaS.
+This is a historical implementation log for VIMJ Studio OS SaaS (FastAPI + PostgreSQL, React Admin/Coach web, and Flutter mobile). Historical entries below describe changes made at the time; the current supported product scope is maintained in the [main README](README.md).
 
 Every new endpoint follows the codebase's existing conventions (role-guarded via `Depends(require_admin/require_coach/...)`, `log_action(...)` audit entries before every commit, `notify()` for SMS/WhatsApp — all best-effort/no-op in dev unless Twilio env vars are set).
 

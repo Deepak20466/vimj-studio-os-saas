@@ -1,4 +1,4 @@
-# VIMJ Studio OS Architecture
+# VIMJ Studio OS SaaS Architecture
 
 ## Application layers
 
@@ -35,12 +35,12 @@ The MCP server exposes five Admin-only tools: `get_todays_absentees`, `get_fee_d
 
 ## Local setup
 
-Install `backend/requirements.txt` for FastAPI and `mcp_server/requirements.txt` in the isolated MCP environment. Configure `backend/.env` with a database connection and active Admin email, then add the MCP entry from the root `.mcp.json` to Claude Desktop's config. Setup details are in [mcp_server/README.md](../mcp_server/README.md).
+Install `backend/requirements.txt` for FastAPI and `mcp_server/requirements.txt` in the isolated MCP environment. Configure `backend/.env` with a database connection and active Admin email. Use the root `.mcp.json` with Claude Code, or copy its entry with absolute paths into Claude Desktop's config. Setup details are in [mcp_server/README.md](../mcp_server/README.md).
 
 ## Free-tier health checks
 
 `GET /health` is a lightweight liveness route and intentionally does not depend
-on PostgreSQL. `GET /health/ready` runs a read-only `SELECT 1` and is used by
+on PostgreSQL. `GET /health/ready` reads one existing user row without changing data and is used by
 the scheduled [Supabase activity workflow](../.github/workflows/supabase-keepalive.yml)
 every ten minutes. Its readiness probe reads an existing application user row,
 so it produces database activity without modifying studio data. This is a

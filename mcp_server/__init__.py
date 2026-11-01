@@ -1,1 +1,1 @@
-"""VIMJ Studio OS MCP integration."""
+"""VIMJ Studio OS SaaS MCP integration."""

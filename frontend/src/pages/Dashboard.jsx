@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Bar,
-  BarChart,
+  ComposedChart,
   CartesianGrid,
   Legend,
   Line,
@@ -231,7 +231,7 @@ export default function Dashboard() {
           <div className="empty-state">No active batches are available for comparison.</div>
         ) : (
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={[...batchRows].sort((a, b) => Number(b.estimated_profit || 0) - Number(a.estimated_profit || 0))} margin={{ top: 12, right: 16, left: 12, bottom: 45 }}>
+            <ComposedChart data={[...batchRows].sort((a, b) => Number(b.estimated_profit || 0) - Number(a.estimated_profit || 0))} margin={{ top: 12, right: 16, left: 12, bottom: 45 }}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="batch_name" angle={-18} textAnchor="end" interval={0} height={70} fontSize={11} />
               <YAxis yAxisId="revenue" tickFormatter={(value) => `Rs ${Number(value).toLocaleString("en-IN")}`} fontSize={11} />
@@ -240,7 +240,7 @@ export default function Dashboard() {
               <Legend verticalAlign="top" />
               <Bar yAxisId="revenue" dataKey="estimated_profit" name="Estimated revenue share*" fill="#CC7000" radius={[4, 4, 0, 0]} />
               <Line yAxisId="attendance" dataKey="attendance_pct" name="Attendance" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} />
-            </BarChart>
+            </ComposedChart>
           </ResponsiveContainer>
         )}
         <p className="ai-chart-note">*Estimated monthly revenue share allocated by activity; expense data is not stored, so net profit is unavailable.</p>

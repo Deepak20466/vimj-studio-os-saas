@@ -100,10 +100,10 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
               const SizedBox(height: 16),
               const Text(
-                'VIMJ Studio',
+                'VIMJ Studio OS SaaS',
                 style: TextStyle(
                     color: Colors.white,
-                    fontSize: 24,
+                    fontSize: 21,
                     fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),

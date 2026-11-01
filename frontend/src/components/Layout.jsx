@@ -40,15 +40,15 @@ export default function Layout({ links }) {
         <div className="topbar-brand">
           <img
             src="/logo.jpeg"
-            alt="VIMJ Studio"
+            alt="VIMJ Studio OS SaaS"
             className="topbar-logo"
             onError={(e) => {
               e.currentTarget.style.display = "none";
             }}
           />
           <div className="topbar-titles">
-            <span className="topbar-title">VIMJ Studio</span>
-            <span className="topbar-subtitle">Attendance Management</span>
+            <span className="topbar-title">VIMJ Studio OS</span>
+            <span className="topbar-subtitle">SaaS</span>
           </div>
         </div>
         <div className="topbar-user">

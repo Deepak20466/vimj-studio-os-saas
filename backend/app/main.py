@@ -33,7 +33,7 @@ from app.routers import (
 from app.api.v1 import insights
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("vimj.main")
+logger = logging.getLogger("vimj.studio_os")
 
 
 @asynccontextmanager
@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI):
     shutdown_scheduler()
 
 
-app = FastAPI(title="VIMJ Studio Attendance System", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="VIMJ Studio OS SaaS", version="1.0.0", lifespan=lifespan)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -89,7 +89,7 @@ app.include_router(insights.versioned_router)
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "service": "VIMJ Studio Attendance System"}
+    return {"status": "ok", "service": "VIMJ Studio OS SaaS"}
 
 
 @app.get("/health/ready")

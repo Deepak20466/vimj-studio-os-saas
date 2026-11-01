@@ -1,5 +1,5 @@
 [Unit]
-Description=VIMJ Studio Attendance System - FastAPI backend
+Description=VIMJ Studio OS SaaS - FastAPI backend
 After=network.target postgresql.service
 
 [Service]

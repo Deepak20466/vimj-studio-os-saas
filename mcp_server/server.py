@@ -30,7 +30,7 @@ from app.models.user import User, UserRole
 from app.services.audit import log_action
 from app.services.insights import batch_analytics, fee_defaulters
 
-mcp = FastMCP("VIMJ Studio OS Admin Tools")
+mcp = FastMCP("VIMJ Studio OS SaaS Admin Tools")
 
 
 def _open_admin_session() -> tuple[Session, User]:

@@ -1,4 +1,4 @@
-# VIMJ Studio Mobile App (Flutter)
+# VIMJ Studio OS SaaS — Mobile App (Flutter)
 
 A Flutter app for coaches and admins. Students are records the admin/coach
 manage (attendance subjects, fee accounts) but do not get their own login —
@@ -103,29 +103,19 @@ flutter build apk --release --split-per-abi \
   --dart-define=GEOFENCE_RADIUS_METERS=100
 ```
 
-Replace the lat/lng above with an exact Google Maps pin for the real facility
-if one becomes available — these are geocoded from the address only, accurate
-to roughly a city block. The lat/lng/radius must match the backend's config
-(`FACILITY_LAT`, `FACILITY_LNG`, `GEOFENCE_RADIUS_METERS`) on Cloud Run. Tag the release
-(`mobile-vX.Y.Z`) and publish the three split-ABI APKs as GitHub release
-assets:
+Set the configured API and facility values to match the backend deployment. To
+publish an APK, update `version` in `pubspec.yaml`, commit the change, then push
+a `mobile-vX.Y.Z` tag. The GitHub Actions workflow builds and attaches the three
+split-ABI APKs to the release. It signs builds with the persistent Android
+keystore configured in repository Actions secrets; keep that key private and
+use the same key for future updates.
 
 ```bash
-git tag mobile-vX.Y.Z && git push origin mobile-vX.Y.Z
-gh release create mobile-vX.Y.Z \
-  build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
-  build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
-  build/app/outputs/flutter-apk/app-x86_64-release.apk \
-  --repo Deepak20466/attendance-management \
-  --title "mobile-vX.Y.Z" --notes "..."
+git tag mobile-vX.Y.Z
+git push origin mobile-vX.Y.Z
 ```
 
-APKs are debug-signed (see `android/app/build.gradle.kts`) — fine for
-sideloading, not for a Play Store upload. Anyone installing the app must
-grab the APK from the latest GitHub release tag, not an older one; a commit
-landing on `master` does nothing for a phone until a new tagged APK is built
-and installed from it.
-
+Installers should use the APKs attached to the latest GitHub release tag.
 ## What's implemented
 
 - **Admin AI Command Center**: Admin-only revenue-risk predictions, fee
@@ -136,9 +126,8 @@ and installed from it.
 - **Auth**: login, forgot/reset password, biometric app-unlock on relaunch
   (`lib/features/auth/`), JWT access/refresh handled transparently by
   `lib/core/api_client.dart`.
-- **Coach**: today's classes, geofenced facility check-in/out, per-student
-  attendance marking with camera selfie + GPS (`lib/features/coach/`), leave
-  requests, class swap requests, salary history + acknowledgment.
+- **Coach**: a separate role-based view for class lists, student attendance,
+  leave requests, class swaps, fee receipts, and settings (`lib/features/coach/`).
 - **Offline queue**: if marking attendance fails due to no connectivity, it's
   queued in a local SQLite table (`lib/core/offline_queue.dart`) and flushed
   automatically the next time connectivity is detected
@@ -147,8 +136,8 @@ and installed from it.
 - **Notifications**: local (on-device) notifications via
   `flutter_local_notifications`. Full push delivery while the app is closed
   needs a Firebase project wired into this plugin — that's account-specific
-  setup outside this codebase's scope. SMS/WhatsApp reminders are sent
-  directly by the backend and don't depend on this.
+  setup outside this codebase's scope. The Admin reminder action queues a mock
+  reminder through the backend and does not send a paid SMS/WhatsApp message.
 
 ## Android release signing
 

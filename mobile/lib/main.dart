@@ -25,7 +25,7 @@ class VimjApp extends StatelessWidget {
       valueListenable: ThemeController.mode,
       builder: (context, themeMode, _) {
         return MaterialApp(
-          title: 'VIMJ Studio',
+          title: 'VIMJ Studio OS SaaS',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light(),
           darkTheme: AppTheme.dark(),

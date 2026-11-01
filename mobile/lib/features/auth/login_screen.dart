@@ -179,12 +179,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'VIMJ Studio',
+                        'VIMJ Studio OS SaaS',
                         textAlign: TextAlign.center,
                         style: Theme.of(context)
                             .textTheme
                             .headlineMedium
                             ?.copyWith(
+                              fontSize: 22,
                               fontWeight: FontWeight.bold,
                               color: AppColors.brandOrange,
                             ),

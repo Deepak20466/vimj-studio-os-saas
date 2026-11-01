@@ -1,4 +1,4 @@
-# VIMJ Studio OS MCP Server
+# VIMJ Studio OS SaaS — MCP Server
 
 This local FastMCP server exposes five VIMJ tools over stdio. It reads the existing SQLAlchemy models and database directly; analytics are deterministic rules, and no OpenAI, Gemini, Twilio, or other paid API is called by these tools.
 
@@ -35,14 +35,14 @@ Claude Desktop reads its MCP configuration from `%APPDATA%\Claude\claude_desktop
       "command": "C:\\path\\to\\attendance-management-master\\mcp_server\\.venv\\Scripts\\python.exe",
       "args": ["C:\\path\\to\\attendance-management-master\\mcp_server\\server.py"],
       "env": {
-        "VIMJ_MCP_ADMIN_EMAIL": "admin@vimj.com"
+        "VIMJ_MCP_ADMIN_EMAIL": "your-active-admin@example.com"
       }
     }
   }
 }
 ```
 
-The root `.mcp.json` is the equivalent project-root configuration. Restart Claude Desktop after saving the config. The Python process loads `backend/.env` for the database URL; `VIMJ_MCP_ADMIN_EMAIL` may be supplied by the MCP config or `backend/.env`.
+The root `.mcp.json` is the equivalent project-root configuration for Claude Code. For Claude Desktop, use absolute paths in its config and replace the example email with your own active Admin email. Restart Claude Desktop after saving. The Python process loads `backend/.env` for the database URL; `VIMJ_MCP_ADMIN_EMAIL` may be supplied by the MCP config or `backend/.env`. Do not commit real database URLs, passwords, or personal Admin configuration.
 
 ## Admin-only tools
 

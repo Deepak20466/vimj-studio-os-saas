@@ -67,14 +67,14 @@ export default function Login() {
       <div className="login-card">
         <img
           src="/logo.jpeg"
-          alt="VIMJ Studio"
+          alt="VIMJ Studio OS SaaS"
           className="login-logo"
           onError={(e) => {
             e.currentTarget.style.display = "none";
           }}
         />
-        <h1>VIMJ Studio</h1>
-        <p className="subtitle">Attendance Management System</p>
+        <h1>VIMJ Studio OS</h1>
+        <p className="subtitle">Studio Operations SaaS</p>
 
         {mode === "login" && (
           <form onSubmit={handleLogin}>

@@ -1,7 +1,8 @@
-# VIMJ Studio Attendance Dashboard (React)
+# VIMJ Studio OS SaaS — Web Dashboard (React)
 
-Admin-only web dashboard: students, coaches, activities/classes, attendance oversight,
-leave approvals, fee tracking, and business analytics with charts + PDF/CSV export.
+The web app has separate protected Admin and Coach dashboards. Admins manage students,
+coaches, activities, attendance, leave, fees, reports, and Admin-only AI insights. Coaches
+use their own student and attendance workflows and do not receive revenue forecasts.
 
 ## Development
 
@@ -10,7 +11,7 @@ npm install
 npm run dev
 ```
 
-Runs on `http://localhost:5173` and proxies `/api/*` to the FastAPI backend at
+Runs on `http://localhost:5173` and proxies `/api/*` to FastAPI at
 `http://localhost:8000` (see `vite.config.js`). Start the backend first.
 
 ## Production build
@@ -19,11 +20,11 @@ Runs on `http://localhost:5173` and proxies `/api/*` to the FastAPI backend at
 npm run build
 ```
 
-Outputs static files to `dist/`, served by Nginx alongside the FastAPI reverse proxy
-(see `backend/nginx.conf.example`).
+Outputs static files to `dist/`. The deployed React app runs on Google Cloud Run;
+see [the architecture guide](../docs/ARCHITECTURE.md).
 
-## Notes
+## Role access
 
-- Coaches and students are not granted access to this dashboard — they use the React
-  Native mobile app. Logging in here with a non-admin account shows a redirect message.
-- Brand colors: `#0000FF` (primary) / `#F0F8FF` (light accent), defined in `src/theme/theme.css`.
+- The Admin dashboard is protected by the Admin role.
+- Coaches are routed to `/coach` and keep a separate student and attendance view.
+- Students do not receive logins.
