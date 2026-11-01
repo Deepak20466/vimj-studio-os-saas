@@ -42,9 +42,12 @@ Install `backend/requirements.txt` for FastAPI and `mcp_server/requirements.txt`
 `GET /health` is a lightweight liveness route and intentionally does not depend
 on PostgreSQL. `GET /health/ready` runs a read-only `SELECT 1` and is used by
 the scheduled [Supabase activity workflow](../.github/workflows/supabase-keepalive.yml)
-every ten minutes. The workflow helps keep a Supabase Free project active and
-reduces Cloud Run idle time; if the project is already paused, an owner must
-restore it in Supabase first.
+every ten minutes. Its readiness probe reads an existing application user row,
+so it produces database activity without modifying studio data. This is a
+best-effort keepalive for Supabase Free, not a guarantee: Supabase's inactivity
+policy can still pause Free projects, and only a paid Supabase plan guarantees
+no inactivity pauses. A paused project must first be restored by its owner in
+the Supabase dashboard.
 
 The API defaults to one Gunicorn worker on Cloud Run's 1-vCPU instance. This
 reduces memory pressure and ensures the in-process scheduler is not started

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/api_client.dart';
@@ -14,7 +16,8 @@ class AdminDashboardTab extends StatefulWidget {
   State<AdminDashboardTab> createState() => _AdminDashboardTabState();
 }
 
-class _AdminDashboardTabState extends State<AdminDashboardTab> {
+class _AdminDashboardTabState extends State<AdminDashboardTab>
+    with WidgetsBindingObserver {
   bool _loading = false;
   bool _insightsLoaded = false;
   bool _insightsFailed = false;
@@ -23,7 +26,12 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
   bool _revenueFailed = false;
   bool _revenueLoading = false;
   bool _sendingReminders = false;
+  bool _insightsRefreshing = false;
   Map<String, dynamic>? _insights;
+  Map<String, double>? _insightChange;
+  DateTime? _insightsUpdatedAt;
+  Timer? _insightsTimer;
+  String _insightFocus = 'risk';
   List<dynamic> _missing = [];
   String _revenuePeriod = 'month';
   DateTime _revenueMonth = DateTime.now();
@@ -39,10 +47,73 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
   String _money(dynamic value) =>
       'Rs ${(value is num ? value : double.tryParse('$value') ?? 0).toStringAsFixed(2)}';
 
+  String _deltaDescription(double? value) {
+    if (value == null || value == 0) return 'unchanged';
+    final direction = value > 0 ? 'up' : 'down';
+    return '$direction ${_money(value.abs())}';
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+    _insightsTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted && !_insightsRefreshing &&
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        _refreshInsights();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _insightsTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _insights != null) {
+      _refreshInsights();
+    }
+  }
+
+  Future<void> _refreshInsights() async {
+    if (_insightsRefreshing || _loading) return;
+    if (mounted) setState(() => _insightsRefreshing = true);
+    try {
+      final next = await ApiClient.instance.get('/insights/revenue-risk')
+          as Map<String, dynamic>;
+      if (!mounted) return;
+      final previous = _insights;
+      setState(() {
+        if (previous != null) {
+          _insightChange = {
+            'risk': _metric(next, 'summary', 'total_at_risk') -
+                _metric(previous, 'summary', 'total_at_risk'),
+            'forecast': _metric(next, 'forecast', 'next_month_revenue') -
+                _metric(previous, 'forecast', 'next_month_revenue'),
+          };
+        }
+        _insights = next;
+        _insightsUpdatedAt = DateTime.now();
+        _insightsFailed = false;
+        _insightsLoaded = true;
+      });
+    } catch (_) {
+      // Keep the last good dashboard snapshot visible until the next refresh.
+    } finally {
+      if (mounted) setState(() => _insightsRefreshing = false);
+    }
+  }
+
+  double _metric(Map<String, dynamic> root, String group, String key) {
+    final values = root[group];
+    if (values is! Map<String, dynamic>) return 0;
+    final value = values[key];
+    return value is num ? value.toDouble() : double.tryParse('$value') ?? 0;
   }
 
   Future<void> _load() async {
@@ -88,7 +159,20 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
       await Future.wait([
         loadPart(
           ApiClient.instance.get('/insights/revenue-risk'),
-          (v) async => _insights = v as Map<String, dynamic>,
+          (v) async {
+            final next = v as Map<String, dynamic>;
+            final previous = _insights;
+            if (previous != null) {
+              _insightChange = {
+                'risk': _metric(next, 'summary', 'total_at_risk') -
+                    _metric(previous, 'summary', 'total_at_risk'),
+                'forecast': _metric(next, 'forecast', 'next_month_revenue') -
+                    _metric(previous, 'forecast', 'next_month_revenue'),
+              };
+            }
+            _insights = next;
+            _insightsUpdatedAt = DateTime.now();
+          },
           () => _insightsLoaded = true,
           () => _insightsFailed = true,
         ),
@@ -204,6 +288,7 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
         content: Text('$queued of ${feeIds.length} fee reminder(s) queued.'),
       ),
     );
+    if (queued > 0) _refreshInsights();
   }
 
   Widget _sectionCard({required String title, required Widget child}) => Card(
@@ -349,7 +434,16 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
         child: Center(child: Text('No batch analytics available yet.')),
       );
     }
-    final maxProfit = batches.fold<double>(0, (maxValue, value) {
+    final sortedBatches = [...batches]
+      ..sort((a, b) =>
+          (((b as Map<String, dynamic>)['estimated_profit'] as num?)
+                  ?.toDouble() ??
+              0)
+              .compareTo(
+                  ((a as Map<String, dynamic>)['estimated_profit'] as num?)
+                          ?.toDouble() ??
+                      0));
+    final maxProfit = sortedBatches.fold<double>(0, (maxValue, value) {
       final row = value as Map<String, dynamic>;
       final profit = (row['estimated_profit'] as num?)?.toDouble() ?? 0;
       return profit > maxValue ? profit : maxValue;
@@ -363,18 +457,18 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
           children: [
             _ChartLegend(
               color: AppColors.brandOrange,
-              label: 'Estimated profit',
+              label: 'Estimated revenue share',
             ),
             _ChartLegend(color: AppColors.success, label: 'Attendance'),
           ],
         ),
         const SizedBox(height: 4),
         const Text(
-          'Estimated from enrolled monthly fees per active batch.',
+          'Estimated monthly revenue share from enrolled fees; expense data is not stored.',
           style: TextStyle(fontSize: 11, color: AppColors.textMuted),
         ),
         const SizedBox(height: 12),
-        for (final value in batches) ...[
+        for (final value in sortedBatches) ...[
           _BatchMetricBars(
             row: value as Map<String, dynamic>,
             maxProfit: maxProfit,
@@ -402,21 +496,33 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
         ? insights['batch_analytics'] as Map<String, dynamic>
         : <String, dynamic>{};
     final risks = insights['risks'] as List<dynamic>? ?? [];
+    final riskCandidates = risks
+        .where((risk) => (risk as Map<String, dynamic>)['type'] != 'revenue_forecast')
+        .map((risk) => risk as Map<String, dynamic>)
+        .toList()
+      ..sort((a, b) =>
+          ((b['revenue_at_risk'] as num?)?.toDouble() ?? 0).compareTo(
+              (a['revenue_at_risk'] as num?)?.toDouble() ?? 0));
+    final topRisk = riskCandidates.isEmpty ? null : riskCandidates.first;
+    final mostProfit = batchAnalytics['most_profitable_batch'] is Map<String, dynamic>
+        ? batchAnalytics['most_profitable_batch'] as Map<String, dynamic>
+        : null;
     final batches = batchAnalytics['batches'] as List<dynamic>? ?? [];
     final totalAtRisk = (summary['total_at_risk'] as num?)?.toDouble() ?? 0;
     final predictedRevenue =
         (forecast['next_month_revenue'] as num?)?.toDouble() ?? 0;
-    final currentRevenue =
-        (_revenue?['total_revenue'] as num?)?.toDouble() ?? 0;
-    final showTrend = _revenuePeriod == 'month' && _revenue != null;
-    final forecastTrend = !showTrend
+    final forecastDelta = _insightChange?['forecast'];
+    final riskDelta = _insightChange?['risk'];
+    final forecastTrend = forecastDelta == null
         ? Icons.trending_flat
-        : predictedRevenue >= currentRevenue
+        : forecastDelta > 0
         ? Icons.trending_up
-        : Icons.trending_down;
-    final forecastTrendColor = !showTrend
+        : forecastDelta < 0
+        ? Icons.trending_down
+        : Icons.trending_flat;
+    final forecastTrendColor = forecastDelta == null || forecastDelta == 0
         ? AppColors.textMuted
-        : predictedRevenue >= currentRevenue
+        : forecastDelta > 0
         ? AppColors.success
         : AppColors.danger;
 
@@ -426,6 +532,28 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
         padding: const EdgeInsets.all(16),
         children: [
           if (_loading) const LinearProgressIndicator(),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Admin AI Command Center',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+              ),
+              if (_insightsUpdatedAt != null)
+                Text(
+                  TimeOfDay.fromDateTime(_insightsUpdatedAt!).format(context),
+                  style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                ),
+              IconButton(
+                tooltip: 'Refresh live insights',
+                onPressed: _insightsRefreshing ? null : _refreshInsights,
+                icon: _insightsRefreshing
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.refresh),
+              ),
+            ],
+          ),
           if (_insightsFailed && _insights == null)
             Card(
               child: ListTile(
@@ -467,28 +595,71 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
           ),
           const SizedBox(height: 18),
           _sectionCard(
-            title: '⚠️ AI Revenue Risk',
-            child: _insightsFailed && _insights == null
-                ? const Text('Unable to load insights. Pull down to retry.')
-                : !_insightsLoaded
-                ? const Center(
+            title: 'AI Command Center',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    ChoiceChip(
+                      label: const Text('Most Risk'),
+                      selected: _insightFocus == 'risk',
+                      onSelected: (_) => setState(() => _insightFocus = 'risk'),
+                    ),
+                    ChoiceChip(
+                      label: const Text('Most Profit'),
+                      selected: _insightFocus == 'profit',
+                      onSelected: (_) => setState(() => _insightFocus = 'profit'),
+                    ),
+                    ChoiceChip(
+                      label: const Text('Future Forecast'),
+                      selected: _insightFocus == 'forecast',
+                      onSelected: (_) => setState(() => _insightFocus = 'forecast'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                if (_insightsFailed && _insights == null)
+                  const Text('Unable to load insights. Pull down to retry.')
+                else if (!_insightsLoaded)
+                  const Center(
                     child: Padding(
                       padding: EdgeInsets.all(20),
                       child: CircularProgressIndicator(),
                     ),
                   )
-                : risks.isEmpty
-                ? const Text('No risk predictions are available.')
-                : Column(
-                    children: [
-                      for (final risk in risks)
-                        _riskItem(risk as Map<String, dynamic>),
-                    ],
+                else if (_insightFocus == 'risk')
+                  topRisk == null
+                      ? const Text('No active risk signals.')
+                      : _riskItem(topRisk)
+                else if (_insightFocus == 'profit')
+                  mostProfit == null
+                      ? const Text('No active batches are available for comparison.')
+                      : ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const CircleAvatar(child: Icon(Icons.emoji_events_outlined)),
+                          title: Text('${mostProfit['batch_name'] ?? 'Top batch'}'),
+                          subtitle: Text('Highest estimated monthly revenue share / ${mostProfit['attendance_pct'] ?? 0}% attendance'),
+                          trailing: Text(
+                            _money(mostProfit['estimated_profit']),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        )
+                else
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const CircleAvatar(child: Icon(Icons.auto_graph)),
+                    title: Text('Predicted: ${_money(predictedRevenue)}'),
+                    subtitle: const Text('Average of the last three monthly collections.'),
                   ),
+              ],
+            ),
           ),
           const SizedBox(height: 12),
           _sectionCard(
-            title: '📈 AI Forecast',
+            title: 'AI Forecast',
             child: _insightsFailed && _insights == null
                 ? const Text('Unable to load insights. Pull down to retry.')
                 : !_insightsLoaded
@@ -511,20 +682,24 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
                           ),
                         ],
                       ),
+                      if (_insightChange != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            'Forecast ${_deltaDescription(forecastDelta)} since last update',
+                            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                          ),
+                        ),
                       const SizedBox(height: 8),
                       Text(
-                        'At Risk: ${_money(totalAtRisk)}',
+                        'At Risk: ${_money(totalAtRisk)}${riskDelta == null ? '' : ' / ${_deltaDescription(riskDelta)} since refresh'}',
                         style: TextStyle(
-                          color: totalAtRisk > 0
-                              ? AppColors.danger
-                              : AppColors.textMuted,
+                          color: totalAtRisk > 0 ? AppColors.danger : AppColors.textMuted,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: 4),
-                      const Text(
-                        'Local rule-based estimate from recent collections.',
-                      ),
+                      const Text('Local rule-based forecast; updates every 30 seconds while the app is open.'),
                     ],
                   ),
           ),

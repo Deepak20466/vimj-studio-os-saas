@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, patch
 from sqlalchemy.pool import NullPool, QueuePool
 
 from app import database
+from app.main import database_readiness_check
+from app.models.user import User
 
 
 class DatabaseConnectionTests(unittest.TestCase):
@@ -66,6 +68,15 @@ class DatabaseConnectionTests(unittest.TestCase):
                 dependency.throw(RuntimeError("request failed"))
 
         session.close.assert_called_once_with()
+
+    def test_readiness_probe_queries_an_application_table(self):
+        db = MagicMock()
+        db.query.return_value.order_by.return_value.limit.return_value.first.return_value = None
+
+        result = database_readiness_check(db)
+
+        self.assertEqual(result, {"status": "ok", "database": "ok"})
+        db.query.assert_called_once_with(User.id)
 
 
 if __name__ == "__main__":

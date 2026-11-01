@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/AuthContext";
 import { CoachSelfAPI, ActivitiesAPI } from "../../api/endpoints";
@@ -22,27 +22,43 @@ export default function CoachDashboard() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [pendingStatus, setPendingStatus] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const loadVersion = useRef(0);
 
-  const load = (silent) => {
+  const load = useCallback(async (silent = false) => {
+    const version = ++loadVersion.current;
     if (!silent) setLoading(true);
+    setLoadError(null);
     const today = todayStr();
-    Promise.all([CoachSelfAPI.myClasses(today), CoachSelfAPI.myAttendance(user.id, { date_from: today, date_to: today }), ActivitiesAPI.list()])
-      .then(([classesRes, attendanceRes, activitiesRes]) => {
-        setClasses(classesRes.data);
-        const today = attendanceRes.data[0];
-        setTodayAttendance(today || null);
-        setActivityNames(Object.fromEntries(activitiesRes.data.map((a) => [a.id, a.name])));
-        Promise.all(classesRes.data.map((c) => CoachSelfAPI.classSummary(c.id).then((r) => [c.id, r.data])))
-          .then((pairs) => setSummaries(Object.fromEntries(pairs)))
-          .catch(() => {});
-      })
-      .catch((err) => {
-        if (!silent) toast.error(err.response?.data?.detail || "Failed to load dashboard");
-      })
-      .finally(() => {
-        if (!silent) setLoading(false);
-      });
-  };
+    const results = await Promise.allSettled([
+      CoachSelfAPI.myClasses(today),
+      user?.id ? CoachSelfAPI.myAttendance(user.id, { date_from: today, date_to: today }) : Promise.resolve({ data: [] }),
+      ActivitiesAPI.list(),
+    ]);
+    if (version !== loadVersion.current) return;
+
+    const [classesResult, attendanceResult, activitiesResult] = results;
+    if (classesResult.status === "fulfilled") {
+      const nextClasses = classesResult.value.data || [];
+      setClasses(nextClasses);
+      const summaries = await Promise.allSettled(nextClasses.map((c) => CoachSelfAPI.classSummary(c.id)));
+      if (version !== loadVersion.current) return;
+      setSummaries(Object.fromEntries(summaries.flatMap((result, index) => (
+        result.status === "fulfilled" ? [[nextClasses[index].id, result.value.data]] : []
+      ))));
+    } else {
+      setLoadError(classesResult.reason?.response?.data?.detail || "Could not load today's classes. Please refresh.");
+    }
+    if (attendanceResult.status === "fulfilled") {
+      setTodayAttendance(attendanceResult.value.data?.[0] || null);
+    } else if (classesResult.status === "fulfilled") {
+      setLoadError(attendanceResult.reason?.response?.data?.detail || "Classes loaded, but today's attendance could not be checked.");
+    }
+    if (activitiesResult.status === "fulfilled") {
+      setActivityNames(Object.fromEntries((activitiesResult.value.data || []).map((a) => [a.id, a.name])));
+    }
+    if (version === loadVersion.current) setLoading(false);
+  }, [user?.id]);
 
   useEffect(() => {
     load(false);
@@ -50,7 +66,7 @@ export default function CoachDashboard() {
     const interval = setInterval(() => load(true), POLL_MS);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [load]);
 
   const submitMyAttendance = async () => {
     if (!pendingStatus) return;
@@ -73,7 +89,10 @@ export default function CoachDashboard() {
     <div>
       <div className="page-header">
         <h1>Welcome, {user?.name}</h1>
+        <button className="btn btn-secondary btn-sm" onClick={() => load(false)}>Refresh</button>
       </div>
+
+      {loadError && <div className="card" role="status"><span>{loadError}</span> <button className="btn btn-secondary btn-sm" onClick={() => load(false)}>Try again</button></div>}
 
       <div className="card">
         <h3 style={{ marginTop: 0 }}>My Attendance Today</h3>

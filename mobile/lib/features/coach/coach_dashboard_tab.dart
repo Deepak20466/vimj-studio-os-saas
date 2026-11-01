@@ -125,11 +125,16 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
     }
     try {
       final attendance = await ApiClient.instance
-          .get('/coaches/${session.userId}/attendance') as List;
+          .get('/coaches/${session.userId}/attendance', query: {
+            'date_from': today,
+            'date_to': today,
+          }) as List;
       Map<String, dynamic>? todayRecord;
       for (final e in attendance) {
         final a = e as Map<String, dynamic>;
-        if ((a['date'] as String).substring(0, 10) == today) {
+        final recordDate = a['date'] as String?;
+        if (recordDate != null && recordDate.length >= 10 &&
+            recordDate.substring(0, 10) == today) {
           todayRecord = a;
           break;
         }

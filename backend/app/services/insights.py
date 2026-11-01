@@ -92,18 +92,18 @@ def batch_analytics(db: Session, today: date | None = None) -> dict:
         active_counts[batch.activity_id] = active_counts.get(batch.activity_id, 0) + 1
 
     batch_ids = [batch.id for batch in batches]
-    sessions_by_batch: dict[int, list[ClassSession]] = {}
+    sessions_by_batch: dict[int, list[tuple[int, date]]] = {}
     attendance_rate_by_session: dict[int, float] = {}
     if batch_ids:
         sessions = (
-            db.query(ClassSession)
+            db.query(ClassSession.id, ClassSession.batch_id, ClassSession.date)
             .filter(ClassSession.batch_id.in_(batch_ids), ClassSession.date <= today)
             .order_by(ClassSession.date.desc(), ClassSession.start_time.desc())
             .all()
         )
-        session_ids = [class_session.id for class_session in sessions]
-        for class_session in sessions:
-            sessions_by_batch.setdefault(class_session.batch_id, []).append(class_session)
+        session_ids = [class_session_id for class_session_id, _, _ in sessions]
+        for class_session_id, batch_id, session_date in sessions:
+            sessions_by_batch.setdefault(batch_id, []).append((class_session_id, session_date))
 
         if session_ids:
             attendance_counts = (
@@ -138,10 +138,10 @@ def batch_analytics(db: Session, today: date | None = None) -> dict:
             continue
         name = f"{activity.name} · {batch.session_period.value.title()}"
         rates_by_session = []
-        for class_session in sessions_by_batch.get(batch.id, []):
-            rate = attendance_rate_by_session.get(class_session.id)
+        for class_session_id, session_date in sessions_by_batch.get(batch.id, []):
+            rate = attendance_rate_by_session.get(class_session_id)
             if rate is not None:
-                rates_by_session.append((class_session.date, rate))
+                rates_by_session.append((session_date, rate))
         rates_by_session.sort(key=lambda item: item[0])
 
         recent_rates = [rate for _, rate in rates_by_session[-3:]]

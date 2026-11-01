@@ -3,8 +3,9 @@ name: Supabase database activity check
 on:
   schedule:
     # Supabase Free pauses after a week with too little database activity.
-    # Every ten minutes keeps database activity recent and reduces Cloud Run
-    # idle scale-to-zero delays while the public-repository runner stays free.
+    # The API probe reads a real application table (not only SELECT 1) every
+    # ten minutes. This is a best-effort activity signal; only a paid Supabase
+    # plan can guarantee that the platform will never pause the project.
     - cron: '*/10 * * * *'
   workflow_dispatch:
 

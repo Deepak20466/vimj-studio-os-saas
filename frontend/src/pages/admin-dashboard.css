@@ -19,6 +19,20 @@
   font-size: 0.88rem;
 }
 
+.ai-center-header {
+  align-items: center;
+  gap: 16px;
+}
+
+.ai-refresh-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
 .ai-kpi-grid {
   margin-bottom: 0;
 }
@@ -63,6 +77,77 @@
   color: var(--brand-orange-dark);
   font-size: 0.7rem;
   font-weight: 700;
+}
+
+.ai-focus-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ai-focus-tabs button {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  padding: 8px 12px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 650;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.ai-focus-tabs button.active {
+  color: #fff;
+  border-color: var(--brand-orange-dark);
+  background: var(--brand-orange-dark);
+}
+
+.ai-featured-insight {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-height: 112px;
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--brand-light) 44%, var(--surface));
+}
+
+.ai-insight-icon {
+  display: grid;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--brand-orange-dark);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.ai-featured-insight > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ai-featured-insight p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.ai-featured-insight b {
+  color: var(--brand-orange-dark);
+  font-size: 0.88rem;
 }
 
 .ai-risk-list {
@@ -145,6 +230,25 @@
   background: #dcfce7;
 }
 
+.ai-forecast-arrow.down {
+  color: #dc2626;
+  background: #fee2e2;
+}
+
+.ai-forecast-arrow.flat {
+  color: #64748b;
+  background: #f1f5f9;
+}
+
+.ai-forecast-primary small,
+.ai-forecast-at-risk small {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
 .ai-forecast-primary > div {
   display: flex;
   flex-direction: column;
@@ -191,5 +295,21 @@
 @media (min-width: 800px) {
   .ai-card-grid {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .ai-center-header,
+  .ai-refresh-controls {
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .ai-refresh-controls {
+    width: 100%;
+  }
+
+  .ai-focus-tabs button {
+    flex: 1 1 auto;
   }
 }

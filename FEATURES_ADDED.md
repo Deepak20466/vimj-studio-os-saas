@@ -8,6 +8,14 @@
 - Admin manual fee reminders now return a mock queued status and do not call Twilio. Batch profitability is estimated from activity tuition because the schema contains no batch expenses.
 - No migration or paid AI API was added. Salary, GPS, Chat, and Compliance remain out of scope.
 - Setup: `mcp_server/README.md`; architecture: `docs/ARCHITECTURE.md`.
+
+## 2026-11-01 follow-up — live Admin insights and dashboard fixes
+
+- Admin web and Flutter dashboards now let Admins focus on the highest revenue risk, highest estimated revenue-share batch, or next-month forecast. Insights refresh every 30 seconds while in use; the displayed arrows show the change since the previous snapshot. This remains Admin-only.
+- The Admin batch chart sorts highest estimated revenue share first and explains that expenses are not stored, so it cannot report net profit.
+- Coach web dashboard now keeps class rows visible when an individual summary request fails, ignores stale overlapping refresh results, and exposes a retry action. Coach mobile fetches only today's facility-attendance record instead of downloading full history.
+- The Supabase readiness probe reads an existing `users` table row so scheduled health checks generate actual application-table database activity without modifying studio data. Supabase Free can still pause inactive projects under its platform policy; paid Supabase plans are the only guaranteed no-pause option.
+- Mobile release target: `1.26.35+71`.
 This document maps each of the 11 requested features to exactly where it was implemented, for the existing VIMJ Studio Attendance Management System (FastAPI + PostgreSQL backend, React admin/coach web dashboard). Per the confirmed scope, all of this is **web-only** (React admin + the existing React coach pages) — the separate Flutter mobile app is untouched except for two pre-existing broken-asset-path bugs fixed under 1.3.
 
 Every new endpoint follows the codebase's existing conventions (role-guarded via `Depends(require_admin/require_coach/...)`, `log_action(...)` audit entries before every commit, `notify()` for SMS/WhatsApp — all best-effort/no-op in dev unless Twilio env vars are set).
