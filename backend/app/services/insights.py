@@ -3,7 +3,7 @@
 from datetime import date, timedelta
 from decimal import Decimal
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.models.activity import Activity
@@ -91,6 +91,45 @@ def batch_analytics(db: Session, today: date | None = None) -> dict:
     for batch in batches:
         active_counts[batch.activity_id] = active_counts.get(batch.activity_id, 0) + 1
 
+    batch_ids = [batch.id for batch in batches]
+    sessions_by_batch: dict[int, list[ClassSession]] = {}
+    attendance_rate_by_session: dict[int, float] = {}
+    if batch_ids:
+        sessions = (
+            db.query(ClassSession)
+            .filter(ClassSession.batch_id.in_(batch_ids), ClassSession.date <= today)
+            .order_by(ClassSession.date.desc(), ClassSession.start_time.desc())
+            .all()
+        )
+        session_ids = [class_session.id for class_session in sessions]
+        for class_session in sessions:
+            sessions_by_batch.setdefault(class_session.batch_id, []).append(class_session)
+
+        if session_ids:
+            attendance_counts = (
+                db.query(
+                    StudentAttendance.class_id,
+                    func.count(StudentAttendance.id),
+                    func.sum(
+                        case(
+                            (StudentAttendance.status == AttendanceStatus.PRESENT, 1),
+                            else_=0,
+                        )
+                    ),
+                )
+                .filter(
+                    StudentAttendance.class_id.in_(session_ids),
+                    StudentAttendance.status != AttendanceStatus.NOT_CONFIRM,
+                )
+                .group_by(StudentAttendance.class_id)
+                .all()
+            )
+            attendance_rate_by_session = {
+                class_id: present_count / record_count * 100
+                for class_id, record_count, present_count in attendance_counts
+                if record_count
+            }
+
     rows: list[dict] = []
     drop_rows: list[dict] = []
     for batch in batches:
@@ -98,15 +137,9 @@ def batch_analytics(db: Session, today: date | None = None) -> dict:
         if activity is None:
             continue
         name = f"{activity.name} · {batch.session_period.value.title()}"
-        sessions = (
-            db.query(ClassSession)
-            .filter(ClassSession.batch_id == batch.id, ClassSession.date <= today)
-            .order_by(ClassSession.date.desc(), ClassSession.start_time.desc())
-            .all()
-        )
         rates_by_session = []
-        for class_session in sessions:
-            rate = _batch_attendance_rate(db, class_session)
+        for class_session in sessions_by_batch.get(batch.id, []):
+            rate = attendance_rate_by_session.get(class_session.id)
             if rate is not None:
                 rates_by_session.append((class_session.date, rate))
         rates_by_session.sort(key=lambda item: item[0])
