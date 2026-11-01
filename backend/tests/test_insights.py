@@ -155,8 +155,10 @@ class InsightsTests(unittest.TestCase):
         self.assertEqual(len(payload["risks"]), 3)
         self.assertEqual(payload["risks"][0]["type"], "fee_default")
         self.assertEqual(payload["risks"][0]["student_ids"], [self.students[10].id])
+        self.assertEqual(payload["risks"][0]["students"][0]["student_name"], "Student 10")
         self.assertEqual(payload["summary"]["total_at_risk"], 4250.0)
         self.assertEqual(payload["forecast"]["next_month_revenue"], 100.0)
+        self.assertEqual([row["collected"] for row in payload["forecast"]["monthly_collections"]], [100.0, 100.0, 100.0])
         self.assertEqual(payload["kpis"]["total_students"], 11)
         self.assertEqual(payload["batch_analytics"]["attendance_drop_batches"][0]["batch_id"], self.batch.id)
 

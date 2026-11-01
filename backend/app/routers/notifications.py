@@ -1,13 +1,47 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.notification import Notification
-from app.models.user import User
+from app.models.notification import Notification, PushDeviceToken
+from app.models.user import User, UserRole
 from app.schemas.notification import NotificationListResponse, NotificationOut
 from app.security import get_current_user
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
+
+
+class DeviceTokenIn(BaseModel):
+    token: str = Field(min_length=20, max_length=512)
+    platform: str = Field(default="android", pattern="^(android|ios)$")
+
+
+class DeviceTokenRemoveIn(BaseModel):
+    token: str = Field(min_length=20, max_length=512)
+
+
+@router.post("/device-token")
+def register_device_token(payload: DeviceTokenIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if current_user.role not in (UserRole.ADMIN, UserRole.COACH):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Device notifications are unavailable for this role")
+    device = db.query(PushDeviceToken).filter(PushDeviceToken.token == payload.token).first()
+    if device:
+        device.user_id = current_user.id
+        device.platform = payload.platform
+    else:
+        db.add(PushDeviceToken(user_id=current_user.id, token=payload.token, platform=payload.platform))
+    db.commit()
+    return {"status": "registered"}
+
+
+@router.post("/device-token/remove")
+def unregister_device_token(payload: DeviceTokenRemoveIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    db.query(PushDeviceToken).filter(
+        PushDeviceToken.user_id == current_user.id,
+        PushDeviceToken.token == payload.token,
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"status": "removed"}
 
 
 @router.get("", response_model=NotificationListResponse)

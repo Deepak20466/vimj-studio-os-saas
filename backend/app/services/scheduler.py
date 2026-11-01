@@ -1,10 +1,14 @@
-import logging
-from datetime import date, datetime, timedelta
+﻿import logging
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
+from sqlalchemy.pool import NullPool
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.interval import IntervalTrigger
 
+from app.config import settings
 from app.database import SessionLocal
 from app.models.attendance import CoachAttendance, CoachAttendanceStatus, StudentAttendance
 from app.models.batch import Batch
@@ -17,16 +21,98 @@ from app.services.notifications import notify, notify_and_push, fee_reminder_mes
 
 logger = logging.getLogger("vimj.scheduler")
 
-scheduler = BackgroundScheduler(timezone="UTC")
+scheduler = BackgroundScheduler(timezone=ZoneInfo("Asia/Kolkata"))
+SCHEDULER_TIMEZONE = ZoneInfo("Asia/Kolkata")
+_SCHEDULER_OWNER_LOCK_KEY = 0x56494D4A
+_scheduler_owner_engine = None
+_scheduler_owner_connection = None
 
 BATCH_AUTO_GENERATE_DAYS_AHEAD = 30
 
 
-def job_monthly_fee_reminders():
+def _local_now(value: datetime | None = None) -> datetime:
+    """Return an aware local time for schedule calculations and class windows."""
+    if value is None:
+        return datetime.now(SCHEDULER_TIMEZONE)
+    if value.tzinfo is None:
+        return value.replace(tzinfo=SCHEDULER_TIMEZONE)
+    return value.astimezone(SCHEDULER_TIMEZONE)
+
+
+def _class_datetime(class_date: date, class_time) -> datetime:
+    return datetime.combine(class_date, class_time).replace(tzinfo=SCHEDULER_TIMEZONE)
+
+
+def _scheduler_lock_url(database_url: str):
+    url = make_url(database_url)
+    if url.get_backend_name() != "postgresql":
+        raise RuntimeError("The production scheduler requires PostgreSQL advisory locks")
+    if (url.host or "").lower().endswith(".pooler.supabase.com"):
+        if (url.port or 5432) == 6543:
+            url = url.set(port=5432)
+        elif (url.port or 5432) != 5432:
+            raise RuntimeError("The Supabase scheduler lock must use the session pooler on port 5432")
+    return url
+
+
+def _acquire_scheduler_owner_lock() -> bool:
+    """Hold one PostgreSQL session advisory lock across this scheduler process.
+
+    Cloud Run can briefly run old and new revisions during a rollout. The
+    session-pooler connection keeps one revision as the sole scheduler owner;
+    the API's ordinary requests continue using the transaction pooler.
+    """
+    global _scheduler_owner_engine, _scheduler_owner_connection
+    url = _scheduler_lock_url(settings.DATABASE_URL)
+    engine = create_engine(
+        url.render_as_string(hide_password=False),
+        poolclass=NullPool,
+        connect_args={"connect_timeout": 10},
+    )
+    connection = engine.connect()
+    acquired = bool(
+        connection.execute(
+            text("SELECT pg_try_advisory_lock(:lock_key)"),
+            {"lock_key": _SCHEDULER_OWNER_LOCK_KEY},
+        ).scalar()
+    )
+    connection.commit()
+    if not acquired:
+        connection.close()
+        engine.dispose()
+        return False
+    _scheduler_owner_engine = engine
+    _scheduler_owner_connection = connection
+    return True
+
+
+def _release_scheduler_owner_lock() -> None:
+    global _scheduler_owner_engine, _scheduler_owner_connection
+    connection = _scheduler_owner_connection
+    engine = _scheduler_owner_engine
+    _scheduler_owner_connection = None
+    _scheduler_owner_engine = None
+    if connection is not None:
+        try:
+            connection.execute(
+                text("SELECT pg_advisory_unlock(:lock_key)"),
+                {"lock_key": _SCHEDULER_OWNER_LOCK_KEY},
+            )
+            connection.commit()
+        finally:
+            connection.close()
+    if engine is not None:
+        engine.dispose()
+
+
+def job_monthly_fee_reminders(now: datetime | None = None):
     """Runs on the 10th of every month: notify students with unpaid fees for the current period."""
+    if not settings.NOTIFICATIONS_ENABLED:
+        logger.info("Monthly fee reminders skipped because external notifications are disabled")
+        return
     db = SessionLocal()
     try:
-        today = date.today()
+        today = _local_now(now).date()
         fees = (
             db.query(StudentFee)
             .filter(
@@ -42,18 +128,18 @@ def job_monthly_fee_reminders():
                 continue
             message = fee_reminder_message(student.name, fee.month, fee.year, fee.amount, fee.due_date)
             notify(student.phone, message)
-            fee.reminder_sent_at = datetime.utcnow()
+            fee.reminder_sent_at = datetime.now(timezone.utc)
         db.commit()
         logger.info("Sent %d fee reminders", len(fees))
     finally:
         db.close()
 
 
-def job_mark_overdue_fees():
+def job_mark_overdue_fees(now: datetime | None = None):
     """Daily: flip UNPAID fees whose due date has passed into OVERDUE."""
     db = SessionLocal()
     try:
-        today = date.today()
+        today = _local_now(now).date()
         updated = (
             db.query(StudentFee)
             .filter(StudentFee.status == FeeStatus.UNPAID, StudentFee.due_date < today)
@@ -65,11 +151,11 @@ def job_mark_overdue_fees():
         db.close()
 
 
-def job_coach_attendance_reminders():
+def job_coach_attendance_reminders(now: datetime | None = None):
     """Runs every minute: reminds coaches 15 min after class end if attendance isn't marked yet."""
     db = SessionLocal()
     try:
-        now = datetime.now()
+        now = _local_now(now)
         window_start = now - timedelta(minutes=16)
         window_end = now - timedelta(minutes=15)
 
@@ -79,8 +165,8 @@ def job_coach_attendance_reminders():
             .all()
         )
         for cls in classes:
-            class_end_dt = datetime.combine(cls.date, cls.end_time)
-            if not (window_start <= class_end_dt <= window_end):
+            class_end_dt = _class_datetime(cls.date, cls.end_time)
+            if not (window_start < class_end_dt <= window_end):
                 continue
 
             enrolled_count = (
@@ -110,18 +196,18 @@ def job_coach_attendance_reminders():
         db.close()
 
 
-def job_pre_session_attendance_reminder():
+def job_pre_session_attendance_reminder(now: datetime | None = None):
     """Runs every minute: 5 min before a class starts, nudges the coach that attendance
     marking for this session is coming up (bell + SMS/WhatsApp on both dashboards)."""
     db = SessionLocal()
     try:
-        now = datetime.now()
+        now = _local_now(now)
         window_start = now + timedelta(minutes=5)
         window_end = now + timedelta(minutes=6)
 
         classes = db.query(ClassSession).filter(ClassSession.date == now.date()).all()
         for cls in classes:
-            class_start_dt = datetime.combine(cls.date, cls.start_time)
+            class_start_dt = _class_datetime(cls.date, cls.start_time)
             if not (window_start <= class_start_dt < window_end):
                 continue
             coach = db.query(User).filter(User.id == cls.coach_id).first()
@@ -141,17 +227,17 @@ def job_pre_session_attendance_reminder():
         db.close()
 
 
-def job_coach_before_class_reminder():
+def job_coach_before_class_reminder(now: datetime | None = None):
     """Runs every minute: reminds coaches 10 min before their class starts."""
     db = SessionLocal()
     try:
-        now = datetime.now()
+        now = _local_now(now)
         window_start = now + timedelta(minutes=10)
         window_end = now + timedelta(minutes=11)
 
         classes = db.query(ClassSession).filter(ClassSession.date == now.date()).all()
         for cls in classes:
-            class_start_dt = datetime.combine(cls.date, cls.start_time)
+            class_start_dt = _class_datetime(cls.date, cls.start_time)
             if not (window_start <= class_start_dt < window_end):
                 continue
             coach = db.query(User).filter(User.id == cls.coach_id).first()
@@ -170,12 +256,12 @@ def job_coach_before_class_reminder():
         db.close()
 
 
-def job_coach_entry_missing_alert():
+def job_coach_entry_missing_alert(now: datetime | None = None):
     """Runs every minute: 10 min after a coach's first class of the day starts, alerts admins
     if the coach still hasn't recorded a facility entry (check-in) for today."""
     db = SessionLocal()
     try:
-        now = datetime.now()
+        now = _local_now(now)
         today = now.date()
         classes = db.query(ClassSession).filter(ClassSession.date == today).all()
         if not classes:
@@ -189,7 +275,7 @@ def job_coach_entry_missing_alert():
 
         admins = None
         for coach_id, cls in first_class_by_coach.items():
-            class_start_dt = datetime.combine(cls.date, cls.start_time)
+            class_start_dt = _class_datetime(cls.date, cls.start_time)
             window_start = class_start_dt + timedelta(minutes=10)
             window_end = class_start_dt + timedelta(minutes=11)
             if not (window_start <= now < window_end):
@@ -226,12 +312,12 @@ def job_coach_entry_missing_alert():
         db.close()
 
 
-def job_coach_exit_missing_alert():
+def job_coach_exit_missing_alert(now: datetime | None = None):
     """Runs every minute: 15 min after a coach's last class of the day ends, alerts admins
     if the coach still hasn't recorded a facility exit (check-out) for today."""
     db = SessionLocal()
     try:
-        now = datetime.now()
+        now = _local_now(now)
         today = now.date()
         classes = db.query(ClassSession).filter(ClassSession.date == today).all()
         if not classes:
@@ -245,7 +331,7 @@ def job_coach_exit_missing_alert():
 
         admins = None
         for coach_id, cls in last_class_by_coach.items():
-            class_end_dt = datetime.combine(cls.date, cls.end_time)
+            class_end_dt = _class_datetime(cls.date, cls.end_time)
             window_start = class_end_dt + timedelta(minutes=15)
             window_end = class_end_dt + timedelta(minutes=16)
             if not (window_start <= now < window_end):
@@ -282,19 +368,19 @@ def job_coach_exit_missing_alert():
         db.close()
 
 
-def job_missed_attendance_admin_alert():
+def job_missed_attendance_admin_alert(now: datetime | None = None):
     """Runs every minute: 10 min after class end, alerts admins if attendance still isn't submitted."""
     db = SessionLocal()
     try:
-        now = datetime.now()
+        now = _local_now(now)
         window_start = now - timedelta(minutes=11)
         window_end = now - timedelta(minutes=10)
 
         classes = db.query(ClassSession).filter(ClassSession.date == now.date()).all()
         admins = None
         for cls in classes:
-            class_end_dt = datetime.combine(cls.date, cls.end_time)
-            if not (window_start <= class_end_dt <= window_end):
+            class_end_dt = _class_datetime(cls.date, cls.end_time)
+            if not (window_start < class_end_dt <= window_end):
                 continue
 
             has_attendance = (
@@ -331,11 +417,11 @@ def job_missed_attendance_admin_alert():
         db.close()
 
 
-def job_end_of_day_missing_report():
+def job_end_of_day_missing_report(now: datetime | None = None):
     """Runs daily in the evening: compiles coaches who never marked entry/exit and notifies admins."""
     db = SessionLocal()
     try:
-        today = date.today()
+        today = _local_now(now).date()
         coaches_with_classes = (
             db.query(ClassSession.coach_id).filter(ClassSession.date == today).distinct().all()
         )
@@ -369,14 +455,14 @@ def job_end_of_day_missing_report():
         db.close()
 
 
-def job_auto_generate_batch_sessions():
+def job_auto_generate_batch_sessions(now: datetime | None = None):
     """Runs daily: rolls every active, coach-assigned batch's recurring schedule forward by
     `BATCH_AUTO_GENERATE_DAYS_AHEAD` days, so admins never have to click "Generate Sessions"
     again once a batch's days/months/time are set — it just keeps applying going forward
     until the batch itself is edited or deactivated."""
     db = SessionLocal()
     try:
-        today = date.today()
+        today = _local_now(now).date()
         horizon = today + timedelta(days=BATCH_AUTO_GENERATE_DAYS_AHEAD)
         batches = db.query(Batch).filter(Batch.is_active.is_(True), Batch.coach_id.isnot(None)).all()
         total_created = 0
@@ -388,41 +474,60 @@ def job_auto_generate_batch_sessions():
         db.close()
 
 
+SCHEDULER_JOB_DEFINITIONS = {
+    "monthly_fee_reminders": (job_monthly_fee_reminders, CronTrigger(day=10, hour=9, minute=0, timezone=SCHEDULER_TIMEZONE)),
+    "mark_overdue_fees": (job_mark_overdue_fees, CronTrigger(hour=0, minute=30, timezone=SCHEDULER_TIMEZONE)),
+    "coach_attendance_reminders": (
+        job_coach_attendance_reminders,
+        CronTrigger(minute="*", timezone=SCHEDULER_TIMEZONE),
+    ),
+    "pre_session_attendance_reminder": (
+        job_pre_session_attendance_reminder,
+        CronTrigger(minute="*", timezone=SCHEDULER_TIMEZONE),
+    ),
+    "coach_before_class_reminder": (
+        job_coach_before_class_reminder,
+        CronTrigger(minute="*", timezone=SCHEDULER_TIMEZONE),
+    ),
+    "coach_entry_missing_alert": (
+        job_coach_entry_missing_alert,
+        CronTrigger(minute="*", timezone=SCHEDULER_TIMEZONE),
+    ),
+    "coach_exit_missing_alert": (
+        job_coach_exit_missing_alert,
+        CronTrigger(minute="*", timezone=SCHEDULER_TIMEZONE),
+    ),
+    "end_of_day_missing_report": (
+        job_end_of_day_missing_report,
+        CronTrigger(hour=21, minute=0, timezone=SCHEDULER_TIMEZONE),
+    ),
+    "missed_attendance_admin_alert": (
+        job_missed_attendance_admin_alert,
+        CronTrigger(minute="*", timezone=SCHEDULER_TIMEZONE),
+    ),
+    "auto_generate_batch_sessions": (
+        job_auto_generate_batch_sessions,
+        CronTrigger(hour=0, minute=15, timezone=SCHEDULER_TIMEZONE),
+    ),
+}
+
+
 def start_scheduler():
-    scheduler.add_job(
-        job_monthly_fee_reminders, CronTrigger(day=10, hour=9, minute=0), id="monthly_fee_reminders", replace_existing=True
-    )
-    scheduler.add_job(
-        job_mark_overdue_fees, CronTrigger(hour=0, minute=30), id="mark_overdue_fees", replace_existing=True
-    )
-    scheduler.add_job(
-        job_coach_attendance_reminders, IntervalTrigger(minutes=1), id="coach_attendance_reminders", replace_existing=True
-    )
-    scheduler.add_job(
-        job_pre_session_attendance_reminder, IntervalTrigger(minutes=1), id="pre_session_attendance_reminder", replace_existing=True
-    )
-    scheduler.add_job(
-        job_coach_before_class_reminder, IntervalTrigger(minutes=1), id="coach_before_class_reminder", replace_existing=True
-    )
-    scheduler.add_job(
-        job_coach_entry_missing_alert, IntervalTrigger(minutes=1), id="coach_entry_missing_alert", replace_existing=True
-    )
-    scheduler.add_job(
-        job_coach_exit_missing_alert, IntervalTrigger(minutes=1), id="coach_exit_missing_alert", replace_existing=True
-    )
-    scheduler.add_job(
-        job_end_of_day_missing_report, CronTrigger(hour=21, minute=0), id="end_of_day_missing_report", replace_existing=True
-    )
-    scheduler.add_job(
-        job_missed_attendance_admin_alert, IntervalTrigger(minutes=1), id="missed_attendance_admin_alert", replace_existing=True
-    )
-    scheduler.add_job(
-        job_auto_generate_batch_sessions, CronTrigger(hour=0, minute=15), id="auto_generate_batch_sessions", replace_existing=True
-    )
+    if scheduler.running:
+        return
+    if not _acquire_scheduler_owner_lock():
+        logger.warning("Scheduler not started: another VIMJ instance holds the database owner lock")
+        return
+    logger.info("Acquired the PostgreSQL scheduler owner advisory lock")
+    for job_id, (job_function, trigger) in SCHEDULER_JOB_DEFINITIONS.items():
+        scheduler.add_job(job_function, trigger, id=job_id, replace_existing=True)
     scheduler.start()
     logger.info("Scheduler started with %d jobs", len(scheduler.get_jobs()))
 
 
 def shutdown_scheduler():
-    if scheduler.running:
-        scheduler.shutdown(wait=False)
+    try:
+        if scheduler.running:
+            scheduler.shutdown(wait=False)
+    finally:
+        _release_scheduler_owner_lock()

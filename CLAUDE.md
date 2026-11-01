@@ -1306,3 +1306,9 @@ both times, per the standing gotcha noted throughout this file.
 ✅ No Docker - direct server deployment
 ✅ Mobile offline support with sync
 ✅ Role-based access control enforced at API
+
+## 2026-11-01 user-requested release work
+
+- The client explicitly requested device notifications outside the mobile app, superseding the earlier in-app-only notification preference. Android FCM is the target for the APK. Continue preserving Admin/Coach RBAC; student push tokens are forbidden. Do not promise push is active until Firebase project terms, Android app registration/config, Cloud Run IAM, and a real device smoke check are complete. iOS push requires APNs configuration.
+- Admin student photo delete uses the existing `/students/{id}/photo` endpoint; the Admin profile UI may expose it when a photo exists. Do not change Coach dashboard files for this work.
+- The Admin AI modes must list data sorted highest to lowest and remain Admin-only. No external LLM or paid prediction API.

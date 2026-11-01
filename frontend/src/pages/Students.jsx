@@ -19,6 +19,7 @@ export default function Students() {
   const [profileFor, setProfileFor] = useState(null); // student object whose profile modal is open
   const [photoUrl, setPhotoUrl] = useState(null);
   const [photoLoading, setPhotoLoading] = useState(false);
+  const [photoDeleting, setPhotoDeleting] = useState(false);
   const [uploadFor, setUploadFor] = useState(null); // student object awaiting a new photo capture
 
   const load = () => {
@@ -123,6 +124,7 @@ export default function Students() {
   };
 
   const openProfile = async (s) => {
+    if (photoUrl) URL.revokeObjectURL(photoUrl);
     setProfileFor(s);
     setPhotoLoading(true);
     setPhotoUrl(null);
@@ -133,6 +135,22 @@ export default function Students() {
       setPhotoUrl(null);
     } finally {
       setPhotoLoading(false);
+    }
+  };
+
+  const deletePhoto = async () => {
+    if (!profileFor || !photoUrl || photoDeleting) return;
+    if (!confirm(`Delete ${profileFor.name}'s profile photo?`)) return;
+    setPhotoDeleting(true);
+    try {
+      await StudentsAPI.deletePhoto(profileFor.id);
+      URL.revokeObjectURL(photoUrl);
+      setPhotoUrl(null);
+      toast.success("Student photo deleted");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to delete photo");
+    } finally {
+      setPhotoDeleting(false);
     }
   };
 
@@ -268,7 +286,7 @@ export default function Students() {
       )}
 
       {profileFor && (
-        <Modal title="Student Profile" onClose={() => setProfileFor(null)}>
+        <Modal title="Student Profile" onClose={() => { if (photoUrl) URL.revokeObjectURL(photoUrl); setPhotoUrl(null); setProfileFor(null); }}>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             <div style={{ flexShrink: 0 }}>
               {photoLoading ? (
@@ -286,6 +304,11 @@ export default function Students() {
               <button className="btn btn-secondary" style={{ marginTop: 8, width: 140 }} onClick={() => setUploadFor(profileFor)}>
                 Upload Photo
               </button>
+              {photoUrl && !photoLoading && (
+                <button className="btn btn-danger" style={{ marginTop: 8, width: 140 }} disabled={photoDeleting} onClick={deletePhoto}>
+                  {photoDeleting ? "Deleting..." : "Delete Photo"}
+                </button>
+              )}
             </div>
             <div style={{ flex: 1, minWidth: 200 }}>
               <table>

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/auth_storage.dart';
+import '../../core/push_notification_service.dart';
 import '../admin/admin_home.dart';
 import '../coach/coach_home.dart';
 import 'login_screen.dart';
@@ -43,6 +44,8 @@ class _SplashScreenState extends State<SplashScreen> {
       _goToLogin();
       return;
     }
+
+    unawaited(PushNotificationService.syncToken());
 
     _goToHome(session.role);
   }

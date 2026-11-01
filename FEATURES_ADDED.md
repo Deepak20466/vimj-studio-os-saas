@@ -508,3 +508,9 @@ under `android/`/`ios/` (newly tracked, not newly changed).
 - **3.10's Firebase step**: creating a Firebase project (requires the academy's own Google
   account) and sharing the resulting config, before true always-on push notifications can be
   built.
+
+## Mobile push notifications and ranked Admin insights
+
+- Added authenticated Android FCM token registration/removal and best-effort server push delivery alongside existing in-app notifications.
+- Added searchable, highest-to-lowest Admin Command Center lists for defaulters/attendance risks, batch revenue estimates, and three-month collections. Coach dashboard remains unchanged.
+- Added a delete-photo control to the Admin student profile modal using the existing RBAC-protected API.

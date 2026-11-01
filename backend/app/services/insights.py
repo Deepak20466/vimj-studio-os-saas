@@ -258,6 +258,7 @@ def revenue_risk_insights(db: Session, today: date | None = None) -> dict:
             "revenue_at_risk": defaults["total_pending"],
             "student_ids": default_student_ids,
             "fee_ids": default_fee_ids,
+            "students": defaults["students"],
         },
         {
             "type": "attendance_drop",
@@ -277,7 +278,14 @@ def revenue_risk_insights(db: Session, today: date | None = None) -> dict:
     ]
     return {
         "risks": risks,
-        "forecast": {"next_month_revenue": forecast, "months_used": [f"{year}-{month:02d}" for month, year in months]},
+        "forecast": {
+            "next_month_revenue": forecast,
+            "months_used": [f"{year}-{month:02d}" for month, year in months],
+            "monthly_collections": [
+                {"month": f"{year}-{month:02d}", "collected": _number(amount)}
+                for (month, year), amount in zip(months, monthly_collections)
+            ],
+        },
         "summary": {"total_at_risk": total_at_risk},
         "kpis": {
             "total_students": db.query(User).filter(User.role == UserRole.STUDENT).count(),

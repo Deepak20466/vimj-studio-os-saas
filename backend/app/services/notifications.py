@@ -17,6 +17,7 @@ from app.config import settings
 logger = logging.getLogger("vimj.notifications")
 
 _client = None
+_fcm_session = None
 
 
 def _get_client():
@@ -90,6 +91,52 @@ def push_inapp(
     )
 
 
+def send_push(user_id: int, title: str, body: str, link: Optional[str] = None) -> None:
+    """Send best-effort FCM alerts to a user's registered Android devices."""
+    if not settings.FIREBASE_PROJECT_ID:
+        return
+    try:
+        import google.auth
+        from google.auth.transport.requests import AuthorizedSession
+
+        global _fcm_session
+        if _fcm_session is None:
+            credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/firebase.messaging"])
+            _fcm_session = AuthorizedSession(credentials)
+
+        from app.models.notification import PushDeviceToken
+        from app.database import SessionLocal
+
+        with SessionLocal() as db:
+            devices = db.query(PushDeviceToken).filter(PushDeviceToken.user_id == user_id).all()
+            for device in devices:
+                try:
+                    response = _fcm_session.post(
+                        f"https://fcm.googleapis.com/v1/projects/{settings.FIREBASE_PROJECT_ID}/messages:send",
+                        json={"message": {
+                            "token": device.token,
+                            "notification": {"title": title, "body": body},
+                            "data": {"link": link or ""},
+                            "android": {"priority": "HIGH"},
+                        }},
+                        timeout=(3, 10),
+                    )
+                    if response.ok:
+                        continue
+                    try:
+                        error = response.json().get("error", {})
+                    except ValueError:
+                        error = {}
+                    logger.warning("FCM delivery failed for user %s device %s: HTTP %s", user_id, device.id, response.status_code)
+                    if error.get("status") == "UNREGISTERED":
+                        db.delete(device)
+                except Exception as exc:
+                    logger.warning("FCM request failed for user %s device %s: %s", user_id, device.id, type(exc).__name__)
+            db.commit()
+    except Exception:
+        logger.exception("FCM delivery failed for user %s", user_id)
+
+
 def notify_and_push(
     db: Session,
     user,
@@ -99,11 +146,12 @@ def notify_and_push(
     link: Optional[str] = None,
     delay_minutes: Optional[int] = None,
 ) -> None:
-    """Send SMS/WhatsApp (if the user has a phone) and write a bell notification. Caller commits."""
+    """Send available alerts and write a bell notification. Caller commits."""
     if user and getattr(user, "phone", None):
         notify(user.phone, message)
     if user:
         push_inapp(db, user.id, type, title, message, link=link, delay_minutes=delay_minutes)
+        send_push(user.id, title, message, link=link)
 
 
 def fee_reminder_message(student_name: str, month: int, year: int, amount: Decimal, due_date: Optional[date]) -> str:

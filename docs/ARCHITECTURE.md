@@ -55,3 +55,9 @@ four times. `WEB_CONCURRENCY` can override the worker count on a larger plan.
 The Cloud Run service still has a zero minimum-instance setting. Periodic
 requests are a no-cost best effort to keep it warm; scale-to-zero can still
 occur during maintenance or delayed workflow runs.
+
+## Mobile push notifications
+
+Android devices register an authenticated Firebase Cloud Messaging token at `/notifications/device-token`. Token registration is scoped to the signed-in Admin or Coach and removed on logout. Existing notification events continue to write the in-app notification row; the backend also sends a best-effort FCM alert using the Cloud Run service account's Application Default Credentials. No service-account key is stored in the repository. Foreground Android alerts use local notification rendering; Android displays FCM notifications when the app is backgrounded or closed. The Google Firebase project and Android app config must be provisioned before release. iOS push requires an Apple APNs key and app configuration and is not enabled by the Android APK release.
+
+The Admin insight payload includes defaulter rows and the last three monthly collection totals so the Admin dashboard can display searchable, descending lists for Most Risk, Most Profit, and Future Forecast. Coach dashboard files and the Admin-only insights authorization remain separate.

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "710335668629",
+    "project_id": "vimj-academy",
+    "storage_bucket": "vimj-academy.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:710335668629:android:09cff3b938247f4a55169c",
+        "android_client_info": {
+          "package_name": "com.vimjstudio.vimj_attendance"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC5tFt4zSjKKV9dj6O8D93CBDSgJuIfYFQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

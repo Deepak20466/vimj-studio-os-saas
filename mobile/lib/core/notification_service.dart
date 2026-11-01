@@ -1,12 +1,8 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-/// Local (on-device) notifications — used to surface reminders and updates
-/// fetched from the backend while the app is open. Full push delivery when
-/// the app is closed requires wiring a Firebase project (FCM) into this
-/// plugin's Android/iOS channels; that project-specific setup is outside
-/// what this codebase can provide out of the box. SMS/WhatsApp reminders are
-/// sent directly by the backend (see backend/app/services/notifications.py)
-/// and work regardless of push setup.
+/// Local notifications used to display FCM messages while the app is open.
+/// Messages delivered while the app is backgrounded or closed are displayed
+/// directly by Android through Firebase Cloud Messaging.
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
@@ -19,11 +15,6 @@ class NotificationService {
     await _plugin.initialize(settings);
     _initialized = true;
 
-    // Android 13+ (API 33) requires this runtime prompt — declaring
-    // POST_NOTIFICATIONS in the manifest alone is not enough there; without
-    // this, `show()` below silently does nothing on those devices, with no
-    // error anywhere to indicate why.
-    await _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.requestNotificationsPermission();
   }
 
   static Future<void> show({required int id, required String title, required String body}) async {

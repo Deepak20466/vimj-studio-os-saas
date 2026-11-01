@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'api_client.dart';
 import 'auth_storage.dart';
 import 'notification_polling_service.dart';
+import 'push_notification_service.dart';
 
 class AuthApi {
   static Future<AuthSession> login(String email, String password) async {
@@ -18,10 +21,12 @@ class AuthApi {
       refreshToken: data['refresh_token'] as String,
     );
     await AuthStorage.save(session);
+    unawaited(PushNotificationService.syncToken());
     return session;
   }
 
   static Future<void> logout() async {
+    await PushNotificationService.unregisterCurrentDevice();
     try {
       await ApiClient.instance.post('/auth/logout');
     } catch (_) {

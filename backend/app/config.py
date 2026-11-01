@@ -45,6 +45,13 @@ class Settings(BaseSettings):
     TWILIO_SMS_FROM: str = ""
     TWILIO_WHATSAPP_FROM: str = "whatsapp:+14155238886"
     NOTIFICATIONS_ENABLED: bool = False
+    FIREBASE_PROJECT_ID: str = ""
+    SCHEDULER_ENABLED: bool = True
+    CLOUD_SCHEDULER_SERVICE_ACCOUNT_EMAIL: str = ""
+    CLOUD_SCHEDULER_OIDC_AUDIENCE: str = ""
+    CLOUD_SCHEDULER_JOB_NAME: str = ""
+    CLOUD_TASKS_QUEUE_NAME: str = ""
+    CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL: str = ""
 
     LOGIN_RATE_LIMIT: str = "5/15minutes"
 

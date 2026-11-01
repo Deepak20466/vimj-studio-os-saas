@@ -29,6 +29,7 @@ from app.routers import (
     notifications,
     reset,
     leave,
+    cloud_scheduler,
 )
 from app.api.v1 import insights
 
@@ -36,15 +37,26 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("vimj.studio_os")
 
 
+def _api_docs_options(environment: str) -> dict:
+    if environment.lower() == "production":
+        return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    return {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if settings.ENV != "test":
+    if settings.ENV not in {"test", "production"} and settings.SCHEDULER_ENABLED:
         start_scheduler()
     yield
     shutdown_scheduler()
 
 
-app = FastAPI(title="VIMJ Studio OS SaaS", version="1.0.0", lifespan=lifespan)
+app = FastAPI(
+    title="VIMJ Studio OS SaaS",
+    version="1.0.0",
+    lifespan=lifespan,
+    **_api_docs_options(settings.ENV),
+)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -85,6 +97,7 @@ app.include_router(reset.router)
 app.include_router(leave.router)
 app.include_router(insights.router)
 app.include_router(insights.versioned_router)
+app.include_router(cloud_scheduler.router)
 
 
 @app.get("/health")

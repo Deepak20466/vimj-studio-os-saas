@@ -16,9 +16,10 @@ from app.models.coach_activity import CoachActivity
 from app.models.fee_receipt import FeeReceipt, ReceiptStatus
 from app.models.academy import AcademySettings
 from app.models.fee_reminder_draft import FeeReminderDraft, ReminderDraftStatus
-from app.models.notification import Notification
+from app.models.notification import Notification, PushDeviceToken
 from app.models.leave import CoachLeave, LeaveStatus
 from app.models.admin_attendance_visibility import AdminAttendanceVisibility
+from app.models.scheduler_job_execution import SchedulerJobExecution
 
 __all__ = [
     "User",
@@ -45,7 +46,9 @@ __all__ = [
     "FeeReminderDraft",
     "ReminderDraftStatus",
     "Notification",
+    "PushDeviceToken",
     "CoachLeave",
     "LeaveStatus",
     "AdminAttendanceVisibility",
+    "SchedulerJobExecution",
 ]

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Bar,
   ComposedChart,
   CartesianGrid,
   Legend,
@@ -26,6 +25,7 @@ export default function Dashboard() {
   const [reminding, setReminding] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [focus, setFocus] = useState("risk");
+  const [insightFilter, setInsightFilter] = useState("");
   const [lastUpdated, setLastUpdated] = useState(null);
   const [change, setChange] = useState(null);
   const refreshInFlight = useRef(false);
@@ -99,9 +99,29 @@ export default function Dashboard() {
   const riskTotal = insights.summary?.total_at_risk || 0;
   const feeRisk = (insights.risks || []).find((risk) => risk.type === "fee_default");
   const forecast = insights.forecast?.next_month_revenue || 0;
-  const riskCandidates = (insights.risks || []).filter((risk) => risk.type !== "revenue_forecast");
-  const topRisk = [...riskCandidates].sort((a, b) => Number(b.revenue_at_risk || 0) - Number(a.revenue_at_risk || 0))[0];
-  const bestBatch = insights.batch_analytics?.most_profitable_batch;
+  const filterText = insightFilter.trim().toLocaleLowerCase();
+  const riskRows = [
+    ...(feeRisk?.students || []).map((student) => ({
+      key: `student-${student.student_id}`,
+      label: student.student_name,
+      detail: `${student.fees?.length || student.fee_ids?.length || 0} overdue fee record(s)`,
+      amount: Number(student.pending_amount || 0),
+      type: "Fee default",
+    })),
+    ...(insights.risks || []).filter((risk) => risk.type === "attendance_drop")
+      .flatMap((risk) => (risk.batches || []).map((batch) => ({
+        key: `batch-risk-${batch.batch_id}`,
+        label: batch.batch_name,
+        detail: `Attendance down ${Number(batch.attendance_drop_pct || 0).toFixed(1)}%${batch.attendance_drop_weekdays?.length ? ` on ${batch.attendance_drop_weekdays.join(", ")}` : ""}`,
+        amount: Number(batch.revenue_at_risk || 0),
+        type: "Attendance drop",
+      }))),
+  ].sort((a, b) => b.amount - a.amount).filter((row) => `${row.label} ${row.detail} ${row.type}`.toLocaleLowerCase().includes(filterText));
+  const profitRows = [...batchRows].sort((a, b) => Number(b.estimated_profit || 0) - Number(a.estimated_profit || 0))
+    .filter((row) => row.batch_name.toLocaleLowerCase().includes(filterText));
+  const forecastRows = [...(insights.forecast?.monthly_collections || [])]
+    .sort((a, b) => Number(b.collected || 0) - Number(a.collected || 0))
+    .filter((row) => row.month.toLocaleLowerCase().includes(filterText));
   const deltaLabel = (value) => {
     if (value == null || value === 0) return "No change since last refresh";
     return `${value > 0 ? "↑" : "↓"} ${rupees(Math.abs(value))} since last refresh`;
@@ -172,23 +192,30 @@ export default function Dashboard() {
               <button key={key} role="tab" aria-selected={focus === key} className={focus === key ? "active" : ""} onClick={() => setFocus(key)}>{label}</button>
             ))}
           </div>
-          {focus === "risk" && (topRisk ? (
-            <article className="ai-featured-insight">
-              <span className="ai-insight-icon" aria-hidden="true">{topRisk.revenue_at_risk > 0 ? "!" : "OK"}</span>
-              <div><strong>{topRisk.type === "fee_default" ? "Fee default risk" : "Attendance drop risk"}</strong><p>{topRisk.message}</p><b>{rupees(topRisk.revenue_at_risk)} at risk</b></div>
-            </article>
-          ) : <p>No active risk signals.</p>)}
-          {focus === "profit" && (bestBatch ? (
-            <article className="ai-featured-insight">
-              <span className="ai-insight-icon" aria-hidden="true">#1</span>
-              <div><strong>{bestBatch.batch_name}</strong><p>Highest estimated monthly revenue share across active batches.</p><b>{rupees(bestBatch.estimated_profit)} estimate / {bestBatch.attendance_pct}% attendance</b></div>
-            </article>
-          ) : <p>No active batches are available for profitability estimates.</p>)}
+          <input className="ai-list-filter" aria-label="Filter AI insights" placeholder="Filter this list..." value={insightFilter} onChange={(event) => setInsightFilter(event.target.value)} />
+          {focus === "risk" && (riskRows.length ? (
+            <div className="ai-ranked-list" aria-label="Revenue risks sorted highest to lowest">
+              {riskRows.map((row, index) => <article className="ai-ranked-row" key={row.key}>
+                <span className="ai-rank">{index + 1}</span><div className="ai-ranked-copy"><strong>{row.label}</strong><small>{row.type} · {row.detail}</small></div><b>{rupees(row.amount)}</b>
+              </article>)}
+            </div>
+          ) : <p>No matching active risks.</p>)}
+          {focus === "profit" && (profitRows.length ? (
+            <div className="ai-ranked-list" aria-label="Batches sorted by estimated monthly revenue">
+              {profitRows.map((row, index) => <article className="ai-ranked-row" key={row.batch_id}>
+                <span className="ai-rank">{index + 1}</span><div className="ai-ranked-copy"><strong>{row.batch_name}</strong><small>{Number(row.attendance_pct || 0).toFixed(1)}% recent attendance</small></div><b>{rupees(row.estimated_profit)}</b>
+              </article>)}
+            </div>
+          ) : <p>No matching active batches.</p>)}
           {focus === "forecast" && (
-            <article className="ai-featured-insight">
-              <span className="ai-insight-icon" aria-hidden="true">Next</span>
-              <div><strong>Next month collection estimate</strong><p>Average of the last three monthly fee collections.</p><b>{rupees(forecast)} predicted</b></div>
-            </article>
+            <>
+              <article className="ai-featured-insight"><span className="ai-insight-icon" aria-hidden="true">Next</span><div><strong>Next month collection estimate</strong><p>Average of the last three monthly fee collections.</p><b>{rupees(forecast)} predicted</b></div></article>
+              {forecastRows.length ? <div className="ai-ranked-list" aria-label="Monthly collections sorted highest to lowest">
+                {forecastRows.map((row, index) => <article className="ai-ranked-row" key={row.month}>
+                  <span className="ai-rank">{index + 1}</span><div className="ai-ranked-copy"><strong>{row.month}</strong><small>Collected fees</small></div><b>{rupees(row.collected)}</b>
+                </article>)}
+              </div> : <p>Monthly collection history is not available for this account.</p>}
+            </>
           )}
           {focus === "risk" && feeRisk?.fee_ids?.length > 0 && (
             <button className="btn btn-primary ai-reminder-button" disabled={reminding} onClick={sendReminders}>
