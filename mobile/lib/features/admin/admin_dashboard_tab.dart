@@ -27,6 +27,7 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
   bool _revenueLoading = false;
   bool _sendingReminders = false;
   bool _insightsRefreshing = false;
+  String _insightFilter = '';
   Map<String, dynamic>? _insights;
   Map<String, double>? _insightChange;
   DateTime? _insightsUpdatedAt;
@@ -308,76 +309,6 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
     ),
   );
 
-  Widget _riskItem(Map<String, dynamic> risk) {
-    final type = '${risk['type'] ?? 'risk'}';
-    final title = switch (type) {
-      'fee_default' => 'Fee default risk',
-      'attendance_drop' => 'Attendance drop',
-      'revenue_forecast' => 'Revenue forecast',
-      _ => 'Studio risk',
-    };
-    final amount = (risk['revenue_at_risk'] as num?)?.toDouble() ?? 0;
-    final feeIds = risk['fee_ids'] as List<dynamic>? ?? [];
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.warning.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.warning.withOpacity(0.24)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.warning_amber_rounded,
-                color: AppColors.warning,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-              Text(
-                _money(amount),
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: amount > 0 ? AppColors.danger : AppColors.textMuted,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text('${risk['message'] ?? 'No additional details.'}'),
-          if (type == 'fee_default') ...[
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: OutlinedButton.icon(
-                onPressed: _sendingReminders || feeIds.isEmpty
-                    ? null
-                    : () => _sendReminders(risk),
-                icon: _sendingReminders
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.notifications_active_outlined),
-                label: const Text('Send Reminders'),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
   Widget _statCard(String label, String value, {Color? valueColor}) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
@@ -496,18 +427,53 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
         ? insights['batch_analytics'] as Map<String, dynamic>
         : <String, dynamic>{};
     final risks = insights['risks'] as List<dynamic>? ?? [];
-    final riskCandidates = risks
-        .where((risk) => (risk as Map<String, dynamic>)['type'] != 'revenue_forecast')
-        .map((risk) => risk as Map<String, dynamic>)
-        .toList()
-      ..sort((a, b) =>
-          ((b['revenue_at_risk'] as num?)?.toDouble() ?? 0).compareTo(
-              (a['revenue_at_risk'] as num?)?.toDouble() ?? 0));
-    final topRisk = riskCandidates.isEmpty ? null : riskCandidates.first;
-    final mostProfit = batchAnalytics['most_profitable_batch'] is Map<String, dynamic>
-        ? batchAnalytics['most_profitable_batch'] as Map<String, dynamic>
-        : null;
+    final feeRisk = risks.whereType<Map<String, dynamic>>().cast<Map<String, dynamic>>().firstWhere(
+      (risk) => risk['type'] == 'fee_default',
+      orElse: () => <String, dynamic>{},
+    );
+    final filterText = _insightFilter.trim().toLowerCase();
+    final riskRows = <Map<String, dynamic>>[];
+    final feeStudents = feeRisk['students'] as List<dynamic>? ?? [];
+    for (final value in feeStudents) {
+      if (value is! Map<String, dynamic>) continue;
+      riskRows.add({
+        'key': 'student-${value['student_id']}',
+        'label': '${value['student_name'] ?? 'Student'}',
+        'detail': '${(value['fees'] as List<dynamic>?)?.length ?? (value['fee_ids'] as List<dynamic>?)?.length ?? 0} overdue fee record(s)',
+        'amount': value['pending_amount'],
+        'type': 'Fee default',
+      });
+    }
+    for (final value in risks) {
+      if (value is! Map<String, dynamic> || value['type'] != 'attendance_drop') continue;
+      for (final batchValue in value['batches'] as List<dynamic>? ?? []) {
+        if (batchValue is! Map<String, dynamic>) continue;
+        final weekdays = batchValue['attendance_drop_weekdays'] as List<dynamic>? ?? [];
+        riskRows.add({
+          'key': 'batch-risk-${batchValue['batch_id']}',
+          'label': '${batchValue['batch_name'] ?? 'Batch'}',
+          'detail': 'Attendance down ${((batchValue['attendance_drop_pct'] as num?)?.toDouble() ?? 0).toStringAsFixed(1)}%${weekdays.isEmpty ? '' : ' on ${weekdays.join(', ')}'}',
+          'amount': batchValue['revenue_at_risk'],
+          'type': 'Attendance drop',
+        });
+      }
+    }
+    riskRows.sort((a, b) => ((b['amount'] as num?)?.toDouble() ?? 0)
+        .compareTo((a['amount'] as num?)?.toDouble() ?? 0));
+    final filteredRiskRows = riskRows.where((row) =>
+      '${row['label']} ${row['detail']} ${row['type']}'.toLowerCase().contains(filterText)).toList();
     final batches = batchAnalytics['batches'] as List<dynamic>? ?? [];
+    final profitRows = batches.whereType<Map<String, dynamic>>().toList()
+      ..sort((a, b) => ((b['estimated_profit'] as num?)?.toDouble() ?? 0)
+          .compareTo((a['estimated_profit'] as num?)?.toDouble() ?? 0));
+    final filteredProfitRows = profitRows.where((row) =>
+      '${row['batch_name'] ?? ''}'.toLowerCase().contains(filterText)).toList();
+    final monthlyCollections = (forecast['monthly_collections'] as List<dynamic>? ?? [])
+        .whereType<Map<String, dynamic>>().toList()
+      ..sort((a, b) => ((b['collected'] as num?)?.toDouble() ?? 0)
+          .compareTo((a['collected'] as num?)?.toDouble() ?? 0));
+    final filteredForecastRows = monthlyCollections.where((row) =>
+      '${row['month'] ?? ''}'.toLowerCase().contains(filterText)).toList();
     final totalAtRisk = (summary['total_at_risk'] as num?)?.toDouble() ?? 0;
     final predictedRevenue =
         (forecast['next_month_revenue'] as num?)?.toDouble() ?? 0;
@@ -621,6 +587,20 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
                   ],
                 ),
                 const SizedBox(height: 10),
+                TextField(
+                  decoration: InputDecoration(
+                    labelText: 'Filter this list',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _insightFilter.isEmpty ? null : IconButton(
+                      tooltip: 'Clear filter',
+                      onPressed: () => setState(() => _insightFilter = ''),
+                      icon: const Icon(Icons.clear),
+                    ),
+                    isDense: true,
+                  ),
+                  onChanged: (value) => setState(() => _insightFilter = value),
+                ),
+                const SizedBox(height: 10),
                 if (_insightsFailed && _insights == null)
                   const Text('Unable to load insights. Pull down to retry.')
                 else if (!_insightsLoaded)
@@ -631,29 +611,60 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
                     ),
                   )
                 else if (_insightFocus == 'risk')
-                  topRisk == null
-                      ? const Text('No active risk signals.')
-                      : _riskItem(topRisk)
+                  filteredRiskRows.isEmpty
+                      ? Text(riskRows.isEmpty ? 'No active risk signals.' : 'No matching risks.')
+                      : Column(children: [
+                          for (var i = 0; i < filteredRiskRows.length; i++)
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: CircleAvatar(
+                                backgroundColor: AppColors.warning.withOpacity(0.12),
+                                child: Text('${i + 1}', style: const TextStyle(color: AppColors.warning, fontWeight: FontWeight.bold)),
+                              ),
+                              title: Text('${filteredRiskRows[i]['label']}'),
+                              subtitle: Text('${filteredRiskRows[i]['type']} · ${filteredRiskRows[i]['detail']}'),
+                              trailing: Text(_money(filteredRiskRows[i]['amount']), style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.danger)),
+                            ),
+                          if ((feeRisk['fee_ids'] as List<dynamic>? ?? []).isNotEmpty)
+                            Align(alignment: Alignment.centerRight, child: OutlinedButton.icon(
+                              onPressed: _sendingReminders ? null : () => _sendReminders(feeRisk),
+                              icon: _sendingReminders ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.notifications_active_outlined),
+                              label: const Text('Send Reminders'),
+                            )),
+                        ])
                 else if (_insightFocus == 'profit')
-                  mostProfit == null
-                      ? const Text('No active batches are available for comparison.')
-                      : ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: const CircleAvatar(child: Icon(Icons.emoji_events_outlined)),
-                          title: Text('${mostProfit['batch_name'] ?? 'Top batch'}'),
-                          subtitle: Text('Highest estimated monthly revenue share / ${mostProfit['attendance_pct'] ?? 0}% attendance'),
-                          trailing: Text(
-                            _money(mostProfit['estimated_profit']),
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        )
+                  filteredProfitRows.isEmpty
+                      ? Text(profitRows.isEmpty ? 'No active batches are available for comparison.' : 'No matching batches.')
+                      : Column(children: [
+                          for (var i = 0; i < filteredProfitRows.length; i++)
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: CircleAvatar(child: Text('${i + 1}')),
+                              title: Text('${filteredProfitRows[i]['batch_name'] ?? 'Batch'}'),
+                              subtitle: Text('${((filteredProfitRows[i]['attendance_pct'] as num?)?.toDouble() ?? 0).toStringAsFixed(1)}% recent attendance'),
+                              trailing: Text(_money(filteredProfitRows[i]['estimated_profit']), style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.success)),
+                            ),
+                        ])
                 else
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const CircleAvatar(child: Icon(Icons.auto_graph)),
-                    title: Text('Predicted: ${_money(predictedRevenue)}'),
-                    subtitle: const Text('Average of the last three monthly collections.'),
-                  ),
+                  Column(children: [
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const CircleAvatar(child: Icon(Icons.auto_graph)),
+                      title: Text('Predicted: ${_money(predictedRevenue)}'),
+                      subtitle: const Text('Average of the last three monthly collections.'),
+                    ),
+                    if (filteredForecastRows.isEmpty)
+                      Text(monthlyCollections.isEmpty ? 'Monthly collection history is not available.' : 'No matching months.')
+                    else
+                      for (var i = 0; i < filteredForecastRows.length; i++)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(child: Text('${i + 1}')),
+                          title: Text('${filteredForecastRows[i]['month'] ?? 'Month'}'),
+                          subtitle: const Text('Collected fees'),
+                          trailing: Text(_money(filteredForecastRows[i]['collected']), style: const TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                  ]),
               ],
             ),
           ),

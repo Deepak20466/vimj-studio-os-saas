@@ -18,6 +18,13 @@ This file retains historical implementation notes. The current supported scope i
 - Coach web dashboard now keeps class rows visible when an individual summary request fails, ignores stale overlapping refresh results, and exposes a retry action. Coach mobile fetches only today's facility-attendance record instead of downloading full history.
 - The Supabase readiness probe reads an existing `users` table row so scheduled health checks generate actual application-table database activity without modifying studio data. Supabase Free can still pause inactive projects under its platform policy; paid Supabase plans are the only guaranteed no-pause option.
 - Mobile release target: `1.26.36+72`; the Android and iOS display names now use VIMJ Studio OS SaaS.
+
+## 2026-11-01 — Admin mobile feature parity
+
+- Flutter Admin AI Command Center now lists revenue risks, batches ranked by estimated revenue share, and monthly collections ranked by amount. Each list supports filtering and refreshes live with the existing Admin-only insights endpoint.
+- Admin student profiles now support deleting an uploaded photo, with confirmation and success/error feedback. Coach screens remain unchanged.
+- Firebase push notifications were already enabled in the Android app and remain part of this release. MCP continues to run as a Claude Desktop server; its Admin tools' matching operations are available in the mobile Admin dashboard, attendance, and fees areas through the authenticated backend.
+- Mobile release target: `1.26.38+74`.
 This is a historical implementation log for VIMJ Studio OS SaaS (FastAPI + PostgreSQL, React Admin/Coach web, and Flutter mobile). Historical entries below describe changes made at the time; the current supported product scope is maintained in the [main README](README.md).
 
 Every new endpoint follows the codebase's existing conventions (role-guarded via `Depends(require_admin/require_coach/...)`, `log_action(...)` audit entries before every commit, `notify()` for SMS/WhatsApp — all best-effort/no-op in dev unless Twilio env vars are set).

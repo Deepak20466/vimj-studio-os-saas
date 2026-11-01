@@ -319,6 +319,7 @@ class _StudentProfileSheetState extends State<_StudentProfileSheet> {
   Uint8List? _photoBytes;
   bool _loadingPhoto = true;
   bool _uploading = false;
+  bool _deletingPhoto = false;
   final _picker = ImagePicker();
 
   @override
@@ -372,6 +373,44 @@ class _StudentProfileSheetState extends State<_StudentProfileSheet> {
     }
   }
 
+  Future<void> _deletePhoto() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete student photo?'),
+        content: const Text('This removes the photo from the student profile.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    setState(() => _deletingPhoto = true);
+    try {
+      await ApiClient.instance.delete('/students/${widget.student.id}/photo');
+      _photoBytes = null;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Student photo deleted')),
+        );
+        setState(() {});
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not delete the student photo. Please try again.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _deletingPhoto = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = widget.student;
@@ -413,7 +452,7 @@ class _StudentProfileSheetState extends State<_StudentProfileSheet> {
             const SizedBox(height: 12),
             Center(
               child: OutlinedButton.icon(
-                onPressed: _uploading ? null : _uploadPhoto,
+                onPressed: _uploading || _deletingPhoto ? null : _uploadPhoto,
                 icon: _uploading
                     ? const SizedBox(
                         width: 16,
@@ -423,6 +462,18 @@ class _StudentProfileSheetState extends State<_StudentProfileSheet> {
                 label: const Text('Upload Photo'),
               ),
             ),
+            if (_photoBytes != null) ...[
+              const SizedBox(height: 8),
+              Center(
+                child: TextButton.icon(
+                  onPressed: _uploading || _deletingPhoto ? null : _deletePhoto,
+                  icon: _deletingPhoto
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.delete_outline, color: AppColors.danger),
+                  label: Text(_deletingPhoto ? 'Deleting...' : 'Delete Photo', style: const TextStyle(color: AppColors.danger)),
+                ),
+              ),
+            ],
             const SizedBox(height: 20),
             _row('Student ID', '#${s.id}'),
             _row('Name', s.name),
