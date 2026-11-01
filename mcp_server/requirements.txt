@@ -1,0 +1,4 @@
+fastmcp==4.0.5
+SQLAlchemy==2.0.35
+psycopg2-binary==2.9.9
+pydantic-settings>=2.5.2,<3

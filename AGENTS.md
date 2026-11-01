@@ -53,7 +53,7 @@ All requested changes have been fully implemented across the Mobile App (Flutter
 - **Flutter Mobile Analysis**: `flutter analyze --no-pub --no-fatal-infos` verified with 0 errors/warnings.
 
 ## Mobile Login Responsiveness Update
-- Login allows time for the production backend to wake from an idle Render free-tier instance,
+- Login allows time for the production backend to wake after Cloud Run scales an idle instance to zero,
   then shows a clear retry message instead of waiting indefinitely.
 - Other API requests have bounded timeouts and display actionable errors.
 - Admin and Coach dashboard shells render while their initial data loads, so a successful login
@@ -62,7 +62,7 @@ All requested changes have been fully implemented across the Mobile App (Flutter
 - Android release APKs built successfully for armeabi-v7a, arm64-v8a, and x86_64.
 
 ## Physical Android Login Hotfix
-- The mobile default API URL is production (`https://vimj-backend.onrender.com`) on
+- The mobile default API URL is production (`https://vimj-backend-eqwnplgd6q-el.a.run.app`) on
   Android/iOS devices; local development can still override it with `API_BASE_URL`.
 - Login exceptions now surface a useful connection/error message instead of the generic
   “Something went wrong” text.
@@ -229,7 +229,7 @@ following additional updates:
 - Admin Attendance's Fees Pending PDF should use the month selected in its attendance
   calendar, so prior-month pending balances can be exported from the same section.
 - Harden the shared Admin/Coach mobile login and API path for transient production
-  gateway/network failures. The Render free-tier cold start can still delay a first
+  gateway/network failures. Cloud Run scale-to-zero can still delay a first
   request; mobile changes must keep the existing bounded login timeout and background
   warm-up behavior.
 - The shared client retries one HTTP 502/503/504 response for safe GET requests and
@@ -648,7 +648,7 @@ following additional updates:
 - If login itself encounters a transient timeout, connection error, or 5xx,
   the app checks API readiness again before its single login retry. Health
   probes do not consume password-attempt rate limits; 429 handling remains.
-- This covers Render free-tier cold starts without repeating password
+- This covers Cloud Run scale-to-zero cold starts without repeating password
   submissions. Genuine server or network outages can still exhaust the bounded
   wait and show an actionable timeout message. No backend or schema change is
   required.

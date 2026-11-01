@@ -28,7 +28,7 @@ def upgrade() -> None:
     with op.batch_alter_table("coach_swap") as batch_op:
         batch_op.alter_column("initiated_by", server_default=None)
 
-    # Photos move from disk (a path string) to bytes stored directly on the row — Render's
+    # Photos move from disk (a path string) to bytes stored directly on the row — Cloud Run's
     # free-tier filesystem is ephemeral, so anything saved to disk was silently lost on the
     # next restart/cold-start. Existing path values (plain ASCII, e.g. "uploads/students/x.jpg")
     # cast losslessly to bytea; they're not valid images either way since the files behind them

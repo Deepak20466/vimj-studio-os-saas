@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "vimj-studio-os": {
+      "command": "mcp_server/.venv/Scripts/python.exe",
+      "args": ["-m", "mcp_server.server"],
+      "env": {
+        "VIMJ_MCP_ADMIN_EMAIL": "admin@vimj.com"
+      }
+    }
+  }
+}

@@ -157,6 +157,7 @@ export const DashboardAPI = {
   summary: () => client.get("/dashboard/summary"),
   feeStatus: () => client.get("/dashboard/fee-status"),
   activityAttendance: () => client.get("/dashboard/activity-attendance"),
+  revenueRisk: () => client.get("/insights/revenue-risk"),
 };
 
 export const ResetAPI = {

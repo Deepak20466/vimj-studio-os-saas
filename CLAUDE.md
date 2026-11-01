@@ -430,19 +430,21 @@ AppBar (covers all 14 sections, unlike the coach app's per-tab placement).
 
 ---
 
-## DEPLOYMENT (No Docker)
-- Python venv: `python -m venv venv && pip install -r requirements.txt`
-- Run backend: `gunicorn -w 4 -b 0.0.0.0:8000 main:app` (actual module path is
-  `app.main:app`, not `main:app` — see `render.yaml`'s `startCommand`)
-- Nginx: reverse proxy + static React files
-- PostgreSQL: native installation with daily backups
-- Currently deployed on Render (`https://vimj-backend.onrender.com`, free tier —
-  cold starts after ~15min idle take 20-40s). Render's free tier has an
-  **ephemeral filesystem**, wiped on every restart/cold-start — this is why
-  selfies/photos moved off disk into Postgres (2026-09-09); do not reintroduce
-  disk-based file storage for anything that needs to persist without first
-  confirming the hosting plan has a real persistent disk.
-- Systemd service file for auto-start (for a non-Render deployment target)
+## DEPLOYMENT (Google Cloud + Supabase)
+- Local backend: `python -m venv venv && pip install -r requirements.txt`, then
+  `uvicorn app.main:app --reload` from `backend/`.
+- Production API: Google Cloud Run service `vimj-backend` in `asia-south1` at
+  `https://vimj-backend-eqwnplgd6q-el.a.run.app`.
+- Production database: Supabase PostgreSQL; `DATABASE_URL` is supplied to Cloud Run
+  from Secret Manager. Keep `.env` and service credentials out of source control.
+- Cloud Run currently uses 1 vCPU, 1 GiB RAM, concurrency 8, and scales from zero
+  to 20 instances. Cold starts remain possible after scale-to-zero. The GitHub
+  Actions Supabase keepalive workflow calls `/health/ready` every 10 minutes to
+  keep database activity recent without a paid minimum Cloud Run instance.
+- Cloud Run's container filesystem is ephemeral. Persist photos and other durable
+  uploads in PostgreSQL or another configured durable store, never in local files.
+- Gunicorn uses one worker by default to reduce per-instance memory and startup
+  work; set `WEB_CONCURRENCY` only after measuring the service's memory and load.
 
 ---
 

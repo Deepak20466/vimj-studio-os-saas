@@ -15,7 +15,7 @@ from app.models.fee import StudentFee, FeeStatus
 from app.schemas.fee import FeeCreate, FeeMarkPaid, FeeUpdate, FeeOut, FeeAdminOut
 from app.security import require_admin
 from app.services.audit import log_action
-from app.services.notifications import notify, fee_reminder_message
+from app.services.notifications import notify
 from app.services.receipt_pdf import build_fee_receipt_pdf
 from app.services.export import rows_to_csv
 
@@ -190,12 +190,11 @@ def send_reminder(
     if not fee:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fee record not found")
 
-    student = db.query(User).filter(User.id == fee.student_id).first()
-    if student and student.phone:
-        notify(student.phone, fee_reminder_message(student.name, fee.month, fee.year, fee.amount, fee.due_date))
-    log_action(db, current_user.id, "SEND_REMINDER", "StudentFee", fee.id)
+    # Manual dashboard/MCP reminders are queued as a free mock WhatsApp action.
+    # Do not invoke the optional paid Twilio integration from this endpoint.
+    log_action(db, current_user.id, "QUEUE_MOCK_REMINDER", "StudentFee", fee.id)
     db.commit()
-    return {"detail": "Reminder sent"}
+    return {"status": "queued", "detail": "Reminder queued (mock WhatsApp)", "fee_id": fee.id}
 
 
 @router.get("/{fee_id}/receipt")

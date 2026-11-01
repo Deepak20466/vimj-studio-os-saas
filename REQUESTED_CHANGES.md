@@ -27,6 +27,7 @@ Release verification (2026-10-02):
 - App version: 1.22.0+22; verified package com.vimjstudio.vimj_attendance.
 - APK signatures verified and matched the previous mobile-v1.21.0 signing certificate.
 - Backend URL compiled into APKs: https://vimj-backend.onrender.com.
+- Current production backend (Cloud Run): https://vimj-backend-eqwnplgd6q-el.a.run.app; database: Supabase PostgreSQL. The URL above records the historical mobile-v1.22.0 release only.
 - Database revision verified: 0017 (head).
 - Production backend rollout confirmed: OpenAPI exposes the new /reports endpoint.
 - GitHub release: https://github.com/Deepak20466/attendance-management/releases/tag/mobile-v1.22.0

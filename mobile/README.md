@@ -6,8 +6,8 @@ the backend rejects Student-role logins outright. The login screen
 (`lib/features/auth/login_screen.dart`) routes to `CoachHome` or `AdminHome`
 based on the account's role. The admin view (`lib/features/admin/`) covers
 day-to-day operations (students, coaches, activities, attendance, leave,
-fees, salary); the web dashboard remains the fuller admin surface for
-batches/analytics/reports/settings.
+fees), reports, batch analytics, and the Admin-only AI Command Center. Coaches
+continue to use their separate student and attendance dashboard.
 
 ## Setup
 
@@ -89,15 +89,15 @@ flutter run \
 
 ## Release process
 
-Production backend: **https://vimj-backend.onrender.com** (Render, free tier —
-the service spins down after ~15 min idle and takes 20-40s to wake on the
-next request; a cold-start login looks like a long hang, not a bug). Any APK
-built for distribution off the office LAN must point at this URL, not a LAN
-IP:
+Production backend: **https://vimj-backend-eqwnplgd6q-el.a.run.app** (Google
+Cloud Run, `asia-south1`; PostgreSQL is hosted by Supabase). The Cloud Run
+service scales to zero when idle, so a cold start can take longer than a warm
+request. Any APK built for distribution off the office LAN must point at this
+URL, not a LAN IP:
 
 ```bash
 flutter build apk --release --split-per-abi \
-  --dart-define=API_BASE_URL=https://vimj-backend.onrender.com \
+  --dart-define=API_BASE_URL=https://vimj-backend-eqwnplgd6q-el.a.run.app \
   --dart-define=FACILITY_LAT=12.9745723 \
   --dart-define=FACILITY_LNG=77.5689324 \
   --dart-define=GEOFENCE_RADIUS_METERS=100
@@ -106,7 +106,7 @@ flutter build apk --release --split-per-abi \
 Replace the lat/lng above with an exact Google Maps pin for the real facility
 if one becomes available — these are geocoded from the address only, accurate
 to roughly a city block. The lat/lng/radius must match the backend's config
-(`FACILITY_LAT`, `FACILITY_LNG`, `GEOFENCE_RADIUS_METERS`) on Render. Tag the release
+(`FACILITY_LAT`, `FACILITY_LNG`, `GEOFENCE_RADIUS_METERS`) on Cloud Run. Tag the release
 (`mobile-vX.Y.Z`) and publish the three split-ABI APKs as GitHub release
 assets:
 
@@ -128,6 +128,11 @@ and installed from it.
 
 ## What's implemented
 
+- **Admin AI Command Center**: Admin-only revenue-risk predictions, fee
+  reminder queue actions, next-month collection forecast, and batch
+  profitability/attendance insights. Predictions use local rules and the
+  authenticated FastAPI endpoint; no paid AI API is required. Coach screens do
+  not include these insights. Claude Desktop accesses the separate MCP server.
 - **Auth**: login, forgot/reset password, biometric app-unlock on relaunch
   (`lib/features/auth/`), JWT access/refresh handled transparently by
   `lib/core/api_client.dart`.

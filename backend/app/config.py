@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     # account configured), /auth/forgot-password has no delivery channel in
     # production and the dev-only reset_token-in-response fallback is disabled
     # there too — nobody, including the admin, can self-service a reset. Setting
-    # this (Render env var, keep it private) lets a request that includes a
+    # this (Google Cloud Run env var, keep it private) lets a request that includes a
     # matching `X-Recovery-Secret` header get the reset_token back in the response
     # regardless of ENV, so the token can be retrieved via curl/Postman and either
     # relayed to the locked-out user or used directly against /auth/reset-password.

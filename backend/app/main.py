@@ -2,13 +2,17 @@ import logging
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
 from app.core.rate_limit import limiter
+from app.database import get_db
 from app.services.scheduler import start_scheduler, shutdown_scheduler
 from app.routers import (
     auth,
@@ -26,6 +30,7 @@ from app.routers import (
     reset,
     leave,
 )
+from app.api.v1 import insights
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("vimj.main")
@@ -78,11 +83,24 @@ app.include_router(fee_reminders.router)
 app.include_router(notifications.router)
 app.include_router(reset.router)
 app.include_router(leave.router)
+app.include_router(insights.router)
+app.include_router(insights.versioned_router)
 
 
 @app.get("/health")
 def health_check():
     return {"status": "ok", "service": "VIMJ Studio Attendance System"}
+
+
+@app.get("/health/ready")
+def database_readiness_check(db: Session = Depends(get_db)):
+    """Check the database connection for monitoring without changing app data."""
+    try:
+        db.execute(text("SELECT 1"))
+    except SQLAlchemyError as exc:
+        logger.warning("Database readiness check failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="database_unavailable") from None
+    return {"status": "ok", "database": "ok"}
 
 from app.routers import reports
 app.include_router(reports.router)

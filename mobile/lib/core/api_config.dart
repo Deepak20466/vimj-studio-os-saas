@@ -12,7 +12,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 ///   flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
 class ApiConfig {
   static const String _override = String.fromEnvironment('API_BASE_URL');
-  static const String _productionUrl = 'https://vimj-backend.onrender.com';
+  static const String _productionUrl =
+      'https://vimj-backend-eqwnplgd6q-el.a.run.app';
   // kIsWeb can't be reached from a browser, so it always needs localhost,
   // regardless of the Android-emulator-oriented compiled-in default below.
   static final String baseUrl = _override.isNotEmpty

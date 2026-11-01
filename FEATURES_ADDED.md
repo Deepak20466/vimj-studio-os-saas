@@ -1,5 +1,13 @@
 # Features Added — 2026-09-06
 
+## 2026-11-01 — Admin AI Command Center (Admin-only) + MCP Server
+
+- The Admin web dashboard now shows student/present/pending-fee/revenue-risk KPIs, three local rule-based predictions, a next-month revenue forecast, and batch revenue/attendance analytics. The Coach dashboard is unchanged and does not display these insights.
+- `GET /insights/revenue-risk` and `/api/v1/insights/revenue-risk` enforce the existing Admin RBAC dependency. Coach requests return 403.
+- The new local FastMCP stdio server exposes five Admin-only tools: `get_todays_absentees`, `get_fee_defaulters`, `mark_attendance`, `create_fee_reminder`, and `get_batch_analytics`.
+- Admin manual fee reminders now return a mock queued status and do not call Twilio. Batch profitability is estimated from activity tuition because the schema contains no batch expenses.
+- No migration or paid AI API was added. Salary, GPS, Chat, and Compliance remain out of scope.
+- Setup: `mcp_server/README.md`; architecture: `docs/ARCHITECTURE.md`.
 This document maps each of the 11 requested features to exactly where it was implemented, for the existing VIMJ Studio Attendance Management System (FastAPI + PostgreSQL backend, React admin/coach web dashboard). Per the confirmed scope, all of this is **web-only** (React admin + the existing React coach pages) — the separate Flutter mobile app is untouched except for two pre-existing broken-asset-path bugs fixed under 1.3.
 
 Every new endpoint follows the codebase's existing conventions (role-guarded via `Depends(require_admin/require_coach/...)`, `log_action(...)` audit entries before every commit, `notify()` for SMS/WhatsApp — all best-effort/no-op in dev unless Twilio env vars are set).
@@ -403,8 +411,8 @@ back-to-back) — all 3 appeared in the coach's class list immediately, not the 
 ## 3.7 Student photos not displaying
 
 Root cause: selfies, student photos, and class/batch photos were saved to local disk, but the
-production host's (Render free tier) filesystem is ephemeral — wiped on every restart and every
-free-tier cold-start (frequent). Uploads succeeded in the moment and vanished shortly after,
+production Cloud Run container filesystem is ephemeral — wiped on every restart and every
+scale-to-zero cold start. Uploads succeeded in the moment and vanished shortly after,
 with a bare 404 and no indication why. Moved all three photo types to store raw JPEG bytes
 directly as `LargeBinary` columns in Postgres instead (migration `0012` casts the old varchar
 path columns straight to bytea — the old values were unrecoverable paths anyway). Verified via

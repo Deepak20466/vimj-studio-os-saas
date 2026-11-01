@@ -148,7 +148,7 @@ export default function Fees() {
   const remind = async (fee) => {
     try {
       await FeesAPI.remind(fee.id);
-      toast.success("Reminder sent");
+      toast.success("Reminder queued (mock WhatsApp)");
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to send reminder");
     }

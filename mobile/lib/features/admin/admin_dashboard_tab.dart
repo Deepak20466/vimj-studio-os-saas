@@ -1,5 +1,5 @@
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/dismissed_items.dart';
@@ -16,33 +16,28 @@ class AdminDashboardTab extends StatefulWidget {
 
 class _AdminDashboardTabState extends State<AdminDashboardTab> {
   bool _loading = false;
-  bool _summaryLoaded = false;
-  bool _summaryFailed = false;
-  bool _feeGraphLoaded = false;
-  bool _feeGraphFailed = false;
+  bool _insightsLoaded = false;
+  bool _insightsFailed = false;
   bool _missingLoaded = false;
   bool _missingFailed = false;
-  bool _activityLoaded = false;
-  bool _activityFailed = false;
   bool _revenueFailed = false;
   bool _revenueLoading = false;
-  Map<String, dynamic>? _summary;
-  Map<String, dynamic>? _feeGraph;
+  bool _sendingReminders = false;
+  Map<String, dynamic>? _insights;
   List<dynamic> _missing = [];
-  List<dynamic> _activityBreakdown = [];
   String _revenuePeriod = 'month';
   DateTime _revenueMonth = DateTime.now();
   Map<String, dynamic>? _revenue;
   String _missingSearch = '';
   List<dynamic> get _visibleMissing => _missing.where((item) {
-        final m = item as Map<String, dynamic>;
-        return '${m['coach_name'] ?? ''} ${m['activity_name'] ?? ''} ${m['date'] ?? ''} ${m['end_time'] ?? ''}'
-            .toLowerCase()
-            .contains(_missingSearch.trim().toLowerCase());
-      }).toList();
+    final m = item as Map<String, dynamic>;
+    return '${m['coach_name'] ?? ''} ${m['activity_name'] ?? ''} ${m['date'] ?? ''} ${m['end_time'] ?? ''}'
+        .toLowerCase()
+        .contains(_missingSearch.trim().toLowerCase());
+  }).toList();
 
   String _money(dynamic value) =>
-      '₹${(value is num ? value : double.tryParse('$value') ?? 0).toStringAsFixed(2)}';
+      'Rs ${(value is num ? value : double.tryParse('$value') ?? 0).toStringAsFixed(2)}';
 
   @override
   void initState() {
@@ -53,10 +48,8 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
   Future<void> _load() async {
     setState(() {
       _loading = true;
-      _summaryFailed = false;
-      _feeGraphFailed = false;
+      _insightsFailed = false;
       _missingFailed = false;
-      _activityFailed = false;
       _revenueFailed = false;
       _revenueLoading = true;
     });
@@ -78,7 +71,8 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content: Text('Unable to load a dashboard section.')),
+              content: Text('Unable to load a dashboard section.'),
+            ),
           );
         }
       } finally {
@@ -93,37 +87,38 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
     try {
       await Future.wait([
         loadPart(
-            ApiClient.instance.get('/dashboard/summary'),
-            (v) async => _summary = v as Map<String, dynamic>,
-            () => _summaryLoaded = true,
-            () => _summaryFailed = true),
+          ApiClient.instance.get('/insights/revenue-risk'),
+          (v) async => _insights = v as Map<String, dynamic>,
+          () => _insightsLoaded = true,
+          () => _insightsFailed = true,
+        ),
         loadPart(
-            ApiClient.instance.get('/dashboard/fee-status'),
-            (v) async => _feeGraph = v as Map<String, dynamic>,
-            () => _feeGraphLoaded = true,
-            () => _feeGraphFailed = true),
-        loadPart(ApiClient.instance.get('/attendance/daily-missing'),
-            (v) async {
-          _missing = await DismissedItems.filter(
+          ApiClient.instance.get('/attendance/daily-missing'),
+          (v) async {
+            _missing = await DismissedItems.filter(
               _missingAttendanceDismissKey,
               v as List<dynamic>,
-              (m) => (m as Map<String, dynamic>)['class_id'] as int);
-        }, () => _missingLoaded = true, () => _missingFailed = true),
+              (m) => (m as Map<String, dynamic>)['class_id'] as int,
+            );
+          },
+          () => _missingLoaded = true,
+          () => _missingFailed = true,
+        ),
         loadPart(
-            ApiClient.instance.get('/dashboard/activity-attendance'),
-            (v) async => _activityBreakdown =
-                (v as Map<String, dynamic>)['points'] as List<dynamic>? ?? [],
-            () => _activityLoaded = true,
-            () => _activityFailed = true),
-        loadPart(
-            ApiClient.instance.get('/dashboard/revenue', query: {
+          ApiClient.instance.get(
+            '/dashboard/revenue',
+            query: {
               'period': 'month',
               'month': DateTime.now().month,
-              'year': DateTime.now().year
-            }),
-            (v) async => _revenue = v as Map<String, dynamic>, () {
-          _revenueLoading = false;
-        }, () => _revenueFailed = true),
+              'year': DateTime.now().year,
+            },
+          ),
+          (v) async => _revenue = v as Map<String, dynamic>,
+          () {
+            _revenueLoading = false;
+          },
+          () => _revenueFailed = true,
+        ),
       ]);
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -138,11 +133,14 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
       if (month != null) _revenueMonth = month;
     });
     try {
-      _revenue = await ApiClient.instance.get('/dashboard/revenue', query: {
-        'period': period,
-        if (period == 'month') 'month': _revenueMonth.month,
-        if (period != 'overall') 'year': _revenueMonth.year
-      }) as Map<String, dynamic>;
+      _revenue = await ApiClient.instance.get(
+        '/dashboard/revenue',
+        query: {
+          'period': period,
+          if (period == 'month') 'month': _revenueMonth.month,
+          if (period != 'overall') 'year': _revenueMonth.year,
+        },
+      ) as Map<String, dynamic>;
       if (mounted) setState(() {});
     } on ApiException catch (e) {
       _revenueFailed = true;
@@ -163,15 +161,139 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
 
   Future<void> _dismissMissing(Map<String, dynamic> m) async {
     await DismissedItems.dismiss(
-        _missingAttendanceDismissKey, m['class_id'] as int);
+      _missingAttendanceDismissKey,
+      m['class_id'] as int,
+    );
     if (mounted)
-      setState(() => _missing = _missing
-          .where(
-              (x) => (x as Map<String, dynamic>)['class_id'] != m['class_id'])
-          .toList());
+      setState(
+        () => _missing = _missing
+            .where(
+              (x) => (x as Map<String, dynamic>)['class_id'] != m['class_id'],
+            )
+            .toList(),
+      );
   }
 
-  Widget _statCard(String label, String value) {
+  Future<void> _sendReminders(Map<String, dynamic> risk) async {
+    final feeIds = (risk['fee_ids'] as List<dynamic>? ?? [])
+        .map((id) => int.tryParse('$id'))
+        .whereType<int>()
+        .toSet()
+        .toList();
+    if (feeIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('There are no overdue fees to remind.')),
+      );
+      return;
+    }
+
+    setState(() => _sendingReminders = true);
+    var queued = 0;
+    for (final feeId in feeIds) {
+      try {
+        await ApiClient.instance.post('/fees/$feeId/remind');
+        queued++;
+      } catch (_) {
+        // Keep processing so one bad record cannot block the remaining reminders.
+      }
+    }
+    if (!mounted) return;
+    setState(() => _sendingReminders = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$queued of ${feeIds.length} fee reminder(s) queued.'),
+      ),
+    );
+  }
+
+  Widget _sectionCard({required String title, required Widget child}) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          const SizedBox(height: 14),
+          child,
+        ],
+      ),
+    ),
+  );
+
+  Widget _riskItem(Map<String, dynamic> risk) {
+    final type = '${risk['type'] ?? 'risk'}';
+    final title = switch (type) {
+      'fee_default' => 'Fee default risk',
+      'attendance_drop' => 'Attendance drop',
+      'revenue_forecast' => 'Revenue forecast',
+      _ => 'Studio risk',
+    };
+    final amount = (risk['revenue_at_risk'] as num?)?.toDouble() ?? 0;
+    final feeIds = risk['fee_ids'] as List<dynamic>? ?? [];
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.warning.withOpacity(0.24)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.warning_amber_rounded,
+                color: AppColors.warning,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              Text(
+                _money(amount),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: amount > 0 ? AppColors.danger : AppColors.textMuted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text('${risk['message'] ?? 'No additional details.'}'),
+          if (type == 'fee_default') ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(
+                onPressed: _sendingReminders || feeIds.isEmpty
+                    ? null
+                    : () => _sendReminders(risk),
+                icon: _sendingReminders
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.notifications_active_outlined),
+                label: const Text('Send Reminders'),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _statCard(String label, String value, {Color? valueColor}) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
       decoration: BoxDecoration(
@@ -179,46 +301,124 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 8,
-              offset: const Offset(0, 3))
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-              height: 30,
-              child: Text(label.toUpperCase(),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textMuted,
-                      letterSpacing: 0.4))),
+            height: 30,
+            child: Text(
+              label.toUpperCase(),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textMuted,
+                letterSpacing: 0.4,
+              ),
+            ),
+          ),
           const SizedBox(height: 6),
           FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(value,
-                  style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.brandOrange))),
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: valueColor ?? AppColors.brandOrange,
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
+  Widget _batchProfitabilityChart(List<dynamic> batches) {
+    if (batches.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Center(child: Text('No batch analytics available yet.')),
+      );
+    }
+    final maxProfit = batches.fold<double>(0, (maxValue, value) {
+      final row = value as Map<String, dynamic>;
+      final profit = (row['estimated_profit'] as num?)?.toDouble() ?? 0;
+      return profit > maxValue ? profit : maxValue;
+    });
+
+    return Column(
+      children: [
+        const Wrap(
+          spacing: 16,
+          runSpacing: 6,
+          children: [
+            _ChartLegend(
+              color: AppColors.brandOrange,
+              label: 'Estimated profit',
+            ),
+            _ChartLegend(color: AppColors.success, label: 'Attendance'),
+          ],
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Estimated from enrolled monthly fees per active batch.',
+          style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+        ),
+        const SizedBox(height: 12),
+        for (final value in batches) ...[
+          _BatchMetricBars(
+            row: value as Map<String, dynamic>,
+            maxProfit: maxProfit,
+            money: _money,
+          ),
+          const SizedBox(height: 14),
+        ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final s = _summary ?? {};
-    final fees = _feeGraph ?? {'paid': 0, 'unpaid': 0, 'overdue': 0};
-    final paid = (fees['paid'] as num?)?.toDouble() ?? 0;
-    final unpaid = (fees['unpaid'] as num?)?.toDouble() ?? 0;
-    final overdue = (fees['overdue'] as num?)?.toDouble() ?? 0;
-    final total = paid + unpaid + overdue;
+    final insights = _insights ?? {};
+    final kpis = insights['kpis'] is Map<String, dynamic>
+        ? insights['kpis'] as Map<String, dynamic>
+        : <String, dynamic>{};
+    final summary = insights['summary'] is Map<String, dynamic>
+        ? insights['summary'] as Map<String, dynamic>
+        : <String, dynamic>{};
+    final forecast = insights['forecast'] is Map<String, dynamic>
+        ? insights['forecast'] as Map<String, dynamic>
+        : <String, dynamic>{};
+    final batchAnalytics = insights['batch_analytics'] is Map<String, dynamic>
+        ? insights['batch_analytics'] as Map<String, dynamic>
+        : <String, dynamic>{};
+    final risks = insights['risks'] as List<dynamic>? ?? [];
+    final batches = batchAnalytics['batches'] as List<dynamic>? ?? [];
+    final totalAtRisk = (summary['total_at_risk'] as num?)?.toDouble() ?? 0;
+    final predictedRevenue =
+        (forecast['next_month_revenue'] as num?)?.toDouble() ?? 0;
+    final currentRevenue =
+        (_revenue?['total_revenue'] as num?)?.toDouble() ?? 0;
+    final showTrend = _revenuePeriod == 'month' && _revenue != null;
+    final forecastTrend = !showTrend
+        ? Icons.trending_flat
+        : predictedRevenue >= currentRevenue
+        ? Icons.trending_up
+        : Icons.trending_down;
+    final forecastTrendColor = !showTrend
+        ? AppColors.textMuted
+        : predictedRevenue >= currentRevenue
+        ? AppColors.success
+        : AppColors.danger;
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -226,12 +426,16 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
         padding: const EdgeInsets.all(16),
         children: [
           if (_loading) const LinearProgressIndicator(),
-          if (_summaryFailed && _summary == null)
+          if (_insightsFailed && _insights == null)
             Card(
-                child: ListTile(
-                    title: const Text('Dashboard data is unavailable'),
-                    trailing: IconButton(
-                        icon: const Icon(Icons.refresh), onPressed: _load))),
+              child: ListTile(
+                title: const Text('Admin insights are unavailable'),
+                trailing: IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: _load,
+                ),
+              ),
+            ),
           GridView.count(
             crossAxisCount: 2,
             shrinkWrap: true,
@@ -240,257 +444,208 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
             mainAxisSpacing: 12,
             childAspectRatio: 1.45,
             children: [
-              _statCard('Students',
-                  _summaryLoaded ? '${s['total_students'] ?? '—'}' : '…'),
-              _statCard('Coaches',
-                  _summaryLoaded ? '${s['total_coaches'] ?? '—'}' : '…'),
               _statCard(
-                  'Classes this month',
-                  _summaryLoaded
-                      ? '${s['total_classes_this_month'] ?? '—'}'
-                      : '…'),
+                'Total Students',
+                _insights != null ? '${kpis['total_students'] ?? '—'}' : '…',
+              ),
               _statCard(
-                  _revenuePeriod == 'month'
-                      ? 'Monthly revenue'
-                      : _revenuePeriod == 'year'
-                          ? 'Yearly revenue'
-                          : 'Overall revenue',
-                  '₹${_revenue?['total_revenue'] ?? s['monthly_revenue'] ?? 0}'),
-              _statCard('Unpaid/overdue fees',
-                  _summaryLoaded ? '${s['unpaid_fees_count'] ?? '—'}' : '…'),
+                'Today Present',
+                _insights != null ? '${kpis['today_present'] ?? '—'}' : '…',
+              ),
+              _statCard(
+                'Fee Pending Amount',
+                _insights != null ? _money(kpis['fee_pending_amount']) : '…',
+              ),
+              _statCard(
+                'Revenue at Risk',
+                _insights != null ? _money(totalAtRisk) : '…',
+                valueColor: totalAtRisk > 0
+                    ? AppColors.danger
+                    : AppColors.success,
+              ),
             ],
           ),
-          Card(
-              child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Revenue period',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16)),
-                        const SizedBox(height: 4),
-                        Text(
-                            _revenuePeriod == 'month'
-                                ? '${_revenueMonth.month}/${_revenueMonth.year}'
-                                : _revenuePeriod == 'year'
-                                    ? '${_revenueMonth.year}'
-                                    : 'All collected revenue',
-                            style: const TextStyle(
-                                color: AppColors.textMuted, fontSize: 12)),
-                        const SizedBox(height: 10),
-                        Wrap(spacing: 8, children: [
-                          ChoiceChip(
-                              label: const Text('Current month'),
-                              selected: _revenuePeriod == 'month' &&
-                                  _revenueMonth.month == DateTime.now().month &&
-                                  _revenueMonth.year == DateTime.now().year,
-                              onSelected: (_) =>
-                                  _loadRevenue('month', month: DateTime.now())),
-                          ChoiceChip(
-                              label: const Text('Choose month'),
-                              selected: _revenuePeriod == 'month' &&
-                                  !(_revenueMonth.month ==
-                                          DateTime.now().month &&
-                                      _revenueMonth.year ==
-                                          DateTime.now().year),
-                              onSelected: (_) async {
-                                final d = await showDatePicker(
-                                    context: context,
-                                    initialDate: _revenueMonth,
-                                    firstDate: DateTime(2000),
-                                    lastDate: DateTime(2100));
-                                if (d != null) _loadRevenue('month', month: d);
-                              }),
-                          ChoiceChip(
-                              label: const Text('Yearly'),
-                              selected: _revenuePeriod == 'year',
-                              onSelected: (_) => _loadRevenue('year')),
-                          ChoiceChip(
-                              label: const Text('Overall'),
-                              selected: _revenuePeriod == 'overall',
-                              onSelected: (_) => _loadRevenue('overall')),
-                        ]),
-                        if (_revenueLoading)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 12),
-                            child: LinearProgressIndicator(),
-                          ),
-                        if (_revenueFailed && _revenue == null)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 10),
-                            child: Text(
-                                'Revenue details are unavailable. Pull to retry.'),
-                          ),
-                        if (_revenue != null)
-                          Wrap(spacing: 12, runSpacing: 4, children: [
-                            Text('Fees ${_money(_revenue!['fee_revenue'])}'),
-                            Text(
-                                'Products ${_money(_revenue!['product_revenue'])}'),
-                            Text('Total ${_money(_revenue!['total_revenue'])}',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold))
-                          ]),
-                      ]))),
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-                color: Colors.white, borderRadius: BorderRadius.circular(14)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Fee Status',
-                    style:
-                        TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                const SizedBox(height: 12),
-                if (!_feeGraphLoaded)
-                  const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(child: CircularProgressIndicator()))
-                else if (_feeGraphFailed && _feeGraph == null)
-                  const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(
-                          child: Text(
-                              'Fee status is unavailable. Pull to retry.')))
-                else if (total == 0)
-                  const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(child: Text('No fee data yet.')))
-                else
-                  SizedBox(
-                    height: 180,
-                    child: PieChart(
-                      PieChartData(
-                        sections: [
-                          if (paid > 0)
-                            PieChartSectionData(
-                                value: paid,
-                                color: AppColors.success,
-                                title: 'Paid\n${paid.toInt()}',
-                                radius: 70,
-                                titleStyle: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold)),
-                          if (unpaid > 0)
-                            PieChartSectionData(
-                                value: unpaid,
-                                color: AppColors.warning,
-                                title: 'Unpaid\n${unpaid.toInt()}',
-                                radius: 70,
-                                titleStyle: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold)),
-                          if (overdue > 0)
-                            PieChartSectionData(
-                                value: overdue,
-                                color: AppColors.danger,
-                                title: 'Overdue\n${overdue.toInt()}',
-                                radius: 70,
-                                titleStyle: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold)),
-                        ],
-                        sectionsSpace: 2,
-                      ),
+          const SizedBox(height: 18),
+          _sectionCard(
+            title: '⚠️ AI Revenue Risk',
+            child: _insightsFailed && _insights == null
+                ? const Text('Unable to load insights. Pull down to retry.')
+                : !_insightsLoaded
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(20),
+                      child: CircularProgressIndicator(),
                     ),
+                  )
+                : risks.isEmpty
+                ? const Text('No risk predictions are available.')
+                : Column(
+                    children: [
+                      for (final risk in risks)
+                        _riskItem(risk as Map<String, dynamic>),
+                    ],
                   ),
-              ],
-            ),
           ),
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-                color: Colors.white, borderRadius: BorderRadius.circular(14)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Activity Attendance %',
-                    style:
-                        TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                const SizedBox(height: 12),
-                if (!_activityLoaded)
-                  const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(child: CircularProgressIndicator()))
-                else if (_activityFailed && _activityBreakdown.isEmpty)
-                  const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(
-                          child: Text(
-                              'Activity data is unavailable. Pull to retry.')))
-                else if (_activityBreakdown.isEmpty)
-                  const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(
-                          child: Text('No activity data for this period.')))
-                else
-                  SizedBox(
-                    height: 180,
-                    child: BarChart(
-                      BarChartData(
-                        barGroups: [
-                          for (int i = 0; i < _activityBreakdown.length; i++)
-                            BarChartGroupData(x: i, barRods: [
-                              BarChartRodData(
-                                  toY: (_activityBreakdown[i]
-                                          ['avg_attendance_pct'] as num)
-                                      .toDouble(),
-                                  color: AppColors.brandOrange,
-                                  width: 18,
-                                  borderRadius: BorderRadius.circular(4)),
-                            ]),
-                        ],
-                        titlesData: FlTitlesData(
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              getTitlesWidget: (value, meta) {
-                                final idx = value.toInt();
-                                if (idx < 0 || idx >= _activityBreakdown.length)
-                                  return const SizedBox.shrink();
-                                final name = _activityBreakdown[idx]
-                                    ['activity_name'] as String;
-                                return Padding(
-                                    padding: const EdgeInsets.only(top: 4),
-                                    child: Text(
-                                        name.length > 8
-                                            ? '${name.substring(0, 8)}…'
-                                            : name,
-                                        style: const TextStyle(fontSize: 9)));
-                              },
+          const SizedBox(height: 12),
+          _sectionCard(
+            title: '📈 AI Forecast',
+            child: _insightsFailed && _insights == null
+                ? const Text('Unable to load insights. Pull down to retry.')
+                : !_insightsLoaded
+                ? const Text('Forecast will appear when insights load.')
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(forecastTrend, color: forecastTrendColor),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Predicted: ${_money(predictedRevenue)}',
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                          leftTitles: AxisTitles(
-                              sideTitles: SideTitles(
-                                  showTitles: true,
-                                  reservedSize: 32,
-                                  getTitlesWidget: (v, m) => Text(
-                                      '${v.toInt()}%',
-                                      style: const TextStyle(fontSize: 9)))),
-                          topTitles: const AxisTitles(
-                              sideTitles: SideTitles(showTitles: false)),
-                          rightTitles: const AxisTitles(
-                              sideTitles: SideTitles(showTitles: false)),
-                        ),
-                        gridData: const FlGridData(drawVerticalLine: false),
-                        borderData: FlBorderData(show: false),
+                        ],
                       ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'At Risk: ${_money(totalAtRisk)}',
+                        style: TextStyle(
+                          color: totalAtRisk > 0
+                              ? AppColors.danger
+                              : AppColors.textMuted,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Local rule-based estimate from recent collections.',
+                      ),
+                    ],
+                  ),
+          ),
+          const SizedBox(height: 18),
+          _sectionCard(
+            title: 'Batch Profitability vs Attendance',
+            child: _insightsFailed && _insights == null
+                ? const Text(
+                    'Unable to load batch analytics. Pull down to retry.',
+                  )
+                : _insightsLoaded
+                ? _batchProfitabilityChart(batches)
+                : const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(20),
+                      child: CircularProgressIndicator(),
                     ),
                   ),
-              ],
+          ),
+          const SizedBox(height: 18),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Revenue period',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _revenuePeriod == 'month'
+                        ? '${_revenueMonth.month}/${_revenueMonth.year}'
+                        : _revenuePeriod == 'year'
+                        ? '${_revenueMonth.year}'
+                        : 'All collected revenue',
+                    style: const TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('Current month'),
+                        selected:
+                            _revenuePeriod == 'month' &&
+                            _revenueMonth.month == DateTime.now().month &&
+                            _revenueMonth.year == DateTime.now().year,
+                        onSelected: (_) =>
+                            _loadRevenue('month', month: DateTime.now()),
+                      ),
+                      ChoiceChip(
+                        label: const Text('Choose month'),
+                        selected:
+                            _revenuePeriod == 'month' &&
+                            !(_revenueMonth.month == DateTime.now().month &&
+                                _revenueMonth.year == DateTime.now().year),
+                        onSelected: (_) async {
+                          final d = await showDatePicker(
+                            context: context,
+                            initialDate: _revenueMonth,
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime(2100),
+                          );
+                          if (d != null) _loadRevenue('month', month: d);
+                        },
+                      ),
+                      ChoiceChip(
+                        label: const Text('Yearly'),
+                        selected: _revenuePeriod == 'year',
+                        onSelected: (_) => _loadRevenue('year'),
+                      ),
+                      ChoiceChip(
+                        label: const Text('Overall'),
+                        selected: _revenuePeriod == 'overall',
+                        onSelected: (_) => _loadRevenue('overall'),
+                      ),
+                    ],
+                  ),
+                  if (_revenueLoading)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 12),
+                      child: LinearProgressIndicator(),
+                    ),
+                  if (_revenueFailed && _revenue == null)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 10),
+                      child: Text(
+                        'Revenue details are unavailable. Pull to retry.',
+                      ),
+                    ),
+                  if (_revenue != null)
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 4,
+                      children: [
+                        Text('Fees ${_money(_revenue!['fee_revenue'])}'),
+                        Text(
+                          'Products ${_money(_revenue!['product_revenue'])}',
+                        ),
+                        Text(
+                          'Total ${_money(_revenue!['total_revenue'])}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 20),
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-                color: Colors.white, borderRadius: BorderRadius.circular(14)),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -500,65 +655,197 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
                   search: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Coaches Missing Attendance Today',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 16)),
+                      const Text(
+                        'Coaches Missing Attendance Today',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       TextField(
-                          decoration: InputDecoration(
-                              labelText: 'Search coach, activity, or date',
-                              prefixIcon: const Icon(Icons.search),
-                              suffixIcon: _missingSearch.isEmpty
-                                  ? null
-                                  : IconButton(
-                                      onPressed: () =>
-                                          setState(() => _missingSearch = ''),
-                                      icon: const Icon(Icons.clear))),
-                          onChanged: (v) => setState(() => _missingSearch = v)),
+                        decoration: InputDecoration(
+                          labelText: 'Search coach, activity, or date',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: _missingSearch.isEmpty
+                              ? null
+                              : IconButton(
+                                  onPressed: () =>
+                                      setState(() => _missingSearch = ''),
+                                  icon: const Icon(Icons.clear),
+                                ),
+                        ),
+                        onChanged: (v) => setState(() => _missingSearch = v),
+                      ),
                     ],
                   ),
-                  results: Column(children: [
-                    if (!_missingLoaded)
-                      const Padding(
+                  results: Column(
+                    children: [
+                      if (!_missingLoaded)
+                        const Padding(
                           padding: EdgeInsets.symmetric(vertical: 12),
-                          child: Center(child: CircularProgressIndicator()))
-                    else if (_missingFailed && _missing.isEmpty)
-                      const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          child: Text(
-                              'Attendance alerts are unavailable. Pull to retry.'))
-                    else if (_missing.isEmpty)
-                      const Padding(
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      else if (_missingFailed && _missing.isEmpty)
+                        const Padding(
                           padding: EdgeInsets.symmetric(vertical: 12),
                           child: Text(
-                              'All coaches have marked attendance for ended classes today.'))
-                    else if (_visibleMissing.isEmpty)
-                      const Padding(
+                            'Attendance alerts are unavailable. Pull to retry.',
+                          ),
+                        )
+                      else if (_missing.isEmpty)
+                        const Padding(
                           padding: EdgeInsets.symmetric(vertical: 12),
-                          child: Text('No results found.'))
-                    else
-                      ..._visibleMissing.map((m) => ListTile(
+                          child: Text(
+                            'All coaches have marked attendance for ended classes today.',
+                          ),
+                        )
+                      else if (_visibleMissing.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Text('No results found.'),
+                        )
+                      else
+                        ..._visibleMissing.map(
+                          (m) => ListTile(
                             contentPadding: EdgeInsets.zero,
                             title: Text(m['coach_name'] ?? '-'),
                             subtitle: Text(
-                                '${m['activity_name'] ?? '-'} · ${m['date'] ?? ''} · ends ${m['end_time'] ?? ''}'),
-                            leading: const Icon(Icons.warning_amber_rounded,
-                                color: AppColors.warning),
+                              '${m['activity_name'] ?? '-'} · ${m['date'] ?? ''} · ends ${m['end_time'] ?? ''}',
+                            ),
+                            leading: const Icon(
+                              Icons.warning_amber_rounded,
+                              color: AppColors.warning,
+                            ),
                             trailing: IconButton(
-                              icon: const Icon(Icons.delete_outline,
-                                  color: AppColors.danger),
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: AppColors.danger,
+                              ),
                               tooltip: 'Dismiss this alert',
                               onPressed: () =>
                                   _dismissMissing(m as Map<String, dynamic>),
                             ),
-                          )),
-                  ]),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ChartLegend extends StatelessWidget {
+  final Color color;
+  final String label;
+
+  const _ChartLegend({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 9,
+        height: 9,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      ),
+      const SizedBox(width: 6),
+      Text(
+        label,
+        style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+      ),
+    ],
+  );
+}
+
+class _BatchMetricBars extends StatelessWidget {
+  final Map<String, dynamic> row;
+  final double maxProfit;
+  final String Function(dynamic) money;
+
+  const _BatchMetricBars({
+    required this.row,
+    required this.maxProfit,
+    required this.money,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final profit = (row['estimated_profit'] as num?)?.toDouble() ?? 0;
+    final attendance = (row['attendance_pct'] as num?)?.toDouble() ?? 0;
+    final profitProgress = maxProfit > 0
+        ? (profit / maxProfit).clamp(0, 1)
+        : 0.0;
+    final attendanceProgress = (attendance / 100).clamp(0, 1);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '${row['batch_name'] ?? 'Batch'}',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              money(profit),
+              style: const TextStyle(
+                color: AppColors.brandOrange,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: LinearProgressIndicator(
+            value: profitProgress.toDouble(),
+            minHeight: 7,
+            color: AppColors.brandOrange,
+            backgroundColor: AppColors.brandLight,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Attendance',
+                style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+              ),
+            ),
+            Text(
+              '${attendance.toStringAsFixed(0)}%',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.success,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: LinearProgressIndicator(
+            value: attendanceProgress.toDouble(),
+            minHeight: 5,
+            color: AppColors.success,
+            backgroundColor: const Color(0xFFE7F3EA),
+          ),
+        ),
+      ],
     );
   }
 }
