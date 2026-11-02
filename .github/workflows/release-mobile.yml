@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - 'mobile-v*'
+    branches:
+      - 'release-mobile-v*'
   workflow_dispatch:
     inputs:
       release_tag:
@@ -49,8 +51,11 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           tag="${RELEASE_TAG:-$GITHUB_REF_NAME}"
+          if [[ "$GITHUB_REF" == refs/heads/release-mobile-v* ]]; then
+            tag="mobile-${GITHUB_REF_NAME#release-mobile-v}"
+          fi
           echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
-          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "Automated Android release build."
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --target "$GITHUB_SHA" --title "$tag" --notes "Automated Android release build."
       - name: Upload APKs to release
         env:
           GH_TOKEN: ${{ github.token }}

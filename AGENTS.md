@@ -669,3 +669,11 @@ following additional updates:
   All assets match GitHub's published digests, pass `apksigner verify`, and use
   the persistent signing certificate SHA-256
   `7d128bae4a3851fe496175bbfd832733c83f4210de992403b4677554f32d7ea7`.
+
+
+## Coach Salary Restoration (2026-11-02)
+
+- Admin and coach salary views are restored on web and Flutter mobile, backed by the salary ledger API. Admins can record, edit, and delete unacknowledged entries; coaches can view their own records and acknowledge receipt.
+- The monthly salary notification job is available to the durable Cloud Scheduler dispatcher.
+- Alembic revision 0023 skips coach_salary creation when the table already exists and refuses destructive downgrade; existing rows are retained. If prior migrations removed the table and its rows, schema recreation alone cannot recover those values.
+- Local builds: Flutter split-ABI release compilation succeeded with the repository lockfile; frontend production build succeeded. Publish APKs through .github/workflows/release-mobile.yml with the existing persistent signing key. Do not commit signing material.

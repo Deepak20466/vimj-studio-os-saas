@@ -208,6 +208,8 @@ class SalaryRecord {
   final int year;
   final String amount;
   final String? acknowledgedDate;
+  final String? notifiedAt;
+  final String? createdAt;
 
   SalaryRecord({
     required this.id,
@@ -215,6 +217,8 @@ class SalaryRecord {
     required this.year,
     required this.amount,
     this.acknowledgedDate,
+    this.notifiedAt,
+    this.createdAt,
   });
 
   factory SalaryRecord.fromJson(Map<String, dynamic> json) => SalaryRecord(
@@ -223,6 +227,8 @@ class SalaryRecord {
         year: json['year'] as int,
         amount: json['amount'].toString(),
         acknowledgedDate: json['acknowledged_date'] as String?,
+        notifiedAt: json['notified_at'] as String?,
+        createdAt: json['created_at'] as String?,
       );
 }
 

@@ -1,3 +1,7 @@
+## Current Status (2026-11-02): Coach Salary Restored
+
+The client explicitly requested the Coach Salary feature back after its 2026-09-12 removal. This newer decision supersedes the earlier statements below that Salary would remain removed. Salary is restored across the admin and coach web/mobile dashboards, API, database model, and monthly notification schedule. Migration 0023 creates coach_salary only when the table is absent and never drops or replaces salary rows. If the table had already been removed, the migration can recreate the schema but cannot recreate deleted rows; production row verification is pending because the Render connection currently requires reauthentication.
+
 Act as a senior developer and build a complete Production-ready Attendance Management System. *First inspect the existing repository and do not rewrite working functionality unnecessarily.* If this a new project create the architecture below.
 
 > **⚠️ 2026-09-12 — Both dashboards rebuilt to reduced scopes, same day.** The

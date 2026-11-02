@@ -9,8 +9,10 @@ from app.models.user import User, UserRole
 from app.models.activity import Activity
 from app.models.attendance import CoachAttendance
 from app.models.coach_activity import CoachActivity
+from app.models.salary import CoachSalary
 from app.schemas.user import UserCreate, UserOut, UserUpdate
 from app.schemas.attendance import CoachAttendanceOut
+from app.schemas.salary import SalaryOut
 from app.schemas.coach_activity import CoachActivitiesSet, CoachActivityOut
 from app.security import get_current_user, require_admin, require_coach, hash_password
 from app.services.audit import log_action
@@ -33,7 +35,8 @@ def coach_directory(
 ):
     """Minimal name/id list of other active coaches, used to pick a covering coach for a swap.
 
-    Deliberately excludes attendance, salary, and any other coach-private data.
+    Deliberately excludes attendance, salary, and other coach-private data; those records
+    are available only from their own role-checked endpoints.
     """
     coaches = (
         db.query(User)
@@ -139,6 +142,22 @@ def coach_attendance(
     if date_to:
         query = query.filter(CoachAttendance.date <= date_to)
     return query.order_by(CoachAttendance.date.desc()).all()
+
+
+@router.get("/{coach_id}/salary", response_model=List[SalaryOut])
+def coach_salary(
+    coach_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return salary records only to the coach or an admin."""
+    _assert_self_or_admin(current_user, coach_id)
+    return (
+        db.query(CoachSalary)
+        .filter(CoachSalary.coach_id == coach_id)
+        .order_by(CoachSalary.year.desc(), CoachSalary.month.desc())
+        .all()
+    )
 
 
 @router.get("/{coach_id}/activities", response_model=List[CoachActivityOut])

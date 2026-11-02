@@ -521,3 +521,12 @@ under `android/`/`ios/` (newly tracked, not newly changed).
 - Added authenticated Android FCM token registration/removal and best-effort server push delivery alongside existing in-app notifications.
 - Added searchable, highest-to-lowest Admin Command Center lists for defaulters/attendance risks, batch revenue estimates, and three-month collections. Coach dashboard remains unchanged.
 - Added a delete-photo control to the Admin student profile modal using the existing RBAC-protected API.
+
+
+## Coach Salary Restored (2026-11-02)
+
+- Restored admin salary history with create, edit, delete, acknowledgement status, and coach/period/year API filters.
+- Restored coach salary history and receipt acknowledgement on web and mobile. Acknowledgements are audit logged and notify active admins.
+- Restored monthly salary-ready in-app notifications through the existing durable scheduler job definitions.
+- Added migration 0023. It preserves an existing coach_salary table and its rows; if the table is absent, it creates the ledger schema without destructive changes.
+- The data migration is intentionally non-destructive. Production row count still needs checking after Render reauthentication.

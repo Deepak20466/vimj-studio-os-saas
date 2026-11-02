@@ -7,6 +7,7 @@ import 'coach_students_tab.dart';
 import 'coach_receipts_tab.dart';
 import 'coach_fee_reminders_tab.dart';
 import 'coach_facility_attendance_tab.dart';
+import 'coach_salary_tab.dart';
 
 class CoachHome extends StatefulWidget {
   const CoachHome({super.key});
@@ -38,6 +39,7 @@ class _CoachHomeState extends State<CoachHome> {
     _MoreItem('Receipts', Icons.receipt_long_outlined, _buildReceipts),
     _MoreItem(
         'Fee Reminders', Icons.notifications_active_outlined, _buildReminders),
+    _MoreItem('Salary', Icons.account_balance_wallet_outlined, _buildSalary),
     _MoreItem('Settings', Icons.settings_outlined, _buildSettings),
   ];
 
@@ -46,6 +48,7 @@ class _CoachHomeState extends State<CoachHome> {
       const CoachReceiptsTab();
   static Widget _buildReminders(BuildContext context) =>
       const CoachFeeRemindersTab();
+  static Widget _buildSalary(BuildContext context) => const CoachSalaryTab();
   static Widget _buildSettings(BuildContext context) => const CoachProfileTab();
 
   void _openMore() {

@@ -29,6 +29,7 @@ from app.routers import (
     notifications,
     reset,
     leave,
+    salary,
     cloud_scheduler,
 )
 from app.api.v1 import insights
@@ -95,6 +96,7 @@ app.include_router(fee_reminders.router)
 app.include_router(notifications.router)
 app.include_router(reset.router)
 app.include_router(leave.router)
+app.include_router(salary.router)
 app.include_router(insights.router)
 app.include_router(insights.versioned_router)
 app.include_router(cloud_scheduler.router)

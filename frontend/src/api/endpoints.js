@@ -34,6 +34,15 @@ export const CoachesAPI = {
   setActivities: (id, activityIds) => client.put(`/coaches/${id}/activities`, { activity_ids: activityIds }),
 };
 
+export const SalaryAPI = {
+  list: (params) => client.get("/salary", { params }),
+  create: (payload) => client.post("/salary", payload),
+  update: (id, payload) => client.put("/salary/" + id, payload),
+  remove: (id) => client.delete("/salary/" + id),
+  acknowledge: (salaryId) => client.post("/salary/acknowledge", { salary_id: salaryId }),
+  coachHistory: (coachId) => client.get("/coaches/" + coachId + "/salary"),
+};
+
 export const ActivitiesAPI = {
   list: () => client.get("/activities"),
   create: (payload) => client.post("/activities", payload),

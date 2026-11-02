@@ -9,6 +9,7 @@ import 'admin_activities_tab.dart';
 import 'admin_batches_tab.dart';
 import 'admin_attendance_tab.dart';
 import 'admin_fees_tab.dart';
+import 'admin_salary_tab.dart';
 import 'admin_reports_tab.dart';
 import 'admin_leave_tab.dart';
 import 'admin_settings_tab.dart';
@@ -30,7 +31,7 @@ class _NavItem {
 
 class _AdminHomeState extends State<AdminHome> {
   int _index = 0;
-  final List<Widget?> _pageCache = List<Widget?>.filled(10, null);
+  final List<Widget?> _pageCache = List<Widget?>.filled(11, null);
 
   // Same bottom-nav-plus-"More"-sheet pattern as the web dashboard's Layout.jsx and the
   // coach app's CoachHome — the admin app used to be the only screen in VIMJ using a left
@@ -46,6 +47,7 @@ class _AdminHomeState extends State<AdminHome> {
     _NavItem('Batches', Icons.calendar_month_outlined, AdminBatchesTab()),
     _NavItem('Reports', Icons.picture_as_pdf_outlined, AdminReportsTab()),
     _NavItem('Fees', Icons.payments_outlined, AdminFeesTab()),
+    _NavItem('Salary', Icons.account_balance_wallet_outlined, AdminSalaryTab()),
     _NavItem('Leave', Icons.beach_access_outlined, AdminLeaveTab()),
     _NavItem('Settings', Icons.settings_outlined, AdminSettingsTab()),
   ];

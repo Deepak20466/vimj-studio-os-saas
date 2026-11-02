@@ -15,6 +15,7 @@ from app.models.batch import Batch
 from app.models.class_session import ClassSession
 from app.models.enrollment import StudentEnrollment
 from app.models.fee import StudentFee, FeeStatus
+from app.models.salary import CoachSalary
 from app.models.user import User, UserRole
 from app.services.batches import generate_sessions_for_batch
 from app.services.notifications import notify, notify_and_push, fee_reminder_message
@@ -147,6 +148,45 @@ def job_mark_overdue_fees(now: datetime | None = None):
         )
         db.commit()
         logger.info("Marked %d fees overdue", updated)
+    finally:
+        db.close()
+
+
+def job_monthly_salary_notifications(now: datetime | None = None):
+    """Runs on the 10th: notify coaches about salary records for the current month."""
+    db = SessionLocal()
+    try:
+        today = _local_now(now).date()
+        salaries = (
+            db.query(CoachSalary)
+            .filter(
+                CoachSalary.month == today.month,
+                CoachSalary.year == today.year,
+                CoachSalary.notified_at.is_(None),
+            )
+            .all()
+        )
+        notified = 0
+        for salary in salaries:
+            coach = db.query(User).filter(User.id == salary.coach_id).first()
+            if coach is None:
+                continue
+            message = (
+                f"Hi {coach.name}, your VIMJ Studio salary of {salary.amount} for "
+                f"{today.month}/{today.year} is ready. Please acknowledge receipt in the app."
+            )
+            notify_and_push(
+                db,
+                coach,
+                message,
+                "Salary ready",
+                "SALARY_CREDITED",
+                link="/coach/salary",
+            )
+            salary.notified_at = datetime.now(timezone.utc)
+            notified += 1
+        db.commit()
+        logger.info("Sent %d salary notifications", notified)
     finally:
         db.close()
 
@@ -476,6 +516,7 @@ def job_auto_generate_batch_sessions(now: datetime | None = None):
 
 SCHEDULER_JOB_DEFINITIONS = {
     "monthly_fee_reminders": (job_monthly_fee_reminders, CronTrigger(day=10, hour=9, minute=0, timezone=SCHEDULER_TIMEZONE)),
+    "monthly_salary_notifications": (job_monthly_salary_notifications, CronTrigger(day=10, hour=9, minute=5, timezone=SCHEDULER_TIMEZONE)),
     "mark_overdue_fees": (job_mark_overdue_fees, CronTrigger(hour=0, minute=30, timezone=SCHEDULER_TIMEZONE)),
     "coach_attendance_reminders": (
         job_coach_attendance_reminders,
