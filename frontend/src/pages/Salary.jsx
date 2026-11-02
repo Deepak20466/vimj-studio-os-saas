@@ -101,7 +101,7 @@ export default function Salary() {
                   <td>
                     {MONTH_NAMES[s.month]} {s.year}
                   </td>
-                  <td>?{Number(s.amount).toLocaleString()}</td>
+                  <td>Rs {Number(s.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                   <td>{s.notified_at ? new Date(s.notified_at).toLocaleDateString() : "-"}</td>
                   <td>
                     {s.acknowledged_date ? (

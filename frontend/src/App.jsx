@@ -34,7 +34,6 @@ const ADMIN_LINKS = [
   { to: "/reports", label: "Reports", icon: "attendance" },
   { to: "/fees", label: "Fees", icon: "fees" },
   { to: "/salary", label: "Salary", icon: "salary" },
-  { to: "/salary", label: "Salary", icon: "salary" },
   { to: "/leave", label: "Leave", icon: "leave" },
   { to: "/settings", label: "Settings", icon: "settings" },
 ];
@@ -44,7 +43,6 @@ const COACH_LINKS = [
   { to: "/coach/classes", label: "Classes", icon: "classes" },
   { to: "/coach/students", label: "Students", icon: "students" },
   { to: "/coach/attendance", label: "Attendance", icon: "attendance" },
-  { to: "/coach/salary", label: "Salary", icon: "salary" },
   { to: "/coach/salary", label: "Salary", icon: "salary" },
   { to: "/coach/leave", label: "Leave", icon: "leave" },
   { to: "/coach/receipts", label: "Receipts", icon: "fees" },

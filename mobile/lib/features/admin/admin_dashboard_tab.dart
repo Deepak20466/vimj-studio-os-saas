@@ -27,6 +27,8 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
   bool _revenueLoading = false;
   bool _sendingReminders = false;
   bool _insightsRefreshing = false;
+  bool _showAllInsightRows = false;
+  bool _showAllBatchRows = false;
   String _insightFilter = '';
   Map<String, dynamic>? _insights;
   Map<String, double>? _insightChange;
@@ -39,11 +41,11 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
   Map<String, dynamic>? _revenue;
   String _missingSearch = '';
   List<dynamic> get _visibleMissing => _missing.where((item) {
-    final m = item as Map<String, dynamic>;
-    return '${m['coach_name'] ?? ''} ${m['activity_name'] ?? ''} ${m['date'] ?? ''} ${m['end_time'] ?? ''}'
-        .toLowerCase()
-        .contains(_missingSearch.trim().toLowerCase());
-  }).toList();
+        final m = item as Map<String, dynamic>;
+        return '${m['coach_name'] ?? ''} ${m['activity_name'] ?? ''} ${m['date'] ?? ''} ${m['end_time'] ?? ''}'
+            .toLowerCase()
+            .contains(_missingSearch.trim().toLowerCase());
+      }).toList();
 
   String _money(dynamic value) =>
       'Rs ${(value is num ? value : double.tryParse('$value') ?? 0).toStringAsFixed(2)}';
@@ -60,7 +62,8 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
     WidgetsBinding.instance.addObserver(this);
     _load();
     _insightsTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted && !_insightsRefreshing &&
+      if (mounted &&
+          !_insightsRefreshing &&
           WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
         _refreshInsights();
       }
@@ -293,21 +296,22 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
   }
 
   Widget _sectionCard({required String title, required Widget child}) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 14),
+              child,
+            ],
           ),
-          const SizedBox(height: 14),
-          child,
-        ],
-      ),
-    ),
-  );
+        ),
+      );
 
   Widget _statCard(String label, String value, {Color? valueColor}) {
     return Container(
@@ -365,20 +369,20 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
         child: Center(child: Text('No batch analytics available yet.')),
       );
     }
-    final sortedBatches = [...batches]
-      ..sort((a, b) =>
-          (((b as Map<String, dynamic>)['estimated_profit'] as num?)
-                  ?.toDouble() ??
-              0)
-              .compareTo(
-                  ((a as Map<String, dynamic>)['estimated_profit'] as num?)
-                          ?.toDouble() ??
-                      0));
+    final sortedBatches = [...batches]..sort((a, b) =>
+        (((b as Map<String, dynamic>)['estimated_profit'] as num?)
+                    ?.toDouble() ??
+                0)
+            .compareTo(((a as Map<String, dynamic>)['estimated_profit'] as num?)
+                    ?.toDouble() ??
+                0));
     final maxProfit = sortedBatches.fold<double>(0, (maxValue, value) {
       final row = value as Map<String, dynamic>;
       final profit = (row['estimated_profit'] as num?)?.toDouble() ?? 0;
       return profit > maxValue ? profit : maxValue;
     });
+    final visibleBatches =
+        _showAllBatchRows ? sortedBatches : sortedBatches.take(5).toList();
 
     return Column(
       children: [
@@ -399,7 +403,7 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
           style: TextStyle(fontSize: 11, color: AppColors.textMuted),
         ),
         const SizedBox(height: 12),
-        for (final value in sortedBatches) ...[
+        for (final value in visibleBatches) ...[
           _BatchMetricBars(
             row: value as Map<String, dynamic>,
             maxProfit: maxProfit,
@@ -407,7 +411,120 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
           ),
           const SizedBox(height: 14),
         ],
+        if (sortedBatches.length > 5)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () =>
+                  setState(() => _showAllBatchRows = !_showAllBatchRows),
+              icon: Icon(
+                  _showAllBatchRows ? Icons.expand_less : Icons.expand_more),
+              label: Text(_showAllBatchRows
+                  ? 'View less'
+                  : 'View more (${sortedBatches.length - 5})'),
+            ),
+          ),
       ],
+    );
+  }
+
+  Widget _forecastVisual(
+    List<Map<String, dynamic>> collections,
+    double predictedRevenue,
+  ) {
+    final rows = <Map<String, dynamic>>[
+      ...collections.map((row) => {
+            'label': '${row['month'] ?? 'Month'}',
+            'amount': (row['collected'] as num?)?.toDouble() ?? 0.0,
+            'forecast': false,
+          }),
+      {'label': 'Next month', 'amount': predictedRevenue, 'forecast': true},
+    ];
+    final maxAmount = rows.fold<double>(0, (maxValue, row) {
+      final amount = row['amount'] as double;
+      return amount > maxValue ? amount : maxValue;
+    });
+    return Container(
+      margin: const EdgeInsets.only(top: 12, bottom: 8),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+      decoration: BoxDecoration(
+        color: AppColors.brandLight.withOpacity(0.45),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.brandOrange.withOpacity(0.14)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Collections and estimate',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 126,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                for (final row in rows)
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              _money(row['amount']),
+                              style: const TextStyle(
+                                  fontSize: 10,
+                                  color: AppColors.textMuted,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Container(
+                            width: 30,
+                            height: maxAmount <= 0
+                                ? 6
+                                : (72 * (row['amount'] as double) / maxAmount)
+                                    .clamp(6, 72),
+                            decoration: BoxDecoration(
+                              color: row['forecast'] == true
+                                  ? AppColors.brandOrange
+                                  : AppColors.textMuted.withOpacity(0.55),
+                              borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(7)),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '${row['label']}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: row['forecast'] == true
+                                  ? AppColors.brandOrange
+                                  : AppColors.textMuted,
+                              fontWeight: row['forecast'] == true
+                                  ? FontWeight.w700
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'The estimate is the average collection from the last three months.',
+            style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+          ),
+        ],
+      ),
     );
   }
 
@@ -427,10 +544,13 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
         ? insights['batch_analytics'] as Map<String, dynamic>
         : <String, dynamic>{};
     final risks = insights['risks'] as List<dynamic>? ?? [];
-    final feeRisk = risks.whereType<Map<String, dynamic>>().cast<Map<String, dynamic>>().firstWhere(
-      (risk) => risk['type'] == 'fee_default',
-      orElse: () => <String, dynamic>{},
-    );
+    final feeRisk = risks
+        .whereType<Map<String, dynamic>>()
+        .cast<Map<String, dynamic>>()
+        .firstWhere(
+          (risk) => risk['type'] == 'fee_default',
+          orElse: () => <String, dynamic>{},
+        );
     final filterText = _insightFilter.trim().toLowerCase();
     final riskRows = <Map<String, dynamic>>[];
     final feeStudents = feeRisk['students'] as List<dynamic>? ?? [];
@@ -439,20 +559,24 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
       riskRows.add({
         'key': 'student-${value['student_id']}',
         'label': '${value['student_name'] ?? 'Student'}',
-        'detail': '${(value['fees'] as List<dynamic>?)?.length ?? (value['fee_ids'] as List<dynamic>?)?.length ?? 0} overdue fee record(s)',
+        'detail':
+            '${(value['fees'] as List<dynamic>?)?.length ?? (value['fee_ids'] as List<dynamic>?)?.length ?? 0} overdue fee record(s)',
         'amount': value['pending_amount'],
         'type': 'Fee default',
       });
     }
     for (final value in risks) {
-      if (value is! Map<String, dynamic> || value['type'] != 'attendance_drop') continue;
+      if (value is! Map<String, dynamic> || value['type'] != 'attendance_drop')
+        continue;
       for (final batchValue in value['batches'] as List<dynamic>? ?? []) {
         if (batchValue is! Map<String, dynamic>) continue;
-        final weekdays = batchValue['attendance_drop_weekdays'] as List<dynamic>? ?? [];
+        final weekdays =
+            batchValue['attendance_drop_weekdays'] as List<dynamic>? ?? [];
         riskRows.add({
           'key': 'batch-risk-${batchValue['batch_id']}',
           'label': '${batchValue['batch_name'] ?? 'Batch'}',
-          'detail': 'Attendance down ${((batchValue['attendance_drop_pct'] as num?)?.toDouble() ?? 0).toStringAsFixed(1)}%${weekdays.isEmpty ? '' : ' on ${weekdays.join(', ')}'}',
+          'detail':
+              'Attendance down ${((batchValue['attendance_drop_pct'] as num?)?.toDouble() ?? 0).toStringAsFixed(1)}%${weekdays.isEmpty ? '' : ' on ${weekdays.join(', ')}'}',
           'amount': batchValue['revenue_at_risk'],
           'type': 'Attendance drop',
         });
@@ -460,20 +584,38 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
     }
     riskRows.sort((a, b) => ((b['amount'] as num?)?.toDouble() ?? 0)
         .compareTo((a['amount'] as num?)?.toDouble() ?? 0));
-    final filteredRiskRows = riskRows.where((row) =>
-      '${row['label']} ${row['detail']} ${row['type']}'.toLowerCase().contains(filterText)).toList();
+    final filteredRiskRows = riskRows
+        .where((row) => '${row['label']} ${row['detail']} ${row['type']}'
+            .toLowerCase()
+            .contains(filterText))
+        .toList();
     final batches = batchAnalytics['batches'] as List<dynamic>? ?? [];
     final profitRows = batches.whereType<Map<String, dynamic>>().toList()
       ..sort((a, b) => ((b['estimated_profit'] as num?)?.toDouble() ?? 0)
           .compareTo((a['estimated_profit'] as num?)?.toDouble() ?? 0));
-    final filteredProfitRows = profitRows.where((row) =>
-      '${row['batch_name'] ?? ''}'.toLowerCase().contains(filterText)).toList();
-    final monthlyCollections = (forecast['monthly_collections'] as List<dynamic>? ?? [])
-        .whereType<Map<String, dynamic>>().toList()
-      ..sort((a, b) => ((b['collected'] as num?)?.toDouble() ?? 0)
-          .compareTo((a['collected'] as num?)?.toDouble() ?? 0));
-    final filteredForecastRows = monthlyCollections.where((row) =>
-      '${row['month'] ?? ''}'.toLowerCase().contains(filterText)).toList();
+    final filteredProfitRows = profitRows
+        .where((row) =>
+            '${row['batch_name'] ?? ''}'.toLowerCase().contains(filterText))
+        .toList();
+    final monthlyCollections = (forecast['monthly_collections']
+                as List<dynamic>? ??
+            [])
+        .whereType<Map<String, dynamic>>()
+        .toList()
+      ..sort((a, b) => '${a['month'] ?? ''}'.compareTo('${b['month'] ?? ''}'));
+    final filteredForecastRows = monthlyCollections
+        .where(
+            (row) => '${row['month'] ?? ''}'.toLowerCase().contains(filterText))
+        .toList();
+    final visibleRiskRows = filteredRiskRows
+        .take(_showAllInsightRows ? filteredRiskRows.length : 5)
+        .toList();
+    final visibleProfitRows = filteredProfitRows
+        .take(_showAllInsightRows ? filteredProfitRows.length : 5)
+        .toList();
+    final visibleForecastRows = filteredForecastRows
+        .take(_showAllInsightRows ? filteredForecastRows.length : 5)
+        .toList();
     final totalAtRisk = (summary['total_at_risk'] as num?)?.toDouble() ?? 0;
     final predictedRevenue =
         (forecast['next_month_revenue'] as num?)?.toDouble() ?? 0;
@@ -482,15 +624,15 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
     final forecastTrend = forecastDelta == null
         ? Icons.trending_flat
         : forecastDelta > 0
-        ? Icons.trending_up
-        : forecastDelta < 0
-        ? Icons.trending_down
-        : Icons.trending_flat;
+            ? Icons.trending_up
+            : forecastDelta < 0
+                ? Icons.trending_down
+                : Icons.trending_flat;
     final forecastTrendColor = forecastDelta == null || forecastDelta == 0
         ? AppColors.textMuted
         : forecastDelta > 0
-        ? AppColors.success
-        : AppColors.danger;
+            ? AppColors.success
+            : AppColors.danger;
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -509,13 +651,17 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
               if (_insightsUpdatedAt != null)
                 Text(
                   TimeOfDay.fromDateTime(_insightsUpdatedAt!).format(context),
-                  style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                  style:
+                      const TextStyle(fontSize: 12, color: AppColors.textMuted),
                 ),
               IconButton(
                 tooltip: 'Refresh live insights',
                 onPressed: _insightsRefreshing ? null : _refreshInsights,
                 icon: _insightsRefreshing
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.refresh),
               ),
             ],
@@ -553,9 +699,8 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
               _statCard(
                 'Revenue at Risk',
                 _insights != null ? _money(totalAtRisk) : '…',
-                valueColor: totalAtRisk > 0
-                    ? AppColors.danger
-                    : AppColors.success,
+                valueColor:
+                    totalAtRisk > 0 ? AppColors.danger : AppColors.success,
               ),
             ],
           ),
@@ -572,17 +717,26 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
                     ChoiceChip(
                       label: const Text('Most Risk'),
                       selected: _insightFocus == 'risk',
-                      onSelected: (_) => setState(() => _insightFocus = 'risk'),
+                      onSelected: (_) => setState(() {
+                        _insightFocus = 'risk';
+                        _showAllInsightRows = false;
+                      }),
                     ),
                     ChoiceChip(
-                      label: const Text('Most Profit'),
+                      label: const Text('Top Revenue'),
                       selected: _insightFocus == 'profit',
-                      onSelected: (_) => setState(() => _insightFocus = 'profit'),
+                      onSelected: (_) => setState(() {
+                        _insightFocus = 'profit';
+                        _showAllInsightRows = false;
+                      }),
                     ),
                     ChoiceChip(
                       label: const Text('Future Forecast'),
                       selected: _insightFocus == 'forecast',
-                      onSelected: (_) => setState(() => _insightFocus = 'forecast'),
+                      onSelected: (_) => setState(() {
+                        _insightFocus = 'forecast';
+                        _showAllInsightRows = false;
+                      }),
                     ),
                   ],
                 ),
@@ -591,11 +745,14 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
                   decoration: InputDecoration(
                     labelText: 'Filter this list',
                     prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _insightFilter.isEmpty ? null : IconButton(
-                      tooltip: 'Clear filter',
-                      onPressed: () => setState(() => _insightFilter = ''),
-                      icon: const Icon(Icons.clear),
-                    ),
+                    suffixIcon: _insightFilter.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Clear filter',
+                            onPressed: () =>
+                                setState(() => _insightFilter = ''),
+                            icon: const Icon(Icons.clear),
+                          ),
                     isDense: true,
                   ),
                   onChanged: (value) => setState(() => _insightFilter = value),
@@ -612,58 +769,141 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
                   )
                 else if (_insightFocus == 'risk')
                   filteredRiskRows.isEmpty
-                      ? Text(riskRows.isEmpty ? 'No active risk signals.' : 'No matching risks.')
+                      ? Text(riskRows.isEmpty
+                          ? 'No active risk signals.'
+                          : 'No matching risks.')
                       : Column(children: [
-                          for (var i = 0; i < filteredRiskRows.length; i++)
+                          for (var i = 0; i < visibleRiskRows.length; i++)
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               leading: CircleAvatar(
-                                backgroundColor: AppColors.warning.withOpacity(0.12),
-                                child: Text('${i + 1}', style: const TextStyle(color: AppColors.warning, fontWeight: FontWeight.bold)),
+                                backgroundColor:
+                                    AppColors.warning.withOpacity(0.12),
+                                child: Text('${i + 1}',
+                                    style: const TextStyle(
+                                        color: AppColors.warning,
+                                        fontWeight: FontWeight.bold)),
                               ),
-                              title: Text('${filteredRiskRows[i]['label']}'),
-                              subtitle: Text('${filteredRiskRows[i]['type']} · ${filteredRiskRows[i]['detail']}'),
-                              trailing: Text(_money(filteredRiskRows[i]['amount']), style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.danger)),
+                              title: Text('${visibleRiskRows[i]['label']}'),
+                              subtitle: Text(
+                                  '${visibleRiskRows[i]['type']} · ${visibleRiskRows[i]['detail']}'),
+                              trailing: Text(
+                                  _money(visibleRiskRows[i]['amount']),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.danger)),
                             ),
-                          if ((feeRisk['fee_ids'] as List<dynamic>? ?? []).isNotEmpty)
-                            Align(alignment: Alignment.centerRight, child: OutlinedButton.icon(
-                              onPressed: _sendingReminders ? null : () => _sendReminders(feeRisk),
-                              icon: _sendingReminders ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.notifications_active_outlined),
-                              label: const Text('Send Reminders'),
-                            )),
+                          if (filteredRiskRows.length > 5)
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton.icon(
+                                onPressed: () => setState(() =>
+                                    _showAllInsightRows = !_showAllInsightRows),
+                                icon: Icon(_showAllInsightRows
+                                    ? Icons.expand_less
+                                    : Icons.expand_more),
+                                label: Text(_showAllInsightRows
+                                    ? 'View less'
+                                    : 'View more (${filteredRiskRows.length - 5})'),
+                              ),
+                            ),
+                          if ((feeRisk['fee_ids'] as List<dynamic>? ?? [])
+                              .isNotEmpty)
+                            Align(
+                                alignment: Alignment.centerRight,
+                                child: OutlinedButton.icon(
+                                  onPressed: _sendingReminders
+                                      ? null
+                                      : () => _sendReminders(feeRisk),
+                                  icon: _sendingReminders
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2))
+                                      : const Icon(
+                                          Icons.notifications_active_outlined),
+                                  label: const Text('Send Reminders'),
+                                )),
                         ])
                 else if (_insightFocus == 'profit')
                   filteredProfitRows.isEmpty
-                      ? Text(profitRows.isEmpty ? 'No active batches are available for comparison.' : 'No matching batches.')
+                      ? Text(profitRows.isEmpty
+                          ? 'No active batches are available for comparison.'
+                          : 'No matching batches.')
                       : Column(children: [
-                          for (var i = 0; i < filteredProfitRows.length; i++)
+                          for (var i = 0; i < visibleProfitRows.length; i++)
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               leading: CircleAvatar(child: Text('${i + 1}')),
-                              title: Text('${filteredProfitRows[i]['batch_name'] ?? 'Batch'}'),
-                              subtitle: Text('${((filteredProfitRows[i]['attendance_pct'] as num?)?.toDouble() ?? 0).toStringAsFixed(1)}% recent attendance'),
-                              trailing: Text(_money(filteredProfitRows[i]['estimated_profit']), style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.success)),
+                              title: Text(
+                                  '${visibleProfitRows[i]['batch_name'] ?? 'Batch'}'),
+                              subtitle: Text(
+                                  '${((visibleProfitRows[i]['attendance_pct'] as num?)?.toDouble() ?? 0).toStringAsFixed(1)}% recent attendance'),
+                              trailing: Text(
+                                  _money(
+                                      visibleProfitRows[i]['estimated_profit']),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.success)),
+                            ),
+                          if (filteredProfitRows.length > 5)
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton.icon(
+                                onPressed: () => setState(() =>
+                                    _showAllInsightRows = !_showAllInsightRows),
+                                icon: Icon(_showAllInsightRows
+                                    ? Icons.expand_less
+                                    : Icons.expand_more),
+                                label: Text(_showAllInsightRows
+                                    ? 'View less'
+                                    : 'View more (${filteredProfitRows.length - 5})'),
+                              ),
                             ),
                         ])
                 else
                   Column(children: [
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: const CircleAvatar(child: Icon(Icons.auto_graph)),
+                      leading:
+                          const CircleAvatar(child: Icon(Icons.auto_graph)),
                       title: Text('Predicted: ${_money(predictedRevenue)}'),
-                      subtitle: const Text('Average of the last three monthly collections.'),
+                      subtitle: const Text(
+                          'Average of the last three monthly collections.'),
                     ),
+                    _forecastVisual(monthlyCollections, predictedRevenue),
                     if (filteredForecastRows.isEmpty)
-                      Text(monthlyCollections.isEmpty ? 'Monthly collection history is not available.' : 'No matching months.')
+                      Text(monthlyCollections.isEmpty
+                          ? 'Monthly collection history is not available.'
+                          : 'No matching months.')
                     else
-                      for (var i = 0; i < filteredForecastRows.length; i++)
+                      for (var i = 0; i < visibleForecastRows.length; i++)
                         ListTile(
                           contentPadding: EdgeInsets.zero,
                           leading: CircleAvatar(child: Text('${i + 1}')),
-                          title: Text('${filteredForecastRows[i]['month'] ?? 'Month'}'),
+                          title: Text(
+                              '${visibleForecastRows[i]['month'] ?? 'Month'}'),
                           subtitle: const Text('Collected fees'),
-                          trailing: Text(_money(filteredForecastRows[i]['collected']), style: const TextStyle(fontWeight: FontWeight.bold)),
+                          trailing: Text(
+                              _money(visibleForecastRows[i]['collected']),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold)),
                         ),
+                    if (filteredForecastRows.length > 5)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: () => setState(
+                              () => _showAllInsightRows = !_showAllInsightRows),
+                          icon: Icon(_showAllInsightRows
+                              ? Icons.expand_less
+                              : Icons.expand_more),
+                          label: Text(_showAllInsightRows
+                              ? 'View less'
+                              : 'View more (${filteredForecastRows.length - 5})'),
+                        ),
+                      ),
                   ]),
               ],
             ),
@@ -674,61 +914,65 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
             child: _insightsFailed && _insights == null
                 ? const Text('Unable to load insights. Pull down to retry.')
                 : !_insightsLoaded
-                ? const Text('Forecast will appear when insights load.')
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                    ? const Text('Forecast will appear when insights load.')
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(forecastTrend, color: forecastTrendColor),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Predicted: ${_money(predictedRevenue)}',
-                              style: const TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.bold,
+                          Row(
+                            children: [
+                              Icon(forecastTrend, color: forecastTrendColor),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Predicted: ${_money(predictedRevenue)}',
+                                  style: const TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (_insightChange != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                'Forecast ${_deltaDescription(forecastDelta)} since last update',
+                                style: const TextStyle(
+                                    fontSize: 12, color: AppColors.textMuted),
                               ),
                             ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'At Risk: ${_money(totalAtRisk)}${riskDelta == null ? '' : ' / ${_deltaDescription(riskDelta)} since refresh'}',
+                            style: TextStyle(
+                              color: totalAtRisk > 0
+                                  ? AppColors.danger
+                                  : AppColors.textMuted,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
+                          const SizedBox(height: 4),
+                          const Text(
+                              'Local rule-based forecast; updates every 30 seconds while the app is open.'),
                         ],
                       ),
-                      if (_insightChange != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            'Forecast ${_deltaDescription(forecastDelta)} since last update',
-                            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                          ),
-                        ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'At Risk: ${_money(totalAtRisk)}${riskDelta == null ? '' : ' / ${_deltaDescription(riskDelta)} since refresh'}',
-                        style: TextStyle(
-                          color: totalAtRisk > 0 ? AppColors.danger : AppColors.textMuted,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text('Local rule-based forecast; updates every 30 seconds while the app is open.'),
-                    ],
-                  ),
           ),
           const SizedBox(height: 18),
           _sectionCard(
-            title: 'Batch Profitability vs Attendance',
+            title: 'Estimated Revenue vs Attendance',
             child: _insightsFailed && _insights == null
                 ? const Text(
                     'Unable to load batch analytics. Pull down to retry.',
                   )
                 : _insightsLoaded
-                ? _batchProfitabilityChart(batches)
-                : const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: CircularProgressIndicator(),
-                    ),
-                  ),
+                    ? _batchProfitabilityChart(batches)
+                    : const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: CircularProgressIndicator(),
+                        ),
+                      ),
           ),
           const SizedBox(height: 18),
           Card(
@@ -746,8 +990,8 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
                     _revenuePeriod == 'month'
                         ? '${_revenueMonth.month}/${_revenueMonth.year}'
                         : _revenuePeriod == 'year'
-                        ? '${_revenueMonth.year}'
-                        : 'All collected revenue',
+                            ? '${_revenueMonth.year}'
+                            : 'All collected revenue',
                     style: const TextStyle(
                       color: AppColors.textMuted,
                       fontSize: 12,
@@ -759,8 +1003,7 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
                     children: [
                       ChoiceChip(
                         label: const Text('Current month'),
-                        selected:
-                            _revenuePeriod == 'month' &&
+                        selected: _revenuePeriod == 'month' &&
                             _revenueMonth.month == DateTime.now().month &&
                             _revenueMonth.year == DateTime.now().year,
                         onSelected: (_) =>
@@ -768,8 +1011,7 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
                       ),
                       ChoiceChip(
                         label: const Text('Choose month'),
-                        selected:
-                            _revenuePeriod == 'month' &&
+                        selected: _revenuePeriod == 'month' &&
                             !(_revenueMonth.month == DateTime.now().month &&
                                 _revenueMonth.year == DateTime.now().year),
                         onSelected: (_) async {
@@ -934,20 +1176,20 @@ class _ChartLegend extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        width: 9,
-        height: 9,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      ),
-      const SizedBox(width: 6),
-      Text(
-        label,
-        style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-      ),
-    ],
-  );
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 9,
+            height: 9,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+          ),
+        ],
+      );
 }
 
 class _BatchMetricBars extends StatelessWidget {
@@ -965,9 +1207,8 @@ class _BatchMetricBars extends StatelessWidget {
   Widget build(BuildContext context) {
     final profit = (row['estimated_profit'] as num?)?.toDouble() ?? 0;
     final attendance = (row['attendance_pct'] as num?)?.toDouble() ?? 0;
-    final profitProgress = maxProfit > 0
-        ? (profit / maxProfit).clamp(0, 1)
-        : 0.0;
+    final profitProgress =
+        maxProfit > 0 ? (profit / maxProfit).clamp(0, 1) : 0.0;
     final attendanceProgress = (attendance / 100).clamp(0, 1);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

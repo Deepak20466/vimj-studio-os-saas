@@ -79,7 +79,7 @@ export default function CoachSalary() {
               {salaries.map((salary) => (
                 <tr key={salary.id}>
                   <td>{MONTH_NAMES[salary.month]} {salary.year}</td>
-                  <td>?{Number(salary.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                  <td>Rs {Number(salary.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                   <td>{formatDate(salary.notified_at)}</td>
                   <td>
                     {salary.acknowledged_date ? (

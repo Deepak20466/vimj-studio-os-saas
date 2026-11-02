@@ -1,14 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ComposedChart,
-  CartesianGrid,
-  Legend,
-  Line,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { AttendanceAPI, DashboardAPI, FeesAPI } from "../api/endpoints";
 import toast from "react-hot-toast";
 import useResizeAfterLoad from "../hooks/useResizeAfterLoad";
@@ -16,6 +6,7 @@ import { dismissItem, filterDismissed } from "../utils/dismissedItems";
 import "./admin-dashboard.css";
 
 const rupees = (value) => `Rs ${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+const AI_LIST_PREVIEW = 5;
 
 export default function Dashboard() {
   const [insights, setInsights] = useState(null);
@@ -25,6 +16,8 @@ export default function Dashboard() {
   const [reminding, setReminding] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [focus, setFocus] = useState("risk");
+  const [showAllInsights, setShowAllInsights] = useState(false);
+  const [showAllBatches, setShowAllBatches] = useState(false);
   const [insightFilter, setInsightFilter] = useState("");
   const [lastUpdated, setLastUpdated] = useState(null);
   const [change, setChange] = useState(null);
@@ -118,10 +111,16 @@ export default function Dashboard() {
       }))),
   ].sort((a, b) => b.amount - a.amount).filter((row) => `${row.label} ${row.detail} ${row.type}`.toLocaleLowerCase().includes(filterText));
   const profitRows = [...batchRows].sort((a, b) => Number(b.estimated_profit || 0) - Number(a.estimated_profit || 0))
-    .filter((row) => row.batch_name.toLocaleLowerCase().includes(filterText));
+    .filter((row) => (row.batch_name || "").toLocaleLowerCase().includes(filterText));
   const forecastRows = [...(insights.forecast?.monthly_collections || [])]
-    .sort((a, b) => Number(b.collected || 0) - Number(a.collected || 0))
-    .filter((row) => row.month.toLocaleLowerCase().includes(filterText));
+    .sort((a, b) => String(a.month || "").localeCompare(String(b.month || "")))
+    .filter((row) => String(row.month || "").toLocaleLowerCase().includes(filterText));
+  const visibleRows = (rows) => showAllInsights ? rows : rows.slice(0, AI_LIST_PREVIEW);
+  const chartBatches = showAllBatches ? profitRows : profitRows.slice(0, AI_LIST_PREVIEW);
+  const maxBatchEstimate = Math.max(1, ...chartBatches.map((row) => Number(row.estimated_profit || 0)));
+  const actualMonths = [...(insights.forecast?.monthly_collections || [])]
+    .sort((a, b) => String(a.month || "").localeCompare(String(b.month || "")));
+  const forecastChartMax = Math.max(1, Number(forecast || 0), ...actualMonths.map((row) => Number(row.collected || 0)));
   const deltaLabel = (value) => {
     if (value == null || value === 0) return "No change since last refresh";
     return `${value > 0 ? "↑" : "↓"} ${rupees(Math.abs(value))} since last refresh`;
@@ -188,32 +187,35 @@ export default function Dashboard() {
             <span className="ai-local-badge">Free / rule-based</span>
           </div>
           <div className="ai-focus-tabs" role="tablist" aria-label="AI insight focus">
-            {[["risk", "Most Risk"], ["profit", "Most Profit"], ["forecast", "Future Forecast"]].map(([key, label]) => (
-              <button key={key} role="tab" aria-selected={focus === key} className={focus === key ? "active" : ""} onClick={() => setFocus(key)}>{label}</button>
+            {[["risk", "Most Risk"], ["profit", "Top Revenue"], ["forecast", "Future Forecast"]].map(([key, label]) => (
+              <button key={key} role="tab" aria-selected={focus === key} className={focus === key ? "active" : ""} onClick={() => { setFocus(key); setShowAllInsights(false); }}>{label}</button>
             ))}
           </div>
           <input className="ai-list-filter" aria-label="Filter AI insights" placeholder="Filter this list..." value={insightFilter} onChange={(event) => setInsightFilter(event.target.value)} />
           {focus === "risk" && (riskRows.length ? (
             <div className="ai-ranked-list" aria-label="Revenue risks sorted highest to lowest">
-              {riskRows.map((row, index) => <article className="ai-ranked-row" key={row.key}>
+              {visibleRows(riskRows).map((row, index) => <article className="ai-ranked-row" key={row.key}>
                 <span className="ai-rank">{index + 1}</span><div className="ai-ranked-copy"><strong>{row.label}</strong><small>{row.type} · {row.detail}</small></div><b>{rupees(row.amount)}</b>
               </article>)}
+              {riskRows.length > AI_LIST_PREVIEW && <button className="ai-view-toggle" onClick={() => setShowAllInsights((value) => !value)}>{showAllInsights ? "View less" : `View all ${riskRows.length} risks`}</button>}
             </div>
           ) : <p>No matching active risks.</p>)}
           {focus === "profit" && (profitRows.length ? (
             <div className="ai-ranked-list" aria-label="Batches sorted by estimated monthly revenue">
-              {profitRows.map((row, index) => <article className="ai-ranked-row" key={row.batch_id}>
+              {visibleRows(profitRows).map((row, index) => <article className="ai-ranked-row" key={row.batch_id}>
                 <span className="ai-rank">{index + 1}</span><div className="ai-ranked-copy"><strong>{row.batch_name}</strong><small>{Number(row.attendance_pct || 0).toFixed(1)}% recent attendance</small></div><b>{rupees(row.estimated_profit)}</b>
               </article>)}
+              {profitRows.length > AI_LIST_PREVIEW && <button className="ai-view-toggle" onClick={() => setShowAllInsights((value) => !value)}>{showAllInsights ? "View less" : `View all ${profitRows.length} batches`}</button>}
             </div>
           ) : <p>No matching active batches.</p>)}
           {focus === "forecast" && (
             <>
               <article className="ai-featured-insight"><span className="ai-insight-icon" aria-hidden="true">Next</span><div><strong>Next month collection estimate</strong><p>Average of the last three monthly fee collections.</p><b>{rupees(forecast)} predicted</b></div></article>
-              {forecastRows.length ? <div className="ai-ranked-list" aria-label="Monthly collections sorted highest to lowest">
-                {forecastRows.map((row, index) => <article className="ai-ranked-row" key={row.month}>
+              {forecastRows.length ? <div className="ai-ranked-list" aria-label="Monthly collections in date order">
+                {visibleRows(forecastRows).map((row, index) => <article className="ai-ranked-row" key={row.month}>
                   <span className="ai-rank">{index + 1}</span><div className="ai-ranked-copy"><strong>{row.month}</strong><small>Collected fees</small></div><b>{rupees(row.collected)}</b>
                 </article>)}
+                {forecastRows.length > AI_LIST_PREVIEW && <button className="ai-view-toggle" onClick={() => setShowAllInsights((value) => !value)}>{showAllInsights ? "View less" : `View all ${forecastRows.length} months`}</button>}
               </div> : <p>Monthly collection history is not available for this account.</p>}
             </>
           )}
@@ -239,6 +241,21 @@ export default function Dashboard() {
               <small>{deltaLabel(change?.forecast)}</small>
             </div>
           </div>
+          <div className="ai-forecast-visual" role="img" aria-label="Last three monthly collections compared with the next month estimate">
+            <div className="ai-forecast-bars">
+              {actualMonths.map((row) => <div className="ai-forecast-bar-column" key={row.month}>
+                <span>{rupees(row.collected)}</span>
+                <div className="ai-forecast-bar-track"><i style={{ height: `${Math.max(5, Number(row.collected || 0) / forecastChartMax * 100)}%` }} /></div>
+                <small>{row.month}</small>
+              </div>)}
+              <div className="ai-forecast-bar-column predicted">
+                <span>{rupees(forecast)}</span>
+                <div className="ai-forecast-bar-track"><i style={{ height: `${Math.max(5, Number(forecast || 0) / forecastChartMax * 100)}%` }} /></div>
+                <small>Next month</small>
+              </div>
+            </div>
+            <p>How to read it: the next month estimate is the average of these three months.</p>
+          </div>
           <div className="ai-forecast-at-risk">
             <span>Revenue at Risk <small>{deltaLabel(change?.risk)}</small></span>
             <strong>{rupees(riskTotal)}</strong>
@@ -250,27 +267,23 @@ export default function Dashboard() {
       <section className="card ai-chart-panel">
         <div className="ai-panel-heading">
           <div>
-            <h2>Batch Profitability vs Attendance</h2>
-            <p>Estimated monthly tuition share compared with recent attendance</p>
+            <h2>Batch Revenue vs Attendance</h2>
+            <p>Estimated revenue ranked against recent attendance</p>
           </div>
         </div>
         {batchRows.length === 0 ? (
           <div className="empty-state">No active batches are available for comparison.</div>
         ) : (
-          <ResponsiveContainer width="100%" height={300}>
-            <ComposedChart data={[...batchRows].sort((a, b) => Number(b.estimated_profit || 0) - Number(a.estimated_profit || 0))} margin={{ top: 12, right: 16, left: 12, bottom: 45 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="batch_name" angle={-18} textAnchor="end" interval={0} height={70} fontSize={11} />
-              <YAxis yAxisId="revenue" tickFormatter={(value) => `Rs ${Number(value).toLocaleString("en-IN")}`} fontSize={11} />
-              <YAxis yAxisId="attendance" orientation="right" domain={[0, 100]} unit="%" fontSize={11} />
-              <Tooltip formatter={(value, name) => name === "Attendance" ? [`${value}%`, name] : [rupees(value), name]} />
-              <Legend verticalAlign="top" />
-              <Bar yAxisId="revenue" dataKey="estimated_profit" name="Estimated revenue share*" fill="#CC7000" radius={[4, 4, 0, 0]} />
-              <Line yAxisId="attendance" dataKey="attendance_pct" name="Attendance" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} />
-            </ComposedChart>
-          </ResponsiveContainer>
+          <div className="ai-batch-list">
+            {chartBatches.map((row, index) => <article className="ai-batch-row" key={row.batch_id}>
+              <div className="ai-batch-row-heading"><span className="ai-rank">{index + 1}</span><strong>{row.batch_name}</strong><b>{rupees(row.estimated_profit)}</b></div>
+              <div className="ai-batch-revenue-track" aria-label={`Estimated revenue share ${rupees(row.estimated_profit)}`}><i style={{ width: `${Math.max(0, Number(row.estimated_profit || 0) / maxBatchEstimate * 100)}%` }} /></div>
+              <div className="ai-batch-attendance"><span>Recent attendance</span><b>{Number(row.attendance_pct || 0).toFixed(0)}%</b></div>
+            </article>)}
+            {profitRows.length > AI_LIST_PREVIEW && <button className="ai-view-toggle" onClick={() => setShowAllBatches((value) => !value)}>{showAllBatches ? "View less" : `View all ${profitRows.length} batches`}</button>}
+          </div>
         )}
-        <p className="ai-chart-note">*Estimated monthly revenue share allocated by activity; expense data is not stored, so net profit is unavailable.</p>
+        <p className="ai-chart-note">Revenue is estimated from enrolled students and activity fees. Expense data is not stored, so this is not net profit.</p>
       </section>
 
       <section className="card">
