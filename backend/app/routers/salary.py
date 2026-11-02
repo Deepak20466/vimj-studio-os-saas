@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -14,11 +15,72 @@ from app.schemas.salary import (
     SalaryOut,
     SalaryUpdate,
 )
-from app.security import require_admin, require_coach
+from app.security import require_admin, require_admin_or_coach, require_coach
 from app.services.audit import log_action
+from app.services.export import rows_to_csv, rows_to_pdf
 from app.services.notifications import notify_and_push
 
 router = APIRouter(prefix="/salary", tags=["salary"])
+
+
+@router.get("/export")
+def export_salary(
+    fmt: str = Query(default="pdf", pattern="^(pdf|csv)$"),
+    coach_id: Optional[int] = Query(default=None, gt=0),
+    month: Optional[int] = Query(default=None, ge=1, le=12),
+    year: Optional[int] = Query(default=None, ge=2000, le=2200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_coach),
+):
+    """Export salary history with coach data restricted to the signed-in coach."""
+    query = db.query(CoachSalary)
+    if current_user.role == UserRole.COACH:
+        query = query.filter(CoachSalary.coach_id == current_user.id)
+        filename = "my_salary_records"
+        coach_names = {current_user.id: current_user.name}
+    else:
+        if coach_id is not None:
+            query = query.filter(CoachSalary.coach_id == coach_id)
+        filename = "salary_records"
+        coach_ids = {
+            row.coach_id
+            for row in query.with_entities(CoachSalary.coach_id).distinct().all()
+        }
+        coach_names = {
+            coach.id: coach.name
+            for coach in db.query(User).filter(User.id.in_(coach_ids)).all()
+        } if coach_ids else {}
+
+    if month is not None:
+        query = query.filter(CoachSalary.month == month)
+    if year is not None:
+        query = query.filter(CoachSalary.year == year)
+    salaries = query.order_by(CoachSalary.year.desc(), CoachSalary.month.desc(), CoachSalary.id.desc()).all()
+    rows = [
+        [
+            coach_names.get(row.coach_id, f"Coach #{row.coach_id}"),
+            f"{row.month:02d}/{row.year}",
+            f"{row.amount:.2f}",
+            row.notified_at.isoformat() if row.notified_at else "-",
+            row.acknowledged_date.isoformat() if row.acknowledged_date else "Pending",
+        ]
+        for row in salaries
+    ]
+    headers = ["Coach", "Period", "Amount", "Notified", "Acknowledgement"]
+    if fmt == "csv":
+        content = rows_to_csv(headers, rows)
+        media_type = "text/csv; charset=utf-8"
+        extension = "csv"
+    else:
+        content = rows_to_pdf("Salary records", headers, rows or [["No salary records", "", "", "", ""]])
+        media_type = "application/pdf"
+        extension = "pdf"
+
+    return StreamingResponse(
+        content,
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename={filename}.{extension}"},
+    )
 
 
 @router.post("", response_model=SalaryOut, status_code=status.HTTP_201_CREATED)

@@ -12,9 +12,9 @@ import 'package:vimj_attendance/features/auth/login_screen.dart';
 
 class _AttendanceApi {
   final requests = <http.Request>[];
-  final delayedFeeStatus = Completer<http.Response>();
+  final delayedInsights = Completer<http.Response>();
   final delayedClassSummary = Completer<http.Response>();
-  bool holdFeeStatus = false;
+  bool holdInsights = false;
   bool holdClassSummary = false;
 
   void install() {
@@ -40,18 +40,9 @@ class _AttendanceApi {
       });
     }
 
-    if (path == '/dashboard/summary') {
-      return _json({
-        'total_students': 27,
-        'total_coaches': 4,
-        'total_classes_this_month': 50,
-        'monthly_revenue': 12000,
-        'unpaid_fees_count': 2,
-      });
-    }
-    if (path == '/dashboard/fee-status') {
-      if (holdFeeStatus) return delayedFeeStatus.future;
-      return _json({'paid': 20, 'unpaid': 3, 'overdue': 1});
+    if (path == '/insights/revenue-risk') {
+      if (holdInsights) return delayedInsights.future;
+      return _insights();
     }
     if (path == '/attendance/daily-missing') return _json([]);
     if (path == '/dashboard/activity-attendance') {
@@ -104,6 +95,27 @@ class _AttendanceApi {
         status,
         headers: const {'content-type': 'application/json'},
       );
+
+  static http.Response _insights() => _json({
+        'risks': <dynamic>[],
+        'forecast': {
+          'next_month_revenue': 12000,
+          'monthly_collections': <dynamic>[],
+          'months_used': <dynamic>[],
+        },
+        'summary': {'total_at_risk': 0},
+        'kpis': {
+          'total_students': 27,
+          'today_present': 20,
+          'fee_pending_amount': 3000,
+        },
+        'batch_analytics': {
+          'most_profitable_batch': null,
+          'attendance_drop_batches': <dynamic>[],
+          'total_revenue_at_risk': 0,
+          'batches': <dynamic>[],
+        },
+      });
 }
 
 Future<void> _signIn(WidgetTester tester, String email) async {
@@ -117,6 +129,13 @@ Future<void> _pumpUntil(WidgetTester tester, Finder finder) async {
     await tester.pump(const Duration(milliseconds: 50));
   }
   expect(finder, findsAtLeastNWidgets(1));
+}
+
+Finder _dashboardScrollable() {
+  final refresh = find.byType(RefreshIndicator).first;
+  final listView =
+      find.descendant(of: refresh, matching: find.byType(ListView)).first;
+  return find.descendant(of: listView, matching: find.byType(Scrollable)).first;
 }
 
 void main() {
@@ -148,9 +167,9 @@ void main() {
   });
 
   testWidgets(
-      'Admin can sign in, load summary progressively, and change revenue period',
+      'Admin can sign in, render while insights load, and change revenue period',
       (tester) async {
-    final api = _AttendanceApi()..holdFeeStatus = true;
+    final api = _AttendanceApi()..holdInsights = true;
     api.install();
     await tester.pumpWidget(MaterialApp(
       theme: AppTheme.light(),
@@ -159,29 +178,29 @@ void main() {
 
     await _signIn(tester, 'admin@example.test');
     await _pumpUntil(tester, find.text('Dashboard'));
-    await _pumpUntil(tester, find.text('27'));
+    await _pumpUntil(tester, find.text('Admin AI Command Center'));
 
-    // The main dashboard is interactive while the independent fee request is held.
-    expect(
-        api.requests.any((r) => r.url.path == '/dashboard/fee-status'), isTrue);
-    api.delayedFeeStatus.complete(_AttendanceApi._json(
-      {'paid': 20, 'unpaid': 3, 'overdue': 1},
-    ));
-    await tester.pumpAndSettle();
-
+    // Revenue is an independent section and stays interactive while insights load.
+    expect(api.requests.any((r) => r.url.path == '/insights/revenue-risk'),
+        isTrue);
+    expect(api.requests.any((r) => r.url.path == '/dashboard/revenue'), isTrue);
     await tester.scrollUntilVisible(
       find.text('Overall'),
       250,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: _dashboardScrollable(),
     );
-    await tester.tap(find.text('Overall'));
+    await tester.ensureVisible(find.text('Overall'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Overall'));
+    await tester.pump(const Duration(milliseconds: 100));
     expect(
       api.requests.any((r) =>
           r.url.path == '/dashboard/revenue' &&
           r.url.queryParameters['period'] == 'overall'),
       isTrue,
     );
+    api.delayedInsights.complete(_AttendanceApi._insights());
+    await tester.pumpAndSettle();
   });
 
   testWidgets(

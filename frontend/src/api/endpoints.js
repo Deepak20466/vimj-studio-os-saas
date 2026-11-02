@@ -39,6 +39,7 @@ export const SalaryAPI = {
   create: (payload) => client.post("/salary", payload),
   update: (id, payload) => client.put("/salary/" + id, payload),
   remove: (id) => client.delete("/salary/" + id),
+  export: (fmt) => client.get("/salary/export", { params: { fmt }, responseType: "blob" }),
   acknowledge: (salaryId) => client.post("/salary/acknowledge", { salary_id: salaryId }),
   coachHistory: (coachId) => client.get("/coaches/" + coachId + "/salary"),
 };

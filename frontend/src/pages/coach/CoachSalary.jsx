@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/AuthContext";
 import { SalaryAPI } from "../../api/endpoints";
+import { blobErrorDetail, downloadBlob } from "../../utils/download";
 
 const MONTH_NAMES = [
   "", "January", "February", "March", "April", "May", "June",
@@ -19,9 +20,13 @@ export default function CoachSalary() {
   const [salaries, setSalaries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [ackId, setAckId] = useState(null);
+  const [exporting, setExporting] = useState("");
 
   const load = async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const { data } = await SalaryAPI.coachHistory(user.id);
@@ -52,11 +57,45 @@ export default function CoachSalary() {
     }
   };
 
+  const exportSalary = async (fmt) => {
+    setExporting(fmt);
+    try {
+      const { data } = await SalaryAPI.export(fmt);
+      const extension = fmt === "csv" ? "csv" : "pdf";
+      downloadBlob(data, `my_salary_records.${extension}`, fmt === "csv" ? "text/csv" : "application/pdf");
+      toast.success(`Salary ${extension.toUpperCase()} downloaded`);
+    } catch (err) {
+      toast.error((await blobErrorDetail(err)) || `Salary ${fmt.toUpperCase()} download failed`);
+    } finally {
+      setExporting("");
+    }
+  };
+
+  const refresh = async () => {
+    await load();
+  };
+
   return (
     <div>
       <div className="page-header">
         <h1>My Salary</h1>
-        <button className="btn btn-secondary btn-sm" onClick={load} disabled={loading}>
+        <div className="toolbar">
+          <button className="btn btn-secondary" disabled={loading || salaries.length === 0 || !!exporting} onClick={() => exportSalary("pdf")}>
+            {exporting === "pdf" ? "Preparing PDF..." : "Download PDF"}
+          </button>
+          <button className="btn btn-secondary" disabled={loading || salaries.length === 0 || !!exporting} onClick={() => exportSalary("csv")}>
+            {exporting === "csv" ? "Preparing CSV..." : "Download CSV"}
+          </button>
+        </div>
+        <div className="toolbar">
+          <button className="btn btn-secondary" disabled={loading || salaries.length === 0 || !!exporting} onClick={() => exportSalary("pdf")}>
+            {exporting === "pdf" ? "Preparing PDF..." : "Download PDF"}
+          </button>
+          <button className="btn btn-secondary" disabled={loading || salaries.length === 0 || !!exporting} onClick={() => exportSalary("csv")}>
+            {exporting === "csv" ? "Preparing CSV..." : "Download CSV"}
+          </button>
+        </div>
+        <button className="btn btn-secondary btn-sm" onClick={refresh} disabled={loading}>
           Refresh
         </button>
       </div>

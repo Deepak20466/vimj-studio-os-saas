@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -9,19 +11,41 @@ import 'package:vimj_attendance/core/api_client.dart';
 import 'package:vimj_attendance/core/app_theme.dart';
 import 'package:vimj_attendance/core/auth_storage.dart';
 import 'package:vimj_attendance/features/admin/admin_home.dart';
+import 'package:vimj_attendance/features/admin/admin_salary_tab.dart';
 import 'package:vimj_attendance/features/coach/coach_home.dart';
+import 'package:vimj_attendance/features/coach/coach_salary_tab.dart';
 
 class _ScreenApi {
   final requests = <http.Request>[];
+  final salaryRows = <Map<String, dynamic>>[];
+  final sharedFiles = <Map<dynamic, dynamic>>[];
 
   void install() {
     ApiClient.instance.setClientForTesting(MockClient(_respond));
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (call) async => call.method == 'getTemporaryDirectory'
+          ? Directory.systemTemp.path
+          : null,
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('dev.fluttercommunity.plus/share'),
+      (call) async {
+        if (call.arguments is Map) {
+          sharedFiles.add(Map<dynamic, dynamic>.from(call.arguments as Map));
+        }
+        return 'success';
+      },
+    );
   }
 
   Future<http.Response> _respond(http.Request request) async {
     requests.add(request);
     final path = request.url.path;
     Object body = <dynamic>[];
+    var statusCode = 200;
 
     if (path == '/dashboard/summary') {
       body = {
@@ -41,6 +65,75 @@ class _ScreenApi {
         'product_revenue': 0,
         'total_revenue': 1000,
       };
+    } else if (path == '/insights/revenue-risk') {
+      body = {
+        'risks': <dynamic>[],
+        'forecast': {
+          'next_month_revenue': 1000,
+          'monthly_collections': <dynamic>[],
+          'months_used': <dynamic>[],
+        },
+        'summary': {'total_at_risk': 0},
+        'kpis': {
+          'total_students': 8,
+          'today_present': 2,
+          'fee_pending_amount': 0
+        },
+        'batch_analytics': {
+          'most_profitable_batch': null,
+          'attendance_drop_batches': <dynamic>[],
+          'total_revenue_at_risk': 0,
+          'batches': <dynamic>[],
+        },
+      };
+    } else if (path == '/coaches') {
+      body = [
+        {
+          'id': 8,
+          'name': 'Smoke Test Coach',
+          'email': 'coach@example.test',
+          'phone': null,
+          'is_active': true,
+        }
+      ];
+    } else if (path == '/salary' && request.method == 'POST') {
+      final payload = jsonDecode(request.body) as Map<String, dynamic>;
+      salaryRows.add({
+        'id': salaryRows.length + 1,
+        'coach_id': payload['coach_id'],
+        'coach_name': 'Smoke Test Coach',
+        'month': payload['month'],
+        'year': payload['year'],
+        'amount': payload['amount'].toString(),
+        'notified_at': null,
+        'acknowledged_date': null,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      statusCode = 201;
+      body = salaryRows.last;
+    } else if (path == '/salary' && request.method == 'GET') {
+      body = salaryRows;
+    } else if (path == '/salary/export') {
+      final isPdf = request.url.queryParameters['fmt'] == 'pdf';
+      return http.Response.bytes(
+        isPdf ? const [37, 80, 68, 70, 45] : utf8.encode('month,year,amount\n'),
+        statusCode,
+        headers: {
+          'content-type': isPdf ? 'application/pdf' : 'text/csv',
+        },
+      );
+    } else if (path == '/salary/coach/7') {
+      body = [
+        {
+          'id': 1,
+          'month': 11,
+          'year': 2026,
+          'amount': '25000',
+          'notified_at': null,
+          'acknowledged_date': null,
+          'created_at': DateTime.now().toIso8601String(),
+        }
+      ];
     } else if (path == '/reports') {
       body = {
         'total_revenue': 1000,
@@ -82,7 +175,7 @@ class _ScreenApi {
 
     return http.Response(
       jsonEncode(body),
-      200,
+      statusCode,
       headers: const {'content-type': 'application/json'},
     );
   }
@@ -103,6 +196,36 @@ Future<void> _tapAdminSection(
   await tester.tap(find.byType(NavigationDestination).at(index));
   await tester.pump(const Duration(milliseconds: 400));
   expect(find.text(title), findsWidgets);
+}
+
+Finder _dashboardScrollable() {
+  final refresh = find.byType(RefreshIndicator).first;
+  final listView =
+      find.descendant(of: refresh, matching: find.byType(ListView)).first;
+  return find.descendant(of: listView, matching: find.byType(Scrollable)).first;
+}
+
+Future<void> _pumpUntil(WidgetTester tester, Finder finder) async {
+  for (var i = 0; i < 30 && finder.evaluate().isEmpty; i++) {
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+  expect(finder, findsAtLeastNWidgets(1));
+}
+
+Future<void> _pumpUntilExportRequest(
+  WidgetTester tester,
+  _ScreenApi api,
+  String format,
+) async {
+  for (var i = 0; i < 30; i++) {
+    if (api.requests.any((request) =>
+        request.url.path == '/salary/export' &&
+        request.url.queryParameters['fmt'] == format)) {
+      return;
+    }
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+  fail('The $format salary export button did not send its request.');
 }
 
 Future<void> _tapAdminMore(WidgetTester tester, String title) async {
@@ -156,6 +279,11 @@ void main() {
       home: const AdminHome(),
     ));
     await tester.pump(const Duration(milliseconds: 50));
+    await tester.scrollUntilVisible(
+      find.text('Revenue period'),
+      250,
+      scrollable: _dashboardScrollable(),
+    );
     expect(find.text('Revenue period'), findsOneWidget);
 
     await _tapAdminSection(tester, 1, 'Students');
@@ -172,13 +300,35 @@ void main() {
       await _tapAdminMore(tester, title);
     }
 
+    await _tapAdminMore(tester, 'Salary');
+    await _pumpUntil(tester, find.text('No salary records yet.'));
+    await tester.tap(find.byType(FloatingActionButton).hitTestable());
+    await tester.pumpAndSettle();
+    final coachPicker = find.byType(DropdownButtonFormField<int>);
+    expect(coachPicker, findsOneWidget);
+    await tester.tap(coachPicker);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Smoke Test Coach').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, '25000');
+    final createButton = find.widgetWithText(ElevatedButton, 'Create');
+    await tester.ensureVisible(createButton);
+    await tester.tap(createButton);
+    await tester.pumpAndSettle();
+    expect(
+      api.requests.any((request) =>
+          request.method == 'POST' && request.url.path == '/salary'),
+      isTrue,
+    );
+    expect(find.text('Smoke Test Coach'), findsOneWidget);
     await tester
         .tap(find.byIcon(Icons.notifications_outlined).hitTestable().last);
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
     expect(find.text('Notifications'), findsOneWidget);
 
     for (final path in const [
-      '/dashboard/summary',
+      '/insights/revenue-risk',
+      '/dashboard/revenue',
       '/students',
       '/coaches',
       '/attendance/daily-missing',
@@ -186,6 +336,7 @@ void main() {
       '/batches',
       '/reports',
       '/fees',
+      '/salary',
       '/leave/pending',
       '/academy',
       '/notifications',
@@ -210,6 +361,7 @@ void main() {
     await _tapCoachMore(tester, 'Leave', 'Leave Requests');
     await _tapCoachMore(tester, 'Receipts', 'Fee Receipts');
     await _tapCoachMore(tester, 'Fee Reminders', 'Fee Reminders');
+    await _tapCoachMore(tester, 'Salary', 'Salary');
     await _tapCoachMore(tester, 'Settings', 'Settings');
 
     await tester.tap(find.byType(NavigationDestination).at(1));
@@ -236,10 +388,50 @@ void main() {
       '/leave/my',
       '/receipts/my',
       '/fee-reminders/my',
+      '/salary/coach/7',
       '/auth/me',
       '/notifications',
     ]) {
       expect(api.requests.any((r) => r.url.path == path), isTrue, reason: path);
+    }
+  });
+
+  testWidgets('Admin salary PDF and CSV buttons request their files',
+      (tester) async {
+    final row = {
+      'id': 1,
+      'coach_id': 8,
+      'coach_name': 'Smoke Test Coach',
+      'month': 11,
+      'year': 2026,
+      'amount': '25000',
+      'notified_at': null,
+      'acknowledged_date': null,
+    };
+
+    for (final format in const ['pdf', 'csv']) {
+      final api = _ScreenApi()..install();
+      api.salaryRows.add(row);
+      await tester.pumpWidget(MaterialApp(home: const AdminSalaryTab()));
+      await _pumpUntil(tester, find.text('Smoke Test Coach'));
+      await tester.tap(find.widgetWithText(
+          OutlinedButton, format == 'pdf' ? 'Download PDF' : 'Download CSV'));
+      await _pumpUntilExportRequest(tester, api, format);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
+
+  testWidgets('Coach salary PDF and CSV buttons request their files',
+      (tester) async {
+    await _setRole('COACH');
+    for (final format in const ['pdf', 'csv']) {
+      final api = _ScreenApi()..install();
+      await tester.pumpWidget(MaterialApp(home: const CoachSalaryTab()));
+      await _pumpUntil(tester, find.text('November 2026'));
+      await tester.tap(find.byTooltip(
+          format == 'pdf' ? 'Download salary PDF' : 'Download salary CSV'));
+      await _pumpUntilExportRequest(tester, api, format);
+      await tester.pumpWidget(const SizedBox.shrink());
     }
   });
 }

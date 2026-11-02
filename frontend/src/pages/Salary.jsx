@@ -3,15 +3,20 @@ import toast from "react-hot-toast";
 import { SalaryAPI, CoachesAPI } from "../api/endpoints";
 import Modal from "../components/Modal";
 import StatusBadge from "../components/StatusBadge";
+import { blobErrorDetail, downloadBlob } from "../utils/download";
 
 const MONTH_NAMES = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export default function Salary() {
   const [salaries, setSalaries] = useState([]);
   const [coaches, setCoaches] = useState([]);
+  const [coachesLoading, setCoachesLoading] = useState(true);
+  const [coachLoadError, setCoachLoadError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [exporting, setExporting] = useState("");
   const [form, setForm] = useState({ coach_id: "", month: new Date().getMonth() + 1, year: new Date().getFullYear(), amount: "" });
 
   const load = () => {
@@ -22,9 +27,23 @@ export default function Salary() {
       .finally(() => setLoading(false));
   };
 
+  const loadCoaches = async () => {
+    setCoachesLoading(true);
+    setCoachLoadError("");
+    try {
+      const { data } = await CoachesAPI.list();
+      setCoaches(data);
+      if (!data.length) setCoachLoadError("Add an active coach before recording salary.");
+    } catch (err) {
+      setCoachLoadError(err.response?.data?.detail || "Could not load coaches. Retry before creating salary.");
+    } finally {
+      setCoachesLoading(false);
+    }
+  };
+
   useEffect(() => {
     load();
-    CoachesAPI.list().then((r) => setCoaches(r.data));
+    loadCoaches();
   }, []);
 
   const openCreate = () => {
@@ -41,6 +60,7 @@ export default function Salary() {
 
   const submit = async (e) => {
     e.preventDefault();
+    setSaving(true);
     try {
       if (editing) {
         await SalaryAPI.update(editing.id, { month: Number(form.month), year: Number(form.year), amount: Number(form.amount) });
@@ -54,6 +74,8 @@ export default function Salary() {
       load();
     } catch (err) {
       toast.error(err.response?.data?.detail || `Failed to ${editing ? "update" : "create"} salary record`);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -68,10 +90,32 @@ export default function Salary() {
     }
   };
 
+  const exportSalary = async (fmt) => {
+    setExporting(fmt);
+    try {
+      const { data } = await SalaryAPI.export(fmt);
+      const extension = fmt === "csv" ? "csv" : "pdf";
+      downloadBlob(data, `salary_records.${extension}`, fmt === "csv" ? "text/csv" : "application/pdf");
+      toast.success(`Salary ${extension.toUpperCase()} downloaded`);
+    } catch (err) {
+      toast.error((await blobErrorDetail(err)) || `Salary ${fmt.toUpperCase()} download failed`);
+    } finally {
+      setExporting("");
+    }
+  };
+
   return (
     <div>
       <div className="page-header">
         <h1>Coach Salary</h1>
+        <div className="toolbar">
+          <button className="btn btn-secondary" disabled={loading || salaries.length === 0 || !!exporting} onClick={() => exportSalary("pdf")}>
+            {exporting === "pdf" ? "Preparing PDF..." : "Download PDF"}
+          </button>
+          <button className="btn btn-secondary" disabled={loading || salaries.length === 0 || !!exporting} onClick={() => exportSalary("csv")}>
+            {exporting === "csv" ? "Preparing CSV..." : "Download CSV"}
+          </button>
+        </div>
         <button className="btn btn-primary" onClick={openCreate}>
           + Record Salary
         </button>
@@ -146,7 +190,7 @@ export default function Salary() {
           <form onSubmit={submit}>
             <div className="field">
               <label>Coach</label>
-              <select value={form.coach_id} onChange={(e) => setForm({ ...form, coach_id: e.target.value })} disabled={!!editing} required>
+              <select value={form.coach_id} onChange={(e) => setForm({ ...form, coach_id: e.target.value })} disabled={!!editing || coachesLoading || !!coachLoadError} required>
                 <option value="">Select coach</option>
                 {coaches.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -154,6 +198,7 @@ export default function Salary() {
                   </option>
                 ))}
               </select>
+              {coachLoadError && <div role="alert" className="form-error">{coachLoadError} <button type="button" className="btn btn-secondary btn-sm" onClick={loadCoaches} disabled={coachesLoading}>Retry</button></div>}
             </div>
             <div className="form-grid">
               <div>
@@ -162,12 +207,12 @@ export default function Salary() {
               </div>
               <div>
                 <label>Year</label>
-                <input type="number" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} required />
+                <input type="number" min={2000} max={2200} value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} required />
               </div>
             </div>
             <div className="field">
               <label>Amount (?)</label>
-              <input type="number" min={0} step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
+              <input type="number" min={0.01} step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
             </div>
             <div className="modal-actions">
               <button
@@ -180,7 +225,7 @@ export default function Salary() {
               >
                 Cancel
               </button>
-              <button className="btn btn-primary">{editing ? "Save" : "Create"}</button>
+              <button className="btn btn-primary" disabled={saving || (!editing && (coachesLoading || coaches.length === 0))}>{saving ? "Saving..." : editing ? "Save" : "Create"}</button>
             </div>
           </form>
         </Modal>
