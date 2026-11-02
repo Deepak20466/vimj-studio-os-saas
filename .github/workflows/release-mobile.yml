@@ -52,7 +52,7 @@ jobs:
         run: |
           tag="${RELEASE_TAG:-$GITHUB_REF_NAME}"
           if [[ "$GITHUB_REF" == refs/heads/release-mobile-v* ]]; then
-            tag="mobile-${GITHUB_REF_NAME#release-mobile-v}"
+            tag="mobile-${GITHUB_REF_NAME#release-mobile-}"
           fi
           echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
           gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --target "$GITHUB_SHA" --title "$tag" --notes "Automated Android release build."
