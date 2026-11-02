@@ -6,6 +6,7 @@ import '../../core/app_theme.dart';
 import '../../core/auth_storage.dart';
 import '../../core/export_helper.dart';
 import '../../core/models.dart';
+import '../shared/salary_filter_header.dart';
 
 class CoachSalaryTab extends StatefulWidget {
   const CoachSalaryTab({super.key});
@@ -20,11 +21,83 @@ class _CoachSalaryTabState extends State<CoachSalaryTab> {
   String? _error;
   String? _exporting;
   List<SalaryRecord> _records = [];
+  final TextEditingController _searchController = TextEditingController();
+  String _search = '';
+  DateTime? _fromMonth;
+  DateTime? _toMonth;
+
+  List<SalaryRecord> get _visibleRecords => _records.where((record) {
+        final period = DateTime(record.year, record.month);
+        final monthName = DateFormat('MMMM').format(period);
+        final status = record.acknowledgedDate == null
+            ? 'pending not acknowledged'
+            : 'acknowledged paid received';
+        return salaryMatchesFilters(
+          year: record.year,
+          month: record.month,
+          search: _search,
+          fromMonth: _fromMonth,
+          toMonth: _toMonth,
+          searchFields: [
+            monthName,
+            monthName.substring(0, 3),
+            '${record.month}/${record.year}',
+            '${monthName} ${record.year}',
+            record.amount,
+            status,
+            record.notifiedAt,
+            record.acknowledgedDate,
+          ],
+        );
+      }).toList();
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickFromMonth() async {
+    final picked = await pickSalaryMonth(
+      context,
+      selectedMonth: _fromMonth,
+      helpText: 'Select starting month',
+    );
+    if (picked == null) return;
+    setState(() {
+      _fromMonth = picked;
+      if (_toMonth != null && _toMonth!.isBefore(picked)) _toMonth = picked;
+    });
+  }
+
+  Future<void> _pickToMonth() async {
+    final picked = await pickSalaryMonth(
+      context,
+      selectedMonth: _toMonth,
+      helpText: 'Select ending month',
+    );
+    if (picked == null) return;
+    setState(() {
+      _toMonth = picked;
+      if (_fromMonth != null && _fromMonth!.isAfter(picked)) {
+        _fromMonth = picked;
+      }
+    });
+  }
+
+  void _clearFilters() {
+    _searchController.clear();
+    setState(() {
+      _search = '';
+      _fromMonth = null;
+      _toMonth = null;
+    });
   }
 
   Future<void> _load() async {
@@ -107,6 +180,7 @@ class _CoachSalaryTabState extends State<CoachSalaryTab> {
 
   @override
   Widget build(BuildContext context) {
+    final visibleRecords = _visibleRecords;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Salary'),
@@ -143,70 +217,99 @@ class _CoachSalaryTabState extends State<CoachSalaryTab> {
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _load,
-              child: ListView(
+              child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(12),
-                children: [
-                  if (_error != null)
-                    Card(
-                      color: Theme.of(context).colorScheme.errorContainer,
-                      child: ListTile(
-                        leading: const Icon(Icons.cloud_off_outlined),
-                        title: Text(_error!),
-                        trailing: IconButton(
-                          tooltip: 'Retry',
-                          onPressed: _load,
-                          icon: const Icon(Icons.refresh),
-                        ),
-                      ),
-                    ),
-                  if (_error == null && _records.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Center(child: Text('No salary records yet.')),
-                    ),
-                  for (final record in _records)
-                    Card(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      child: ListTile(
-                        leading: const CircleAvatar(
-                          backgroundColor: AppColors.brandLight,
-                          child: Icon(Icons.account_balance_wallet,
-                              color: AppColors.brandOrange),
-                        ),
-                        title: Text(
-                          DateFormat('MMMM yyyy')
-                              .format(DateTime(record.year, record.month)),
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            'Rs ${record.amount}\nNotified: ${_date(record.notifiedAt)}'
-                            '${record.acknowledgedDate == null ? '' : '\nAcknowledged: ${_date(record.acknowledgedDate)}'}',
-                          ),
-                        ),
-                        isThreeLine: true,
-                        trailing: record.acknowledgedDate != null
-                            ? const Chip(
-                                label: Text('Acknowledged'),
-                                visualDensity: VisualDensity.compact,
-                              )
-                            : TextButton(
-                                onPressed: _busySalaryId == record.id
-                                    ? null
-                                    : () => _acknowledge(record),
-                                child: _busySalaryId == record.id
-                                    ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2),
-                                      )
-                                    : const Text('Acknowledge'),
+                slivers: [
+                  SalaryFilterHeader(
+                    searchController: _searchController,
+                    onSearchChanged: (value) => setState(() => _search = value),
+                    fromMonth: _fromMonth,
+                    toMonth: _toMonth,
+                    onPickFromMonth: _pickFromMonth,
+                    onPickToMonth: _pickToMonth,
+                    onClear: _clearFilters,
+                    hasFilters: _search.isNotEmpty ||
+                        _fromMonth != null ||
+                        _toMonth != null,
+                    visibleCount: visibleRecords.length,
+                    totalCount: _records.length,
+                  ),
+                  SliverPadding(
+                    padding: const EdgeInsets.all(12),
+                    sliver: SliverList(
+                      delegate: SliverChildListDelegate([
+                        if (_error != null)
+                          Card(
+                            color: Theme.of(context).colorScheme.errorContainer,
+                            child: ListTile(
+                              leading: const Icon(Icons.cloud_off_outlined),
+                              title: Text(_error!),
+                              trailing: IconButton(
+                                tooltip: 'Retry',
+                                onPressed: _load,
+                                icon: const Icon(Icons.refresh),
                               ),
-                      ),
+                            ),
+                          ),
+                        if (_error == null && _records.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.all(32),
+                            child:
+                                Center(child: Text('No salary records yet.')),
+                          ),
+                        if (_records.isNotEmpty && visibleRecords.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.all(32),
+                            child: Center(
+                                child: Text(
+                                    'No salary records match these search and date filters.')),
+                          ),
+                        for (final record in visibleRecords)
+                          Card(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            child: ListTile(
+                              leading: const CircleAvatar(
+                                backgroundColor: AppColors.brandLight,
+                                child: Icon(Icons.account_balance_wallet,
+                                    color: AppColors.brandOrange),
+                              ),
+                              title: Text(
+                                DateFormat('MMMM yyyy').format(
+                                    DateTime(record.year, record.month)),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold),
+                              ),
+                              subtitle: Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  'Rs ${record.amount}\nNotified: ${_date(record.notifiedAt)}'
+                                  '${record.acknowledgedDate == null ? '' : '\nAcknowledged: ${_date(record.acknowledgedDate)}'}',
+                                ),
+                              ),
+                              isThreeLine: true,
+                              trailing: record.acknowledgedDate != null
+                                  ? const Chip(
+                                      label: Text('Acknowledged'),
+                                      visualDensity: VisualDensity.compact,
+                                    )
+                                  : TextButton(
+                                      onPressed: _busySalaryId == record.id
+                                          ? null
+                                          : () => _acknowledge(record),
+                                      child: _busySalaryId == record.id
+                                          ? const SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child: CircularProgressIndicator(
+                                                  strokeWidth: 2),
+                                            )
+                                          : const Text('Acknowledge'),
+                                    ),
+                            ),
+                          ),
+                      ]),
                     ),
+                  ),
                 ],
               ),
             ),

@@ -677,3 +677,10 @@ following additional updates:
 - The monthly salary notification job is available to the durable Cloud Scheduler dispatcher.
 - Alembic revision 0023 skips coach_salary creation when the table already exists and refuses destructive downgrade; existing rows are retained. If prior migrations removed the table and its rows, schema recreation alone cannot recover those values.
 - Local builds: Flutter split-ABI release compilation succeeded with the repository lockfile; frontend production build succeeded. Publish APKs through .github/workflows/release-mobile.yml with the existing persistent signing key. Do not commit signing material.
+
+## Mobile Salary Search and Month Filters (2026-11-02)
+
+- Admin and Coach Salary screens now keep search and inclusive month-range filters pinned while salary records scroll. Search covers coach (Admin), period, amount, notification date, and acknowledgement status.
+- Admin Activities already includes the Coach Session Photos gallery; coach Classes already includes My Session Photos, both backed by the authenticated session-photo API.
+- Release target: mobile version `1.26.42+78`, tag `mobile-v1.26.42`, through `.github/workflows/release-mobile.yml` with the persistent Android signing key.
+- Verification: all 36 Flutter tests passed; Flutter analysis completed with no errors or warnings and 202 existing info-level notices; local split-ABI release compilation succeeded using the local debug-signing fallback. GitHub Actions will create the installable APKs with the persistent release key.

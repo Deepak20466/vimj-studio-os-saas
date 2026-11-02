@@ -4,6 +4,7 @@ import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
 import '../../core/export_helper.dart';
 import '../../core/models.dart';
+import '../shared/salary_filter_header.dart';
 
 String _formatDate(String isoDate) {
   final parsed = DateTime.tryParse(isoDate);
@@ -22,11 +23,84 @@ class _AdminSalaryTabState extends State<AdminSalaryTab> {
   List<AdminSalaryRecord> _records = [];
   String? _error;
   String? _exporting;
+  final TextEditingController _searchController = TextEditingController();
+  String _search = '';
+  DateTime? _fromMonth;
+  DateTime? _toMonth;
+
+  List<AdminSalaryRecord> get _visibleRecords => _records.where((record) {
+        final period = DateTime(record.year, record.month);
+        final monthName = DateFormat('MMMM').format(period);
+        final status = record.acknowledgedDate == null
+            ? 'pending not acknowledged'
+            : 'acknowledged paid received';
+        return salaryMatchesFilters(
+          year: record.year,
+          month: record.month,
+          search: _search,
+          fromMonth: _fromMonth,
+          toMonth: _toMonth,
+          searchFields: [
+            record.coachName,
+            monthName,
+            monthName.substring(0, 3),
+            '${record.month}/${record.year}',
+            '${monthName} ${record.year}',
+            record.amount,
+            status,
+            record.notifiedAt,
+            record.acknowledgedDate,
+          ],
+        );
+      }).toList();
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickFromMonth() async {
+    final picked = await pickSalaryMonth(
+      context,
+      selectedMonth: _fromMonth,
+      helpText: 'Select starting month',
+    );
+    if (picked == null) return;
+    setState(() {
+      _fromMonth = picked;
+      if (_toMonth != null && _toMonth!.isBefore(picked)) _toMonth = picked;
+    });
+  }
+
+  Future<void> _pickToMonth() async {
+    final picked = await pickSalaryMonth(
+      context,
+      selectedMonth: _toMonth,
+      helpText: 'Select ending month',
+    );
+    if (picked == null) return;
+    setState(() {
+      _toMonth = picked;
+      if (_fromMonth != null && _fromMonth!.isAfter(picked)) {
+        _fromMonth = picked;
+      }
+    });
+  }
+
+  void _clearFilters() {
+    _searchController.clear();
+    setState(() {
+      _search = '';
+      _fromMonth = null;
+      _toMonth = null;
+    });
   }
 
   Future<void> _load() async {
@@ -131,6 +205,7 @@ class _AdminSalaryTabState extends State<AdminSalaryTab> {
 
   @override
   Widget build(BuildContext context) {
+    final visibleRecords = _visibleRecords;
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'admin-salary-fab',
@@ -142,118 +217,153 @@ class _AdminSalaryTabState extends State<AdminSalaryTab> {
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _load,
-              child: ListView(
+              child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      OutlinedButton.icon(
-                        onPressed: _records.isEmpty || _exporting != null
-                            ? null
-                            : () => _export('pdf'),
-                        icon: const Icon(Icons.picture_as_pdf_outlined),
-                        label: Text(_exporting == 'pdf'
-                            ? 'Preparing PDF...'
-                            : 'Download PDF'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: _records.isEmpty || _exporting != null
-                            ? null
-                            : () => _export('csv'),
-                        icon: const Icon(Icons.table_view_outlined),
-                        label: Text(_exporting == 'csv'
-                            ? 'Preparing CSV...'
-                            : 'Download CSV'),
-                      ),
-                    ],
+                slivers: [
+                  SalaryFilterHeader(
+                    searchController: _searchController,
+                    onSearchChanged: (value) => setState(() => _search = value),
+                    fromMonth: _fromMonth,
+                    toMonth: _toMonth,
+                    onPickFromMonth: _pickFromMonth,
+                    onPickToMonth: _pickToMonth,
+                    onClear: _clearFilters,
+                    hasFilters: _search.isNotEmpty ||
+                        _fromMonth != null ||
+                        _toMonth != null,
+                    visibleCount: visibleRecords.length,
+                    totalCount: _records.length,
                   ),
-                  if (_error != null)
-                    Card(
-                      color: Theme.of(context).colorScheme.errorContainer,
-                      child: ListTile(
-                        leading: const Icon(Icons.cloud_off_outlined),
-                        title: Text(_error!),
-                        trailing: IconButton(
-                          tooltip: 'Retry',
-                          onPressed: _load,
-                          icon: const Icon(Icons.refresh),
-                        ),
-                      ),
-                    ),
-                  if (_error == null && _records.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Center(child: Text('No salary records yet.')),
-                    ),
-                  for (final r in _records)
-                    Card(
-                      margin: const EdgeInsets.only(top: 10),
-                      child: Column(
-                        children: [
-                          ListTile(
-                            leading: const CircleAvatar(
-                              backgroundColor: AppColors.brandLight,
-                              child: Icon(Icons.account_balance_wallet,
-                                  color: AppColors.brandOrange),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
+                    sliver: SliverList(
+                      delegate: SliverChildListDelegate([
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: _records.isEmpty || _exporting != null
+                                  ? null
+                                  : () => _export('pdf'),
+                              icon: const Icon(Icons.picture_as_pdf_outlined),
+                              label: Text(_exporting == 'pdf'
+                                  ? 'Preparing PDF...'
+                                  : 'Download PDF'),
                             ),
-                            title: Text(r.coachName ?? 'Coach #${r.coachId}',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold)),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
+                            OutlinedButton.icon(
+                              onPressed: _records.isEmpty || _exporting != null
+                                  ? null
+                                  : () => _export('csv'),
+                              icon: const Icon(Icons.table_view_outlined),
+                              label: Text(_exporting == 'csv'
+                                  ? 'Preparing CSV...'
+                                  : 'Download CSV'),
+                            ),
+                          ],
+                        ),
+                        if (_error != null)
+                          Card(
+                            color: Theme.of(context).colorScheme.errorContainer,
+                            child: ListTile(
+                              leading: const Icon(Icons.cloud_off_outlined),
+                              title: Text(_error!),
+                              trailing: IconButton(
+                                tooltip: 'Retry',
+                                onPressed: _load,
+                                icon: const Icon(Icons.refresh),
+                              ),
+                            ),
+                          ),
+                        if (_error == null && _records.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.all(32),
+                            child:
+                                Center(child: Text('No salary records yet.')),
+                          ),
+                        if (_records.isNotEmpty && visibleRecords.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.all(32),
+                            child: Center(
+                                child: Text(
+                                    'No salary records match these search and date filters.')),
+                          ),
+                        for (final r in visibleRecords)
+                          Card(
+                            margin: const EdgeInsets.only(top: 10),
+                            child: Column(
                               children: [
-                                Text('${r.month}/${r.year} · ₹${r.amount}'),
-                                Text(
-                                  'Notified: ${r.notifiedAt != null ? _formatDate(r.notifiedAt!) : "-"}',
-                                  style: Theme.of(context).textTheme.bodySmall,
+                                ListTile(
+                                  leading: const CircleAvatar(
+                                    backgroundColor: AppColors.brandLight,
+                                    child: Icon(Icons.account_balance_wallet,
+                                        color: AppColors.brandOrange),
+                                  ),
+                                  title: Text(
+                                      r.coachName ?? 'Coach #${r.coachId}',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold)),
+                                  subtitle: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                          '${r.month}/${r.year} · ₹${r.amount}'),
+                                      Text(
+                                        'Notified: ${r.notifiedAt != null ? _formatDate(r.notifiedAt!) : "-"}',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall,
+                                      ),
+                                    ],
+                                  ),
+                                  isThreeLine: true,
+                                  trailing: r.acknowledgedDate != null
+                                      ? const Chip(
+                                          label: Text('Acknowledged',
+                                              style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 11)),
+                                          backgroundColor: AppColors.success,
+                                          visualDensity: VisualDensity.compact)
+                                      : const Chip(
+                                          label: Text('Pending',
+                                              style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 11)),
+                                          backgroundColor: AppColors.warning,
+                                          visualDensity: VisualDensity.compact),
                                 ),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextButton(
+                                        onPressed: r.acknowledgedDate != null
+                                            ? null
+                                            : () => _openEdit(r),
+                                        child: const Text('Edit'),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: TextButton(
+                                        onPressed: r.acknowledgedDate != null
+                                            ? null
+                                            : () => _remove(r),
+                                        style: TextButton.styleFrom(
+                                            foregroundColor: AppColors.danger),
+                                        child: const Text('Delete'),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
                               ],
                             ),
-                            isThreeLine: true,
-                            trailing: r.acknowledgedDate != null
-                                ? const Chip(
-                                    label: Text('Acknowledged',
-                                        style: TextStyle(
-                                            color: Colors.white, fontSize: 11)),
-                                    backgroundColor: AppColors.success,
-                                    visualDensity: VisualDensity.compact)
-                                : const Chip(
-                                    label: Text('Pending',
-                                        style: TextStyle(
-                                            color: Colors.white, fontSize: 11)),
-                                    backgroundColor: AppColors.warning,
-                                    visualDensity: VisualDensity.compact),
                           ),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextButton(
-                                  onPressed: r.acknowledgedDate != null
-                                      ? null
-                                      : () => _openEdit(r),
-                                  child: const Text('Edit'),
-                                ),
-                              ),
-                              Expanded(
-                                child: TextButton(
-                                  onPressed: r.acknowledgedDate != null
-                                      ? null
-                                      : () => _remove(r),
-                                  style: TextButton.styleFrom(
-                                      foregroundColor: AppColors.danger),
-                                  child: const Text('Delete'),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                        ],
-                      ),
+                      ]),
                     ),
+                  ),
                 ],
               ),
             ),
