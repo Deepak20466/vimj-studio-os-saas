@@ -49,9 +49,9 @@ class _ClassesTabState extends State<ClassesTab> {
       final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
       final data = await ApiClient.instance.get('/activities/classes/my',
           query: {'class_date': dateStr}) as List;
-      _classes = data
-          .map((e) => ClassSession.fromJson(e as Map<String, dynamic>))
-          .toList();
+      _classes = ClassSession.uniqueScheduleSlots(
+        data.map((e) => ClassSession.fromJson(e as Map<String, dynamic>)),
+      );
     } on ApiException catch (e) {
       if (mounted)
         ScaffoldMessenger.of(context)

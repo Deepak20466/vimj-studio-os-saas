@@ -108,6 +108,40 @@ class ClassSession {
         endTime: json['end_time'] as String,
         hasGroupPhoto: json['has_group_photo'] as bool? ?? false,
       );
+
+  /// Removes repeated rows for the same coach, activity, date, and time slot.
+  ///
+  /// Some existing databases contain multiple class rows for one scheduled
+  /// slot. The coach dashboard represents the schedule, so it should display
+  /// that slot once even when those rows have different database IDs.
+  static List<ClassSession> uniqueScheduleSlots(
+    Iterable<ClassSession> sessions,
+  ) {
+    final indexBySlot = <String, int>{};
+    final unique = <ClassSession>[];
+
+    String minuteTime(String value) =>
+        value.length >= 5 ? value.substring(0, 5) : value;
+
+    for (final session in sessions) {
+      final slot = [
+        session.coachId,
+        session.activityId,
+        session.date,
+        minuteTime(session.startTime),
+        minuteTime(session.endTime),
+      ].join('|');
+      final existingIndex = indexBySlot[slot];
+      if (existingIndex == null) {
+        indexBySlot[slot] = unique.length;
+        unique.add(session);
+      } else if (session.id < unique[existingIndex].id) {
+        // Pick a stable canonical row regardless of API ordering.
+        unique[existingIndex] = session;
+      }
+    }
+    return unique;
+  }
 }
 
 class RosterStudent {

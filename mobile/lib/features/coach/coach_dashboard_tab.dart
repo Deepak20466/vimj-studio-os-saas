@@ -86,9 +86,9 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
         '/activities/classes/my',
         query: {'class_date': today},
       ) as List;
-      final classes = data
-          .map((e) => ClassSession.fromJson(e as Map<String, dynamic>))
-          .toList();
+      final classes = ClassSession.uniqueScheduleSlots(
+        data.map((e) => ClassSession.fromJson(e as Map<String, dynamic>)),
+      );
       if (!mounted || version != _loadVersion) return;
       setState(() {
         _classes = classes;
