@@ -184,14 +184,22 @@ void main() {
     expect(api.requests.any((r) => r.url.path == '/insights/revenue-risk'),
         isTrue);
     expect(api.requests.any((r) => r.url.path == '/dashboard/revenue'), isTrue);
+    final revenueCard = find.ancestor(
+      of: find.text('Revenue period'),
+      matching: find.byType(Card),
+    );
+    final revenueOverall = find.descendant(
+      of: revenueCard,
+      matching: find.widgetWithText(ChoiceChip, 'Overall'),
+    );
     await tester.scrollUntilVisible(
-      find.text('Overall'),
+      revenueOverall,
       250,
       scrollable: _dashboardScrollable(),
     );
-    await tester.ensureVisible(find.text('Overall'));
+    await tester.ensureVisible(revenueOverall);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Overall'));
+    await tester.tap(revenueOverall);
     await tester.pump(const Duration(milliseconds: 100));
     expect(
       api.requests.any((r) =>
@@ -199,7 +207,22 @@ void main() {
           r.url.queryParameters['period'] == 'overall'),
       isTrue,
     );
-    final aiOverall = find.widgetWithText(ChoiceChip, 'Overall').first;
+    expect(tester.widget<ChoiceChip>(revenueOverall).selected, isTrue);
+    expect(api.requests.any((r) =>
+        r.url.path == '/insights/revenue-risk' &&
+        r.url.queryParameters['period'] == 'overall'), isFalse);
+    final aiOverall = find.descendant(
+      of: find.ancestor(
+        of: find.widgetWithText(ChoiceChip, 'Day'),
+        matching: find.byType(Wrap),
+      ),
+      matching: find.widgetWithText(ChoiceChip, 'Overall'),
+    );
+    await tester.scrollUntilVisible(
+      aiOverall,
+      -250,
+      scrollable: _dashboardScrollable(),
+    );
     await tester.ensureVisible(aiOverall);
     await tester.tap(aiOverall);
     await tester.pump(const Duration(milliseconds: 100));
