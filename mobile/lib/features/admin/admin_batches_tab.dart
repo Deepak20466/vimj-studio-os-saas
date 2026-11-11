@@ -141,8 +141,12 @@ class _AdminBatchesTabState extends State<AdminBatchesTab> {
           _BatchForm(batch: batch, activities: _activities, coaches: _coaches),
     );
     if (saved == true) {
-      _load();
-      _loadCoverage();
+      await _load();
+      await _loadCoverage();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Schedule saved.')));
+      }
     }
   }
 

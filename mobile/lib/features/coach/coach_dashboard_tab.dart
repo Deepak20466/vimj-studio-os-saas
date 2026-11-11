@@ -26,6 +26,7 @@ class CoachDashboardTab extends StatefulWidget {
 class _CoachDashboardTabState extends State<CoachDashboardTab>
     with WidgetsBindingObserver {
   List<ClassSession> _classes = [];
+  List<Batch> _assignedSchedules = [];
   Map<int, Map<String, dynamic>> _summaries = {};
   bool _loading = false;
   bool _classesLoaded = false;
@@ -49,6 +50,15 @@ class _CoachDashboardTabState extends State<CoachDashboardTab>
               .toLowerCase()
               .contains(_classSearch.trim().toLowerCase()) &&
           (_activityFilter == null || c.activityId == _activityFilter))
+      .toList();
+
+  List<Batch> get _todaySchedules => _assignedSchedules
+      .where((batch) => batch.isScheduledOn(DateTime.now()))
+      .where((batch) => _activityFilter == null || batch.activityId == _activityFilter)
+      .where((batch) =>
+          'activity ${batch.activityId} ${batch.startTime} ${batch.endTime}'
+              .toLowerCase()
+              .contains(_classSearch.trim().toLowerCase()))
       .toList();
 
   @override
@@ -80,6 +90,7 @@ class _CoachDashboardTabState extends State<CoachDashboardTab>
     if (_refreshingClasses) return;
     _refreshingClasses = true;
     final version = _loadVersion;
+    unawaited(_loadAssignedSchedules(version));
     try {
       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
       final data = await ApiClient.instance.get(
@@ -118,6 +129,7 @@ class _CoachDashboardTabState extends State<CoachDashboardTab>
       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
       await Future.wait([
         _loadClasses(today, version),
+        _loadAssignedSchedules(version),
         _loadAttendance(session, today, version),
         _loadPendingSync(version),
       ]);
@@ -128,6 +140,20 @@ class _CoachDashboardTabState extends State<CoachDashboardTab>
       }
     } finally {
       if (mounted && version == _loadVersion) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadAssignedSchedules(int version) async {
+    try {
+      final data = await ApiClient.instance.get('/batches/my') as List;
+      if (!mounted || version != _loadVersion) return;
+      setState(() {
+        _assignedSchedules = data
+            .map((e) => Batch.fromJson(e as Map<String, dynamic>))
+            .toList();
+      });
+    } catch (_) {
+      // Keep dated class sessions usable if the schedule list is unavailable.
     }
   }
 
@@ -414,9 +440,11 @@ class _CoachDashboardTabState extends State<CoachDashboardTab>
                       items: [
                         const DropdownMenuItem<int?>(
                             value: null, child: Text('All activities')),
-                        ..._classes.map((c) => c.activityId).toSet().map((id) =>
-                            DropdownMenuItem<int?>(
-                                value: id, child: Text('Activity #$id')))
+                        ...{
+                          ..._classes.map((c) => c.activityId),
+                          ..._assignedSchedules.map((b) => b.activityId),
+                        }.map((id) => DropdownMenuItem<int?>(
+                            value: id, child: Text('Activity #$id')))
                       ],
                       onChanged: (v) => setState(() => _activityFilter = v)),
                   if (_classSearch.isNotEmpty || _activityFilter != null)
@@ -432,16 +460,18 @@ class _CoachDashboardTabState extends State<CoachDashboardTab>
                     padding: EdgeInsets.symmetric(vertical: 24),
                     child: Center(child: CircularProgressIndicator()),
                   )
-                else if (_classes.isEmpty)
+                else if (_classes.isEmpty && _todaySchedules.isEmpty)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 24),
                     child: Center(child: Text('No classes scheduled today.')),
                   )
-                else if (_visibleClasses.isEmpty)
+                else if (_classes.isNotEmpty &&
+                    _visibleClasses.isEmpty &&
+                    _todaySchedules.isEmpty)
                   const Padding(
                       padding: EdgeInsets.symmetric(vertical: 24),
                       child: Center(child: Text('No results found.')))
-                else
+                else ...[
                   ..._visibleClasses.map((c) {
                     final s = _summaries[c.id];
                     return Card(
@@ -470,6 +500,16 @@ class _CoachDashboardTabState extends State<CoachDashboardTab>
                       ),
                     );
                   }),
+                  if (_classes.isEmpty)
+                    ..._todaySchedules.map((batch) => Card(
+                          child: ListTile(
+                            leading: const Icon(Icons.event_repeat_outlined),
+                            title: Text('${batch.startTime} - ${batch.endTime}'),
+                            subtitle: Text(
+                                'Assigned schedule · Activity #${batch.activityId}'),
+                          ),
+                        )),
+                ],
               ]),
             ),
           ],

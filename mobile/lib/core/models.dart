@@ -628,6 +628,13 @@ class Batch {
             (json['active_months'] as List).map((e) => e as int).toList(),
         isActive: json['is_active'] as bool? ?? true,
       );
+
+  bool isScheduledOn(DateTime date) {
+    const weekdays = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+    return isActive &&
+        activeMonths.contains(date.month) &&
+        daysOfWeek.contains(weekdays[date.weekday - 1]);
+  }
 }
 
 class RecentSwap {

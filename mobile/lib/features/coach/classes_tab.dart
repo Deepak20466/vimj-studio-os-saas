@@ -20,6 +20,7 @@ class ClassesTab extends StatefulWidget {
 class _ClassesTabState extends State<ClassesTab> with WidgetsBindingObserver {
   DateTime _selectedDate = DateTime.now();
   List<ClassSession> _classes = [];
+  List<Batch> _assignedSchedules = [];
   bool _loading = true;
   final Map<int, bool> _groupPhotoOverride =
       {}; // classId -> has photo, for instant UI feedback after upload
@@ -38,6 +39,10 @@ class _ClassesTabState extends State<ClassesTab> with WidgetsBindingObserver {
               (_photoFilter == 'PHOTO'
                   ? _hasGroupPhoto(c)
                   : !_hasGroupPhoto(c))))
+      .toList();
+
+  List<Batch> get _schedulesForSelectedDate => _assignedSchedules
+      .where((batch) => batch.isScheduledOn(_selectedDate))
       .toList();
 
   @override
@@ -70,6 +75,14 @@ class _ClassesTabState extends State<ClassesTab> with WidgetsBindingObserver {
     _refreshInProgress = true;
     if (showLoading && mounted) setState(() => _loading = true);
     try {
+      try {
+        final schedules = await ApiClient.instance.get('/batches/my') as List;
+        _assignedSchedules = schedules
+            .map((e) => Batch.fromJson(e as Map<String, dynamic>))
+            .toList();
+      } catch (_) {
+        // Dated class sessions remain available if recurring schedules fail.
+      }
       final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
       final data = await ApiClient.instance.get('/activities/classes/my',
           query: {'class_date': dateStr}) as List;
@@ -289,7 +302,7 @@ class _ClassesTabState extends State<ClassesTab> with WidgetsBindingObserver {
           Expanded(
             child: _loading && _classes.isEmpty
                 ? const Center(child: CircularProgressIndicator())
-                : _classes.isEmpty
+                : _classes.isEmpty && _schedulesForSelectedDate.isEmpty
                     ? const Padding(
                         padding: EdgeInsets.symmetric(horizontal: 32),
                         child: Center(
@@ -301,9 +314,26 @@ class _ClassesTabState extends State<ClassesTab> with WidgetsBindingObserver {
                           ),
                         ),
                       )
-                    : _visibleClasses.isEmpty
-                        ? const Center(child: Text('No results found.'))
-                        : ListView.builder(
+                    : _classes.isEmpty
+                        ? ListView(
+                            children: _schedulesForSelectedDate
+                                .map((batch) => Card(
+                                      margin: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 6),
+                                      child: ListTile(
+                                        leading: const Icon(
+                                            Icons.event_repeat_outlined),
+                                        title: Text(
+                                            '${batch.startTime} - ${batch.endTime}'),
+                                        subtitle: Text(
+                                            'Assigned schedule · Activity #${batch.activityId}'),
+                                      ),
+                                    ))
+                                .toList(),
+                          )
+                        : _visibleClasses.isEmpty
+                            ? const Center(child: Text('No results found.'))
+                            : ListView.builder(
                             itemCount: _visibleClasses.length,
                             itemBuilder: (context, i) {
                               final c = _visibleClasses[i];
