@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends
+from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -12,11 +14,30 @@ router = APIRouter(prefix="/insights", tags=["insights"])
 
 @router.get("/revenue-risk")
 def get_revenue_risk_insights(
+    period: str | None = None,
+    selected_date: date | None = None,
+    month: int | None = None,
+    year: int | None = None,
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    """Return three local, rule-based revenue and attendance predictions."""
-    return revenue_risk_insights(db)
+    """Return rule-based insights, optionally filtered to a dashboard period."""
+    if period is None:
+        return revenue_risk_insights(db)
+    if period not in {"day", "month", "year", "overall"}:
+        raise HTTPException(status_code=400, detail="Period must be day, month, year, or overall")
+    if month is not None and not 1 <= month <= 12:
+        raise HTTPException(status_code=400, detail="Month must be between 1 and 12")
+    if year is not None and not 2000 <= year <= 2100:
+        raise HTTPException(status_code=400, detail="Year must be between 2000 and 2100")
+    anchor = selected_date or date.today()
+    return revenue_risk_insights(
+        db,
+        period=period,
+        selected_date=anchor,
+        selected_month=month or anchor.month,
+        selected_year=year or anchor.year,
+    )
 
 
 # Keep the existing unversioned routes used by web and mobile clients, while

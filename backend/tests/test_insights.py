@@ -171,6 +171,33 @@ class InsightsTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403, response.text)
         self.assertEqual(versioned_response.status_code, 403, versioned_response.text)
 
+    def test_insights_follow_selected_day_and_month(self):
+        today = date.today()
+        older_day = today - timedelta(days=20)
+        today_payload = self.client.get(
+            "/insights/revenue-risk",
+            params={"period": "day", "selected_date": today.isoformat()},
+        ).json()
+        older_payload = self.client.get(
+            "/insights/revenue-risk",
+            params={"period": "day", "selected_date": older_day.isoformat()},
+        ).json()
+        previous_month = today.month - 1 or 12
+        previous_year = today.year if today.month > 1 else today.year - 1
+        month_payload = self.client.get(
+            "/insights/revenue-risk",
+            params={"period": "month", "month": previous_month, "year": previous_year},
+        ).json()
+
+        self.assertEqual(today_payload["period"]["date"], today.isoformat())
+        self.assertEqual(today_payload["kpis"]["fee_pending_amount"], 250.0)
+        self.assertEqual(older_payload["kpis"]["fee_pending_amount"], 0.0)
+        self.assertEqual(month_payload["period"]["month"], previous_month)
+        self.assertNotEqual(
+            today_payload["summary"]["total_at_risk"],
+            older_payload["summary"]["total_at_risk"],
+        )
+
     def test_versioned_path_and_admin_reminder_return_queued(self):
         response = self.client.get("/api/v1/insights/revenue-risk")
         self.assertEqual(response.status_code, 200, response.text)
