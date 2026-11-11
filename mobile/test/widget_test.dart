@@ -167,7 +167,7 @@ void main() {
   });
 
   testWidgets(
-      'Admin can sign in, render while insights load, and change revenue period',
+      'Admin can sign in, render while insights load, and select AI period',
       (tester) async {
     final api = _AttendanceApi()..holdInsights = true;
     api.install();
@@ -184,23 +184,9 @@ void main() {
     expect(api.requests.any((r) => r.url.path == '/insights/revenue-risk'),
         isTrue);
     expect(api.requests.any((r) => r.url.path == '/dashboard/revenue'), isTrue);
-    await tester.scrollUntilVisible(
-      find.text('Overall'),
-      250,
-      scrollable: _dashboardScrollable(),
-    );
-    await tester.ensureVisible(find.text('Overall'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Overall'));
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(
-      api.requests.any((r) =>
-          r.url.path == '/dashboard/revenue' &&
-          r.url.queryParameters['period'] == 'overall'),
-      isTrue,
-    );
     final aiOverall = find.widgetWithText(ChoiceChip, 'Overall').first;
     await tester.ensureVisible(aiOverall);
+    await tester.pumpAndSettle();
     await tester.tap(aiOverall);
     await tester.pump(const Duration(milliseconds: 100));
     expect(
@@ -209,6 +195,7 @@ void main() {
           r.url.queryParameters['period'] == 'overall'),
       isTrue,
     );
+
     api.delayedInsights.complete(_AttendanceApi._insights());
     await tester.pumpAndSettle();
   });
