@@ -204,10 +204,61 @@ def _month_offsets(today: date, count: int = 3) -> list[tuple[int, int]]:
     return list(reversed(result))
 
 
-def revenue_risk_insights(db: Session, today: date | None = None) -> dict:
+def revenue_risk_insights(
+    db: Session,
+    today: date | None = None,
+    period: str | None = None,
+    selected_date: date | None = None,
+    selected_month: int | None = None,
+    selected_year: int | None = None,
+) -> dict:
     today = today or date.today()
-    defaults = fee_defaulters(db, days_overdue=7, today=today)
-    batch_data = batch_analytics(db, today=today)
+    selected_date = selected_date or today
+    selected_month = selected_month or selected_date.month
+    selected_year = selected_year or selected_date.year
+    if period == "month":
+        reference_date = date(selected_year, selected_month, 1) + timedelta(days=32)
+        reference_date = reference_date.replace(day=1) - timedelta(days=1)
+    elif period == "year":
+        reference_date = date(selected_year, 12, 31)
+    elif period == "day":
+        reference_date = selected_date
+    else:
+        reference_date = today
+
+    def in_period(fee: StudentFee) -> bool:
+        if period == "month":
+            return fee.month == selected_month and fee.year == selected_year
+        if period == "year":
+            return fee.year == selected_year
+        if period == "day":
+            return fee.due_date <= selected_date
+        return True
+
+    selected_overdue = [
+        fee for fee in overdue_fees(db, days_overdue=7, today=reference_date)
+        if in_period(fee)
+    ]
+    selected_fee_ids = {fee.id for fee in selected_overdue}
+    all_defaults = fee_defaulters(db, days_overdue=7, today=reference_date)
+    defaults = {"days_overdue": 7, "students": [], "total_pending": 0.0}
+    for row in all_defaults["students"]:
+        selected_fees = [fee for fee in row["fees"] if fee["fee_id"] in selected_fee_ids]
+        if selected_fees:
+            amount = _number(sum(
+                (Decimal(str(fee["pending_amount"])) for fee in selected_fees),
+                Decimal("0"),
+            ))
+            defaults["students"].append({
+                **row,
+                "fees": selected_fees,
+                "fee_ids": [fee["fee_id"] for fee in selected_fees],
+                "pending_amount": amount,
+            })
+    defaults["total_pending"] = _number(sum(
+        (fee.balance_amount for fee in selected_overdue), Decimal("0")
+    ))
+    batch_data = batch_analytics(db, today=reference_date)
     default_fee_ids = [fee_id for row in defaults["students"] for fee_id in row["fee_ids"]]
     default_student_ids = [row["student_id"] for row in defaults["students"]]
     drop_batch_ids = {row["batch_id"] for row in batch_data["attendance_drop_batches"]}
@@ -217,7 +268,7 @@ def revenue_risk_insights(db: Session, today: date | None = None) -> dict:
         .filter(Batch.id.in_(drop_batch_ids)).all()
     }) if drop_batch_ids else []
 
-    months = _month_offsets(today, 3)
+    months = _month_offsets(reference_date, 3)
     monthly_collections = []
     for month, year in months:
         fees = (
@@ -239,17 +290,27 @@ def revenue_risk_insights(db: Session, today: date | None = None) -> dict:
         attendance_message = "No batch has a sustained attendance drop above 30%."
 
     total_at_risk = _number(Decimal(str(defaults["total_pending"])) + Decimal(str(batch_data["total_revenue_at_risk"])))
-    students_pending = (
+    students_pending = [fee for fee in (
         db.query(StudentFee)
         .filter(StudentFee.status.in_([FeeStatus.UNPAID, FeeStatus.OVERDUE]), StudentFee.balance_amount > 0)
         .all()
-    )
-    today_present = (
-        db.query(StudentAttendance)
-        .join(ClassSession, ClassSession.id == StudentAttendance.class_id)
-        .filter(ClassSession.date == today, StudentAttendance.status == AttendanceStatus.PRESENT)
-        .count()
-    )
+    ) if in_period(fee)]
+    attendance_query = db.query(StudentAttendance).join(
+        ClassSession, ClassSession.id == StudentAttendance.class_id
+    ).filter(StudentAttendance.status == AttendanceStatus.PRESENT)
+    if period in (None, "day"):
+        attendance_query = attendance_query.filter(ClassSession.date == selected_date)
+    elif period == "month":
+        attendance_query = attendance_query.filter(
+            ClassSession.date >= date(selected_year, selected_month, 1),
+            ClassSession.date <= reference_date,
+        )
+    elif period == "year":
+        attendance_query = attendance_query.filter(
+            ClassSession.date >= date(selected_year, 1, 1),
+            ClassSession.date <= reference_date,
+        )
+    today_present = attendance_query.count()
 
     risks = [
         {
@@ -276,7 +337,7 @@ def revenue_risk_insights(db: Session, today: date | None = None) -> dict:
             "fee_ids": [],
         },
     ]
-    return {
+    result = {
         "risks": risks,
         "forecast": {
             "next_month_revenue": forecast,
@@ -294,3 +355,11 @@ def revenue_risk_insights(db: Session, today: date | None = None) -> dict:
         },
         "batch_analytics": batch_data,
     }
+    if period is not None:
+        result["period"] = {
+            "type": period,
+            "date": selected_date.isoformat(),
+            "month": selected_month,
+            "year": selected_year,
+        }
+    return result

@@ -199,6 +199,16 @@ void main() {
           r.url.queryParameters['period'] == 'overall'),
       isTrue,
     );
+    final aiOverall = find.widgetWithText(ChoiceChip, 'Overall').first;
+    await tester.ensureVisible(aiOverall);
+    await tester.tap(aiOverall);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(
+      api.requests.any((r) =>
+          r.url.path == '/insights/revenue-risk' &&
+          r.url.queryParameters['period'] == 'overall'),
+      isTrue,
+    );
     api.delayedInsights.complete(_AttendanceApi._insights());
     await tester.pumpAndSettle();
   });

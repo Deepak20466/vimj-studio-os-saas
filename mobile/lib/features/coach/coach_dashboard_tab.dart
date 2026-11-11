@@ -23,7 +23,8 @@ class CoachDashboardTab extends StatefulWidget {
   State<CoachDashboardTab> createState() => _CoachDashboardTabState();
 }
 
-class _CoachDashboardTabState extends State<CoachDashboardTab> {
+class _CoachDashboardTabState extends State<CoachDashboardTab>
+    with WidgetsBindingObserver {
   List<ClassSession> _classes = [];
   Map<int, Map<String, dynamic>> _summaries = {};
   bool _loading = false;
@@ -39,6 +40,8 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
   String _classSearch = '';
   int? _activityFilter;
   int _loadVersion = 0;
+  Timer? _scheduleRefreshTimer;
+  bool _refreshingClasses = false;
 
   List<ClassSession> get _visibleClasses => _classes
       .where((c) =>
@@ -51,7 +54,55 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+    _scheduleRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted &&
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        _refreshClasses();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _scheduleRefreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refreshClasses();
+  }
+
+  Future<void> _refreshClasses() async {
+    if (_refreshingClasses) return;
+    _refreshingClasses = true;
+    final version = _loadVersion;
+    try {
+      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final data = await ApiClient.instance.get(
+        '/activities/classes/my',
+        query: {'class_date': today},
+      ) as List;
+      final classes = data
+          .map((e) => ClassSession.fromJson(e as Map<String, dynamic>))
+          .toList();
+      if (!mounted || version != _loadVersion) return;
+      final newClasses = classes.where((c) => !_summaries.containsKey(c.id)).toList();
+      setState(() {
+        _classes = classes;
+        _classesLoaded = true;
+      });
+      if (newClasses.isNotEmpty) {
+        unawaited(_loadClassSummaries(newClasses, version));
+      }
+    } catch (_) {
+      // Keep the last loaded schedule visible and retry on the next poll/resume.
+    } finally {
+      _refreshingClasses = false;
+    }
   }
 
   Future<void> _load() async {

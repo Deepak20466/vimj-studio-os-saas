@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/api_client.dart';
 import '../../core/app_theme.dart';
@@ -27,6 +28,7 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
   bool _revenueLoading = false;
   bool _sendingReminders = false;
   bool _insightsRefreshing = false;
+  int _insightsRequestRevision = 0;
   bool _showAllInsightRows = false;
   bool _showAllBatchRows = false;
   String _insightFilter = '';
@@ -38,6 +40,8 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
   List<dynamic> _missing = [];
   String _revenuePeriod = 'month';
   DateTime _revenueMonth = DateTime.now();
+  String _insightPeriod = 'day';
+  DateTime _insightDate = DateTime.now();
   Map<String, dynamic>? _revenue;
   String _missingSearch = '';
   List<dynamic> get _visibleMissing => _missing.where((item) {
@@ -49,6 +53,15 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
 
   String _money(dynamic value) =>
       'Rs ${(value is num ? value : double.tryParse('$value') ?? 0).toStringAsFixed(2)}';
+
+  Map<String, dynamic> get _insightsQuery => {
+        'period': _insightPeriod,
+        if (_insightPeriod == 'day')
+          'selected_date': DateFormat('yyyy-MM-dd').format(_insightDate),
+        if (_insightPeriod == 'month') 'month': _insightDate.month,
+        if (_insightPeriod == 'month' || _insightPeriod == 'year')
+          'year': _insightDate.year,
+      };
 
   String _deltaDescription(double? value) {
     if (value == null || value == 0) return 'unchanged';
@@ -84,13 +97,15 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
     }
   }
 
-  Future<void> _refreshInsights() async {
-    if (_insightsRefreshing || _loading) return;
+  Future<void> _refreshInsights({bool force = false}) async {
+    if ((_insightsRefreshing || _loading) && !force) return;
+    final revision = ++_insightsRequestRevision;
+    final query = Map<String, dynamic>.from(_insightsQuery);
     if (mounted) setState(() => _insightsRefreshing = true);
     try {
-      final next = await ApiClient.instance.get('/insights/revenue-risk')
+      final next = await ApiClient.instance.get('/insights/revenue-risk', query: query)
           as Map<String, dynamic>;
-      if (!mounted) return;
+      if (!mounted || revision != _insightsRequestRevision) return;
       final previous = _insights;
       setState(() {
         if (previous != null) {
@@ -109,8 +124,36 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
     } catch (_) {
       // Keep the last good dashboard snapshot visible until the next refresh.
     } finally {
-      if (mounted) setState(() => _insightsRefreshing = false);
+      if (mounted && revision == _insightsRequestRevision) {
+        setState(() => _insightsRefreshing = false);
+      }
     }
+  }
+
+  Future<void> _selectInsightPeriod(String period) async {
+    var date = _insightDate;
+    if (period == 'day' || period == 'month' || period == 'year') {
+      final picked = await showDatePicker(
+        context: context,
+        initialDate: date,
+        firstDate: DateTime(2000),
+        lastDate: DateTime(2100),
+        helpText: period == 'day'
+            ? 'Select day for AI insights'
+            : period == 'month'
+                ? 'Select month for AI insights'
+                : 'Select year for AI insights',
+        initialDatePickerMode:
+            period == 'year' ? DatePickerMode.year : DatePickerMode.day,
+      );
+      if (picked == null || !mounted) return;
+      date = picked;
+    }
+    setState(() {
+      _insightPeriod = period;
+      _insightDate = date;
+    });
+    await _refreshInsights(force: true);
   }
 
   double _metric(Map<String, dynamic> root, String group, String key) {
@@ -121,6 +164,8 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
   }
 
   Future<void> _load() async {
+    final insightsRevision = ++_insightsRequestRevision;
+    final insightsQuery = Map<String, dynamic>.from(_insightsQuery);
     setState(() {
       _loading = true;
       _insightsFailed = false;
@@ -162,8 +207,9 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
     try {
       await Future.wait([
         loadPart(
-          ApiClient.instance.get('/insights/revenue-risk'),
+          ApiClient.instance.get('/insights/revenue-risk', query: insightsQuery),
           (v) async {
+            if (insightsRevision != _insightsRequestRevision) return;
             final next = v as Map<String, dynamic>;
             final previous = _insights;
             if (previous != null) {
@@ -676,6 +722,44 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
                 ),
               ),
             ),
+          const SizedBox(height: 8),
+          Text(
+            _insightPeriod == 'day'
+                ? 'AI insights for ${DateFormat.yMMMd().format(_insightDate)}'
+                : _insightPeriod == 'month'
+                    ? 'AI insights for ${DateFormat.yMMMM().format(_insightDate)}'
+                    : _insightPeriod == 'year'
+                        ? 'AI insights for ${_insightDate.year}'
+                        : 'AI insights for all time',
+            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            children: [
+              ChoiceChip(
+                label: const Text('Day'),
+                selected: _insightPeriod == 'day',
+                onSelected: (_) => _selectInsightPeriod('day'),
+              ),
+              ChoiceChip(
+                label: const Text('Month'),
+                selected: _insightPeriod == 'month',
+                onSelected: (_) => _selectInsightPeriod('month'),
+              ),
+              ChoiceChip(
+                label: const Text('Year'),
+                selected: _insightPeriod == 'year',
+                onSelected: (_) => _selectInsightPeriod('year'),
+              ),
+              ChoiceChip(
+                label: const Text('Overall'),
+                selected: _insightPeriod == 'overall',
+                onSelected: (_) => _selectInsightPeriod('overall'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
           GridView.count(
             crossAxisCount: 2,
             shrinkWrap: true,
@@ -689,7 +773,7 @@ class _AdminDashboardTabState extends State<AdminDashboardTab>
                 _insights != null ? '${kpis['total_students'] ?? '—'}' : '…',
               ),
               _statCard(
-                'Today Present',
+                'Present (period)',
                 _insights != null ? '${kpis['today_present'] ?? '—'}' : '…',
               ),
               _statCard(

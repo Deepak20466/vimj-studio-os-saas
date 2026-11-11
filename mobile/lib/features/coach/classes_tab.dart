@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -16,7 +17,7 @@ class ClassesTab extends StatefulWidget {
   State<ClassesTab> createState() => _ClassesTabState();
 }
 
-class _ClassesTabState extends State<ClassesTab> {
+class _ClassesTabState extends State<ClassesTab> with WidgetsBindingObserver {
   DateTime _selectedDate = DateTime.now();
   List<ClassSession> _classes = [];
   bool _loading = true;
@@ -25,6 +26,8 @@ class _ClassesTabState extends State<ClassesTab> {
   int? _photoBusyClassId;
   String _search = '';
   String? _photoFilter;
+  Timer? _scheduleRefreshTimer;
+  bool _refreshInProgress = false;
   List<ClassSession> get _visibleClasses => _classes
       .where((c) =>
           (_search.isEmpty ||
@@ -40,11 +43,32 @@ class _ClassesTabState extends State<ClassesTab> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+    _scheduleRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted &&
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        _load(showLoading: false);
+      }
+    });
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  @override
+  void dispose() {
+    _scheduleRefreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _load(showLoading: false);
+  }
+
+  Future<void> _load({bool showLoading = true}) async {
+    if (_refreshInProgress) return;
+    _refreshInProgress = true;
+    if (showLoading && mounted) setState(() => _loading = true);
     try {
       final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
       final data = await ApiClient.instance.get('/activities/classes/my',
@@ -57,6 +81,7 @@ class _ClassesTabState extends State<ClassesTab> {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
+      _refreshInProgress = false;
       if (mounted) setState(() => _loading = false);
     }
   }
