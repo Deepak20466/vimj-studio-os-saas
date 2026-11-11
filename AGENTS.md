@@ -685,6 +685,7 @@ following additional updates:
 - Release target: mobile version `1.26.42+78`, tag `mobile-v1.26.42`, through `.github/workflows/release-mobile.yml` with the persistent Android signing key.
 - Verification: all 36 Flutter tests passed; Flutter analysis completed with no errors or warnings and 202 existing info-level notices; local split-ABI release compilation succeeded using the local debug-signing fallback. GitHub Actions will create the installable APKs with the persistent release key.
 
+
 ## Admin Revenue Period Test Correction (2026-11-12)
 
 - The dashboard regression test now selects Overall within the Revenue period card, and selects the independent insights period via its own control group. Previously it tapped the insights Overall control and expected a revenue request.
