@@ -18,6 +18,7 @@ import 'package:vimj_attendance/features/coach/coach_salary_tab.dart';
 class _ScreenApi {
   final requests = <http.Request>[];
   final salaryRows = <Map<String, dynamic>>[];
+  final attendanceRows = <Map<String, dynamic>>[];
   final sharedFiles = <Map<dynamic, dynamic>>[];
 
   void install() {
@@ -184,6 +185,8 @@ class _ScreenApi {
           'due_date': '2026-11-10',
         }
       ];
+    } else if (path == '/attendance/students') {
+      body = attendanceRows;
     } else if (path == '/notifications') {
       body = {'items': <dynamic>[]};
     }
@@ -366,6 +369,23 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final api = _ScreenApi()..install();
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    api.attendanceRows.add({
+      'id': 501,
+      'student_id': 11,
+      'student_name': 'Admin Entered Attendance',
+      'class_id': 22,
+      'activity_id': 4,
+      'activity_name': 'Yoga',
+      'coach_id': null,
+      'coach_name': null,
+      'status': 'PRESENT',
+      'class_date': today,
+      'timestamp': '${today}T10:00:00',
+      'marked_manually': true,
+      'has_selfie': false,
+      'approval_status': 'APPROVED',
+    });
     await tester.pumpWidget(MaterialApp(
       theme: AppTheme.light(),
       home: const CoachHome(),
@@ -390,6 +410,21 @@ void main() {
     await tester.tap(find.byType(NavigationDestination).at(3));
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Attendance'), findsWidgets);
+    expect(
+      api.requests.any((request) => request.url.path == '/attendance/students'),
+      isTrue,
+    );
+    await tester.scrollUntilVisible(
+      find.text('Admin Entered Attendance'),
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byType(CustomScrollView).last,
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    expect(find.text('Admin Entered Attendance'), findsOneWidget);
 
     await tester.tap(find.byType(NavigationDestination).first);
     await tester.pump(const Duration(milliseconds: 400));

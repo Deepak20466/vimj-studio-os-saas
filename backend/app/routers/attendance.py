@@ -257,7 +257,15 @@ def list_student_attendance(
     if class_id:
         query = query.filter(StudentAttendance.class_id == class_id)
     if current_user.role == UserRole.COACH:
-        query = query.filter(StudentAttendance.coach_id == current_user.id)
+        # Keep records visible to the coach recorded as their marker, and also
+        # include admin-entered/legacy rows that have no coach_id but belong to
+        # one of this coach's assigned class sessions.
+        query = query.filter(
+            or_(
+                StudentAttendance.coach_id == current_user.id,
+                ClassSession.coach_id == current_user.id,
+            )
+        )
     elif coach_id:
         query = query.filter(StudentAttendance.coach_id == coach_id)
     if student_id:

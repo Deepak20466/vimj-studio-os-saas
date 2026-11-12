@@ -1,7 +1,7 @@
 name: vimj_attendance
 description: VIMJ Studio OS SaaS - Admin and Coach mobile app
 publish_to: "none"
-version: 1.26.48+85
+version: 1.26.49+86
 
 environment:
   sdk: ">=3.3.0 <4.0.0"

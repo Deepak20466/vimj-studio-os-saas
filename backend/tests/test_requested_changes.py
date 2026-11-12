@@ -161,6 +161,44 @@ class RequestedChanges(unittest.TestCase):
         response = self.client.get(f'/coaches/{self.coach.id}/attendance', params={'date_from':'2026-10-01','date_to':'2026-10-31'})
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual([row['date'][:10] for row in response.json()], ['2026-10-06'])
+
+    def test_coach_can_see_admin_entered_attendance_for_assigned_class(self):
+        other_coach = User(
+            name="Other Coach",
+            email="other-coach@example.com",
+            role=UserRole.COACH,
+            password_hash="unused",
+        )
+        self.db.add(other_coach)
+        self.db.flush()
+        other_class = ClassSession(
+            activity_id=self.yoga.id,
+            coach_id=other_coach.id,
+            date=date(2026, 9, 11),
+            start_time=time(9),
+            end_time=time(10),
+        )
+        self.db.add(other_class)
+        admin_entered = StudentAttendance(
+            student_id=self.s1.id,
+            class_id=self.cls.id,
+            status=AttendanceStatus.PRESENT,
+            coach_id=None,
+        )
+        other_coach_record = StudentAttendance(
+            student_id=self.s1.id,
+            class_id=other_class.id,
+            status=AttendanceStatus.ABSENT,
+            coach_id=other_coach.id,
+        )
+        self.db.add_all([admin_entered, other_coach_record])
+        self.db.commit()
+
+        self.app.dependency_overrides[require_admin_or_coach] = lambda: self.coach
+        response = self.client.get('/attendance/students')
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual([row['id'] for row in response.json()], [admin_entered.id])
+        self.assertEqual(response.json()[0]['student_name'], 'Yoga Student')
     def test_dated_receipts_and_multiple_collections(self):
         payload = {'student_id':self.s1.id,'month':9,'year':2026,'amount':'100','product_amount':'25','billing_date':'2026-09-10'}
         for day in [10,11]:
