@@ -1,4 +1,5 @@
 from datetime import datetime
+from app.core.clock import facility_now_aware
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -138,12 +139,12 @@ def approve_draft(
     draft.status = ReminderDraftStatus.APPROVED
     draft.decision_note = payload.decision_note
     draft.approved_by_admin_id = current_user.id
-    draft.decided_at = datetime.utcnow()
+    draft.decided_at = facility_now_aware()
 
     student = db.query(User).filter(User.id == draft.student_id).first()
     if student and student.phone:
         notify(student.phone, draft.message)
-        draft.sent_at = datetime.utcnow()
+        draft.sent_at = facility_now_aware()
 
     log_action(db, current_user.id, "APPROVE_FEE_REMINDER", "FeeReminderDraft", draft.id)
     db.commit()
@@ -174,7 +175,7 @@ def reject_draft(
     draft.status = ReminderDraftStatus.REJECTED
     draft.decision_note = payload.decision_note
     draft.approved_by_admin_id = current_user.id
-    draft.decided_at = datetime.utcnow()
+    draft.decided_at = facility_now_aware()
 
     log_action(db, current_user.id, "REJECT_FEE_REMINDER", "FeeReminderDraft", draft.id)
     db.commit()

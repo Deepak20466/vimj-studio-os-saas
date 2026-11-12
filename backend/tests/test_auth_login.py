@@ -9,6 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.login_guard import login_guard
 from app.core.rate_limit import limiter
 from app.database import Base, get_db
 from app.models.user import User, UserRole
@@ -18,6 +19,7 @@ from app.routers import auth
 class AuthLoginTests(unittest.TestCase):
     def setUp(self):
         limiter.reset()
+        login_guard.clear()
         self.engine = create_engine(
             "sqlite://",
             connect_args={"check_same_thread": False},
@@ -102,25 +104,78 @@ class AuthLoginTests(unittest.TestCase):
         self.assertEqual(response.status_code, 401, response.text)
         self.assertEqual(response.json()["detail"], "Invalid email or password")
 
-    def test_login_rate_limit_still_returns_429(self):
+    def _fail(self, client, email, times=1):
+        for _ in range(times):
+            response = client.post(
+                "/auth/login",
+                json={"email": email, "password": "wrong-password"},
+            )
+            self.assertEqual(response.status_code, 401, response.text)
+
+    def test_account_locks_after_failed_attempts_and_returns_retry_after(self):
         with (
             patch("app.routers.auth.verify_password", return_value=False),
             self._client() as client,
         ):
-            for _ in range(5):
-                response = client.post(
-                    "/auth/login",
-                    json={"email": "admin@example.com", "password": "wrong-password"},
-                )
-                self.assertEqual(response.status_code, 401, response.text)
-
+            self._fail(client, "admin@example.com", times=10)
             limited = client.post(
                 "/auth/login",
                 json={"email": "admin@example.com", "password": "wrong-password"},
             )
 
         self.assertEqual(limited.status_code, 429, limited.text)
-        self.assertIn("Rate limit exceeded", limited.json()["error"])
+        self.assertIn("Too many failed sign-in attempts", limited.json()["detail"])
+        self.assertGreater(int(limited.headers["retry-after"]), 0)
+
+    def test_successful_logins_do_not_count_toward_lockout(self):
+        with (
+            patch(
+                "app.routers.auth.verify_password",
+                side_effect=lambda password, stored: password == "correct-password",
+            ),
+            patch("app.routers.auth.log_action"),
+            self._client() as client,
+        ):
+            for _ in range(9):
+                self._fail(client, "coach@example.com")
+            ok = client.post(
+                "/auth/login",
+                json={"email": "coach@example.com", "password": "correct-password"},
+            )
+            self.assertEqual(ok.status_code, 200, ok.text)
+            # The success cleared the count, so nine more failures still do not lock.
+            for _ in range(9):
+                self._fail(client, "coach@example.com")
+
+    def test_lock_on_one_account_does_not_block_another(self):
+        with (
+            patch("app.routers.auth.verify_password", return_value=False),
+            self._client() as client,
+        ):
+            self._fail(client, "admin@example.com", times=10)
+            other = client.post(
+                "/auth/login",
+                json={"email": "coach@example.com", "password": "wrong-password"},
+            )
+
+        self.assertEqual(other.status_code, 401, other.text)
+
+    def test_email_match_ignores_case_and_surrounding_spaces(self):
+        with (
+            patch(
+                "app.routers.auth.verify_password",
+                side_effect=lambda password, stored: password == "correct-password",
+            ),
+            patch("app.routers.auth.log_action"),
+            self._client() as client,
+        ):
+            response = client.post(
+                "/auth/login",
+                json={"email": "  Coach@Example.COM ", "password": "correct-password"},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["role"], "COACH")
 
     def test_forgot_password_rate_limiter_returns_generic_response(self):
         with self._client() as client:

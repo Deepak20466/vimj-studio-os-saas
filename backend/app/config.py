@@ -53,7 +53,14 @@ class Settings(BaseSettings):
     CLOUD_TASKS_QUEUE_NAME: str = ""
     CLOUD_TASKS_SERVICE_ACCOUNT_EMAIL: str = ""
 
-    LOGIN_RATE_LIMIT: str = "5/15minutes"
+    # Broad per-IP abuse guard only. Every login request counts toward it, so it
+    # must stay loose: coaches at the facility share one Wi-Fi/NAT IP.
+    LOGIN_RATE_LIMIT: str = "60/minute"
+    # Lockout applies to failed password attempts on one account (email),
+    # never to successful logins. Once LOGIN_FAILURE_LIMIT failures land inside
+    # LOGIN_FAILURE_WINDOW_SECONDS, that account waits until the window clears.
+    LOGIN_FAILURE_LIMIT: int = 10
+    LOGIN_FAILURE_WINDOW_SECONDS: int = 300
 
     ENV: str = "development"
 

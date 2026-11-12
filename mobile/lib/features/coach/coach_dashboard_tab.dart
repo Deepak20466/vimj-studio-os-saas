@@ -23,7 +23,11 @@ class CoachDashboardTab extends StatefulWidget {
   State<CoachDashboardTab> createState() => _CoachDashboardTabState();
 }
 
-class _CoachDashboardTabState extends State<CoachDashboardTab> {
+const _dashboardRefreshInterval = Duration(seconds: 30);
+
+class _CoachDashboardTabState extends State<CoachDashboardTab>
+    with WidgetsBindingObserver {
+  Timer? _refreshTimer;
   List<ClassSession> _classes = [];
   Map<int, Map<String, dynamic>> _summaries = {};
   bool _loading = false;
@@ -51,15 +55,37 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Admin changes (e.g. marking this coach's own attendance) must appear
+    // without a manual pull-to-refresh, same as the web dashboard's 30s poll.
+    _refreshTimer = Timer.periodic(_dashboardRefreshInterval, (_) {
+      if (mounted && !_actionLoading) _load(silent: true);
+    });
     _load();
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted && !_actionLoading) {
+      _load(silent: true);
+    }
+  }
+
+  Future<void> _load({bool silent = false}) async {
     final version = ++_loadVersion;
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final session = await AuthStorage.load();
       if (!mounted || version != _loadVersion) return;
@@ -207,6 +233,9 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
             'Marked ${_myAttendanceStatusLabels[_myStatus]} — submitted, awaiting admin');
     } on ApiException catch (e) {
       if (mounted) _showSnack(e.message, isError: true);
+      // Re-read the real state (e.g. "already marked" or admin changed it),
+      // so the screen never keeps offering a Submit that cannot succeed.
+      if (mounted) unawaited(_load(silent: true));
     } finally {
       if (mounted) setState(() => _actionLoading = false);
     }
@@ -243,7 +272,7 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
         actions: const [NotificationBellAction(), SizedBox(width: 4)],
       ),
       body: RefreshIndicator(
-        onRefresh: _load,
+        onRefresh: () => _load(),
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -280,6 +309,9 @@ class _CoachDashboardTabState extends State<CoachDashboardTab> {
                           ? 'Attendance could not be checked. Pull to retry.'
                           : "Checking today's attendance..."),
                     ),
+                    if (_attendanceError)
+                      TextButton(
+                          onPressed: () => _load(), child: const Text('Retry')),
                   ],
                 ),
               )

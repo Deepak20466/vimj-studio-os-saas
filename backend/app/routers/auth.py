@@ -1,7 +1,9 @@
+import math
 import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -26,6 +28,7 @@ from app.security import (
 from app.services.audit import log_action
 from app.services.notifications import notify
 from app.core.rate_limit import limiter
+from app.core.login_guard import login_guard, normalize_login_email
 from app.config import settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -39,9 +42,23 @@ def login(
     payload: LoginRequest,
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(User.email == payload.email).first()
+    login_key = normalize_login_email(payload.email)
+    retry_after = login_guard.retry_after(login_key)
+    if retry_after:
+        minutes = max(1, math.ceil(retry_after / 60))
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Too many failed sign-in attempts. Please wait {minutes} minute{'s' if minutes != 1 else ''} and try again.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    # Emails are matched case-insensitively: a coach who types the address with
+    # different capitalization must not be rejected for a correct password.
+    user = db.query(User).filter(func.lower(User.email) == login_key).first()
     if not user or not verify_password(payload.password, user.password_hash):
+        login_guard.record_failure(login_key)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+    login_guard.reset(login_key)
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is deactivated")
     if user.role == UserRole.STUDENT:
@@ -93,10 +110,12 @@ def update_me(payload: SelfAccountUpdate, current_user: User = Depends(get_curre
     if not verify_password(payload.current_password, current_user.password_hash):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
 
-    if payload.email and payload.email != current_user.email:
-        if db.query(User).filter(User.email == payload.email, User.id != current_user.id).first():
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
-        current_user.email = payload.email
+    if payload.email:
+        email = normalize_login_email(payload.email)
+        if email != current_user.email.lower():
+            if db.query(User).filter(func.lower(User.email) == email, User.id != current_user.id).first():
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+            current_user.email = email
 
     if payload.name:
         current_user.name = payload.name

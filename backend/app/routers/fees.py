@@ -1,5 +1,6 @@
 import io
 from datetime import date
+from app.core.clock import facility_today
 from decimal import Decimal
 from typing import List, Optional
 
@@ -119,7 +120,7 @@ def mark_paid(
 
     fee.status = FeeStatus.PAID
     fee.balance_amount = Decimal("0")
-    fee.paid_date = payload.paid_date or date.today()
+    fee.paid_date = payload.paid_date or facility_today()
     log_action(db, current_user.id, "MARK_PAID", "StudentFee", fee.id)
     db.commit()
     db.refresh(fee)
@@ -148,14 +149,14 @@ def update_fee(
     if "balance_amount" in updates and "status" not in updates:
         if fee.balance_amount <= 0:
             fee.status = FeeStatus.PAID
-            fee.paid_date = fee.paid_date or date.today()
+            fee.paid_date = fee.paid_date or facility_today()
         elif fee.status == FeeStatus.PAID:
-            fee.status = FeeStatus.OVERDUE if fee.due_date < date.today() else FeeStatus.UNPAID
+            fee.status = FeeStatus.OVERDUE if fee.due_date < facility_today() else FeeStatus.UNPAID
             fee.paid_date = None
     elif "status" in updates and "balance_amount" not in updates:
         if fee.status == FeeStatus.PAID:
             fee.balance_amount = Decimal("0")
-            fee.paid_date = fee.paid_date or date.today()
+            fee.paid_date = fee.paid_date or facility_today()
         elif fee.balance_amount <= 0:
             fee.balance_amount = fee.amount + fee.product_amount
 
@@ -238,7 +239,7 @@ def fee_receipt(
             fee.product_amount,
             fee.amount + fee.product_amount,
             fee.balance_amount,
-            (fee.paid_date or date.today()).isoformat(),
+            (fee.paid_date or facility_today()).isoformat(),
             current_user.name,
         ]]
         buffer = rows_to_csv(headers, rows)
@@ -261,7 +262,7 @@ def fee_receipt(
         product_name=fee.product_name,
         balance_amount=fee.balance_amount,
         payment_mode="N/A",
-        paid_date=fee.paid_date or date.today(),
+        paid_date=fee.paid_date or facility_today(),
         approved_by=current_user.name,
     )
     log_action(db, current_user.id, "DOWNLOAD_RECEIPT_PDF", "StudentFee", fee.id)

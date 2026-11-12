@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from datetime import date, datetime
+from app.core.clock import facility_now_aware, facility_today
 
 from app.database import get_db
 from app.models.user import User, UserRole
@@ -240,7 +241,7 @@ def class_summary(
     enrolled_count = len(student_ids)
     marked_count = db.query(StudentAttendance).filter(StudentAttendance.class_id == class_id).count()
 
-    today = date.today()
+    today = facility_today()
     fee_paid_count = 0
     fee_unpaid_count = enrolled_count
     if student_ids:
@@ -287,7 +288,7 @@ def upload_group_photo(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="The class hasn't finished yet")
 
     cls.group_photo = save_class_photo(payload.photo_base64)
-    cls.group_photo_uploaded_at = datetime.now()
+    cls.group_photo_uploaded_at = facility_now_aware()
     log_action(db, current_user.id, "UPLOAD_GROUP_PHOTO", "Class", cls.id)
     db.commit()
     db.refresh(cls)
@@ -391,7 +392,7 @@ def activity_roster(
         .filter(StudentEnrollment.activity_id == activity_id)
         .all()
     )
-    today = date.today()
+    today = facility_today()
     student_ids = [s.id for s, _ in rows]
     fees_by_student = {
         f.student_id: f.status.value

@@ -20,6 +20,7 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
   bool _loading = true;
   int? _downloadingId;
   int? _downloadingCsvId;
+  int? _printingId;
   String _search = '';
   String _statusFilter = 'ALL';
   int? _monthFilter;
@@ -143,6 +144,25 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
             .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _downloadingId = null);
+    }
+  }
+
+  Future<void> _printReceipt(FeeReceiptRecord r) async {
+    setState(() => _printingId = r.id);
+    try {
+      final bytes = await ApiClient.instance.getBytes('/receipts/${r.id}/pdf',
+          query: {'disposition': 'inline'});
+      await printPdfBytes(bytes, 'receipt_${r.id}');
+    } on ApiException catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not open the print dialog.')));
+    } finally {
+      if (mounted) setState(() => _printingId = null);
     }
   }
 
@@ -290,6 +310,15 @@ class _CoachReceiptsTabState extends State<CoachReceiptsTab> {
                                         trailing: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
+                                            _printingId == r.id
+                                                ? const SizedBox(
+                                                    width: 20,
+                                                    height: 20,
+                                                    child: CircularProgressIndicator(strokeWidth: 2))
+                                                : IconButton(
+                                                    icon: const Icon(Icons.print_outlined),
+                                                    tooltip: 'Print receipt',
+                                                    onPressed: () => _printReceipt(r)),
                                             _downloadingId == r.id
                                                 ? const SizedBox(
                                                     width: 20,

@@ -2,8 +2,10 @@ from datetime import date
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.login_guard import normalize_login_email
 from app.database import get_db
 from app.models.user import User, UserRole
 from app.models.activity import Activity
@@ -66,11 +68,12 @@ def create_coach(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    if db.query(User).filter(User.email == payload.email).first():
+    email = normalize_login_email(payload.email)
+    if db.query(User).filter(func.lower(User.email) == email).first():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
 
     coach = User(
-        email=payload.email,
+        email=email,
         password_hash=hash_password(payload.password),
         name=payload.name,
         phone=payload.phone,
@@ -95,10 +98,12 @@ def update_coach(
     if not coach:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Coach not found")
 
-    if payload.email and payload.email != coach.email:
-        if db.query(User).filter(User.email == payload.email, User.id != coach_id).first():
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
-        coach.email = payload.email
+    if payload.email:
+        email = normalize_login_email(payload.email)
+        if email != coach.email.lower():
+            if db.query(User).filter(func.lower(User.email) == email, User.id != coach_id).first():
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+            coach.email = email
 
     for field in ("name", "phone", "phone_secondary", "is_active"):
         value = getattr(payload, field)

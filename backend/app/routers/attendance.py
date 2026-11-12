@@ -1,4 +1,5 @@
 from datetime import date as date_type, datetime
+from app.core.clock import facility_now, facility_now_aware, facility_today
 import re
 from typing import List, Optional
 
@@ -207,7 +208,7 @@ def coach_mark(
 ):
     """Coach marks their own facility attendance for today — manual entry, no GPS. Once
     submitted it cannot be changed by the coach; only admin's own tools can correct it."""
-    today = datetime.now().date()
+    today = facility_today()
 
     existing = (
         db.query(CoachAttendance)
@@ -221,7 +222,7 @@ def coach_mark(
         coach_id=current_user.id,
         date=today,
         activity_id=payload.activity_id,
-        entry_time=datetime.now(),
+        entry_time=facility_now_aware(),
         status=payload.status,
     )
     db.add(record)
@@ -577,7 +578,7 @@ def daily_missing(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    today = datetime.now().date()
+    today = facility_today()
     classes = db.query(ClassSession).filter(ClassSession.date == today).all()
     marked_class_ids = {
         row[0]
@@ -588,7 +589,7 @@ def daily_missing(
     }
 
     result = []
-    now = datetime.now()
+    now = facility_now()
     for cls in classes:
         class_end_dt = datetime.combine(cls.date, cls.end_time)
         if now < class_end_dt:

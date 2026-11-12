@@ -1,6 +1,7 @@
 """Local, rule-based revenue and attendance insights shared by the API and MCP."""
 
 from datetime import date, timedelta
+from app.core.clock import facility_today
 from decimal import Decimal
 
 from sqlalchemy import case, func
@@ -20,7 +21,7 @@ def _number(value) -> float:
 
 
 def overdue_fees(db: Session, days_overdue: int = 7, today: date | None = None):
-    today = today or date.today()
+    today = today or facility_today()
     cutoff = today - timedelta(days=days_overdue)
     return (
         db.query(StudentFee)
@@ -76,7 +77,7 @@ def _batch_attendance_rate(db: Session, class_session: ClassSession) -> float | 
 
 
 def batch_analytics(db: Session, today: date | None = None) -> dict:
-    today = today or date.today()
+    today = today or facility_today()
     activities = {activity.id: activity for activity in db.query(Activity).all()}
     enrollments: dict[int, int] = {}
     for activity_id, count in (
@@ -212,7 +213,7 @@ def revenue_risk_insights(
     selected_month: int | None = None,
     selected_year: int | None = None,
 ) -> dict:
-    today = today or date.today()
+    today = today or facility_today()
     selected_date = selected_date or today
     selected_month = selected_month or selected_date.month
     selected_year = selected_year or selected_date.year

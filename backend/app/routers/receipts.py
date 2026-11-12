@@ -1,5 +1,6 @@
 import io
 from datetime import date, datetime
+from app.core.clock import facility_now_aware, facility_today
 from decimal import Decimal
 from typing import List
 
@@ -185,12 +186,12 @@ def approve_receipt(
             fee.product_amount += additional_products
             fee.balance_amount = max(Decimal("0"), fee.balance_amount + additional_products - receipt.amount - receipt.product_amount)
     fee.status = FeeStatus.PAID if fee.balance_amount == 0 else FeeStatus.UNPAID
-    fee.paid_date = (receipt.billing_date or date.today()) if fee.status == FeeStatus.PAID else None
+    fee.paid_date = (receipt.billing_date or facility_today()) if fee.status == FeeStatus.PAID else None
 
     receipt.status = ReceiptStatus.APPROVED
     receipt.decision_note = payload.decision_note
     receipt.approved_by_admin_id = current_user.id
-    receipt.decided_at = datetime.utcnow()
+    receipt.decided_at = facility_now_aware()
 
     log_action(db, current_user.id, "APPROVE_RECEIPT", "FeeReceipt", receipt.id)
     db.commit()
@@ -227,7 +228,7 @@ def reject_receipt(
     receipt.status = ReceiptStatus.REJECTED
     receipt.decision_note = payload.decision_note
     receipt.approved_by_admin_id = current_user.id
-    receipt.decided_at = datetime.utcnow()
+    receipt.decided_at = facility_now_aware()
 
     log_action(db, current_user.id, "REJECT_RECEIPT", "FeeReceipt", receipt.id)
     db.commit()

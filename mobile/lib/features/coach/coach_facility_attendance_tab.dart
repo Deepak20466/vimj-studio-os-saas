@@ -22,8 +22,9 @@ class CoachFacilityAttendanceTab extends StatefulWidget {
       _CoachFacilityAttendanceTabState();
 }
 
-class _CoachFacilityAttendanceTabState
-    extends State<CoachFacilityAttendanceTab> {
+class _CoachFacilityAttendanceTabState extends State<CoachFacilityAttendanceTab>
+    with WidgetsBindingObserver {
+  Timer? _refreshTimer;
   int? _coachId;
 
   List<dynamic> _myAttendance = [];
@@ -59,12 +60,29 @@ class _CoachFacilityAttendanceTabState
   Future<void> _init() async {
     final session = await AuthStorage.load();
     _coachId = session?.userId;
+    WidgetsBinding.instance.addObserver(this);
+    // Keeps admin-entered records visible without a manual pull-to-refresh.
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) _refreshSilently();
+    });
     _loadMyAttendance();
     _loadMonthRecords();
   }
 
+  void _refreshSilently() {
+    _loadMyAttendance(silent: true);
+    _loadMonthRecords(silent: true);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) _refreshSilently();
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _refreshTimer?.cancel();
     _allDateSearchDebounce?.cancel();
     super.dispose();
   }
@@ -177,24 +195,26 @@ class _CoachFacilityAttendanceTabState
     }
   }
 
-  Future<void> _loadMyAttendance() async {
+  Future<void> _loadMyAttendance({bool silent = false}) async {
     if (_coachId == null) return;
-    setState(() => _myAttendanceLoading = true);
+    if (!silent) setState(() => _myAttendanceLoading = true);
     try {
       final data =
           await ApiClient.instance.get('/coaches/$_coachId/attendance') as List;
       _myAttendance = data;
     } on ApiException catch (e) {
-      if (mounted)
+      if (mounted && !silent)
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      // Background refresh failures stay quiet; the next poll retries.
     } finally {
       if (mounted) setState(() => _myAttendanceLoading = false);
     }
   }
 
-  Future<void> _loadMonthRecords() async {
-    setState(() => _recordsLoading = true);
+  Future<void> _loadMonthRecords({bool silent = false}) async {
+    if (!silent) setState(() => _recordsLoading = true);
     try {
       final data = await ApiClient.instance.getAllPages(
         '/attendance/students',
@@ -207,9 +227,11 @@ class _CoachFacilityAttendanceTabState
           .map((e) => AdminAttendanceRecord.fromJson(e as Map<String, dynamic>))
           .toList();
     } on ApiException catch (e) {
-      if (mounted)
+      if (mounted && !silent)
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      // Background refresh failures stay quiet; the next poll retries.
     } finally {
       if (mounted) setState(() => _recordsLoading = false);
     }
@@ -248,7 +270,8 @@ class _CoachFacilityAttendanceTabState
     _loadMonthRecords();
   }
 
-  Future<void> _export(String kind, {String? day}) async {
+  Future<void> _export(String kind,
+      {String? day, bool print = false}) async {
     try {
       final query = <String, dynamic>{
         'month': _viewMonth.month,
@@ -258,6 +281,10 @@ class _CoachFacilityAttendanceTabState
       };
       if (day != null) query['day'] = int.parse(day.substring(8, 10));
       final bytes = await ApiClient.instance.getBytes('/reports', query: query);
+      if (print) {
+        await printPdfBytes(bytes, '${kind}_${_viewMonth.year}_${_viewMonth.month}');
+        return;
+      }
       await shareExportedFile(bytes,
           '${kind}_${_viewMonth.year}_${_viewMonth.month}${day == null ? '' : '_$day'}.pdf');
     } on ApiException catch (e) {
@@ -833,6 +860,14 @@ class _CoachFacilityAttendanceTabState
                     OutlinedButton(
                         onPressed: () => _export('fees_pending'),
                         child: const Text('Fees Pending PDF')),
+                    OutlinedButton.icon(
+                        onPressed: () => _export('fees_paid', print: true),
+                        icon: const Icon(Icons.print_outlined),
+                        label: const Text('Print Fees Paid')),
+                    OutlinedButton.icon(
+                        onPressed: () => _export('fees_pending', print: true),
+                        icon: const Icon(Icons.print_outlined),
+                        label: const Text('Print Fees Pending')),
                   ]),
                   Card(
                     child: Padding(

@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from app.core.clock import facility_today
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -73,7 +74,7 @@ def batch_roster(
     if not batch:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Batch not found")
 
-    target_date = class_date or date.today()
+    target_date = class_date or facility_today()
 
     class_session = (
         db.query(ClassSession)
@@ -99,7 +100,7 @@ def batch_roster(
         ):
             attendance_by_student[record.student_id] = record
 
-    today = date.today()
+    today = facility_today()
     fees_by_student = (
         {
             f.student_id: f
@@ -163,7 +164,7 @@ def batches_coverage(
     """Answers "is any slot not taken, and who takes which activity": unassigned batches
     (no coach linked), batches scheduled for `check_date` that have no generated `ClassSession`
     yet, and a per-activity map of which coach(es) run it."""
-    target = check_date or date.today()
+    target = check_date or facility_today()
     weekday_code = _WEEKDAY_CODES[target.weekday()]
     active_batches = db.query(Batch).filter(Batch.is_active.is_(True)).all()
 
@@ -247,7 +248,7 @@ def create_batch(
     # classes list until tomorrow at the earliest, which reads as "the coach never received
     # the schedule" even though the assignment itself succeeded.
     if batch.coach_id and batch.is_active:
-        generate_sessions_for_batch(db, batch, date.today(), date.today() + timedelta(days=BATCH_AUTO_GENERATE_DAYS_AHEAD))
+        generate_sessions_for_batch(db, batch, facility_today(), facility_today() + timedelta(days=BATCH_AUTO_GENERATE_DAYS_AHEAD))
 
     log_action(db, current_user.id, "CREATE", "Batch", batch.id)
     db.commit()
@@ -283,7 +284,7 @@ def update_batch(
     # coach can see it. generate_sessions_for_batch skips dates that already have a session,
     # so calling this on every update is harmless even when nothing relevant changed.
     if batch.coach_id and batch.is_active:
-        generate_sessions_for_batch(db, batch, date.today(), date.today() + timedelta(days=BATCH_AUTO_GENERATE_DAYS_AHEAD))
+        generate_sessions_for_batch(db, batch, facility_today(), facility_today() + timedelta(days=BATCH_AUTO_GENERATE_DAYS_AHEAD))
 
     log_action(db, current_user.id, "UPDATE", "Batch", batch.id)
     db.commit()

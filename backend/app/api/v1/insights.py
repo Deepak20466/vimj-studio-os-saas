@@ -1,4 +1,5 @@
 from datetime import date
+from app.core.clock import facility_today
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -30,7 +31,7 @@ def get_revenue_risk_insights(
         raise HTTPException(status_code=400, detail="Month must be between 1 and 12")
     if year is not None and not 2000 <= year <= 2100:
         raise HTTPException(status_code=400, detail="Year must be between 2000 and 2100")
-    anchor = selected_date or date.today()
+    anchor = selected_date or facility_today()
     return revenue_risk_insights(
         db,
         period=period,

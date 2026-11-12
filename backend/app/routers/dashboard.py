@@ -1,4 +1,5 @@
 from datetime import date
+from app.core.clock import facility_today
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import extract, func
@@ -23,7 +24,7 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 @router.get("/revenue")
 def dashboard_revenue(period: str = Query("month", pattern="^(month|year|overall)$"), month: int | None = Query(None, ge=1, le=12), year: int | None = Query(None, ge=2000, le=2100), db: Session = Depends(get_db), _: User = Depends(require_admin)):
-    today = date.today()
+    today = facility_today()
     selected_month, selected_year = month or today.month, year or today.year
     query = db.query(StudentFee).filter(StudentFee.status == FeeStatus.PAID)
     if period == "month": query = query.filter(StudentFee.month == selected_month, StudentFee.year == selected_year)
@@ -36,7 +37,7 @@ def dashboard_revenue(period: str = Query("month", pattern="^(month|year|overall
 
 @router.get("/summary", response_model=DashboardSummary)
 def dashboard_summary(db: Session = Depends(get_db), _: User = Depends(require_admin)):
-    today = date.today()
+    today = facility_today()
     total_students = db.query(User).filter(User.role == UserRole.STUDENT).count()
     total_coaches = db.query(User).filter(User.role == UserRole.COACH).count()
     total_activities = db.query(Activity).count()
@@ -72,7 +73,7 @@ def fee_status_chart(db: Session = Depends(get_db), _: User = Depends(require_ad
 @router.get("/activity-attendance", response_model=ActivityAttendanceResponse)
 def activity_attendance_chart(db: Session = Depends(get_db), _: User = Depends(require_admin)):
     """Current month's attendance % per activity, for the Dashboard bar chart."""
-    today = date.today()
+    today = facility_today()
     activities = db.query(Activity).order_by(Activity.name).all()
 
     classes = (
