@@ -9,11 +9,12 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.activity import Activity
+from app.models.coach_activity import CoachActivity
 from app.models.enrollment import StudentEnrollment
 from app.models.user import User
 from app.models.fee import StudentFee, FeeStatus
 from app.schemas.fee import FeeCreate, FeeMarkPaid, FeeUpdate, FeeOut, FeeAdminOut
-from app.security import require_admin
+from app.security import require_admin, require_coach
 from app.services.audit import log_action
 from app.services.notifications import notify
 from app.services.receipt_pdf import build_fee_receipt_pdf
@@ -104,6 +105,61 @@ def list_fees(
             created_at=f.created_at,
         )
         for f in fees
+    ]
+
+
+@router.get("/my", response_model=List[FeeAdminOut])
+def my_fees(
+    status_filter: Optional[FeeStatus] = None,
+    month: Optional[int] = Query(default=None, ge=1, le=12),
+    year: Optional[int] = Query(default=None, ge=2000, le=2100),
+    limit: int = Query(default=500, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_coach),
+):
+    """Read the admin fee ledger for students in this coach's assigned activities."""
+    assigned_student_ids = (
+        db.query(StudentEnrollment.student_id)
+        .join(CoachActivity, CoachActivity.activity_id == StudentEnrollment.activity_id)
+        .filter(CoachActivity.coach_id == current_user.id)
+        .distinct()
+    )
+    query = db.query(StudentFee).filter(StudentFee.student_id.in_(assigned_student_ids))
+    if status_filter:
+        query = query.filter(StudentFee.status == status_filter)
+    if month is not None:
+        query = query.filter(StudentFee.month == month)
+    if year is not None:
+        query = query.filter(StudentFee.year == year)
+
+    fees = (
+        query.order_by(StudentFee.year.desc(), StudentFee.month.desc(), StudentFee.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    students = {
+        u.id: u.name
+        for u in db.query(User).filter(User.id.in_([fee.student_id for fee in fees])).all()
+    }
+    return [
+        FeeAdminOut(
+            id=fee.id,
+            student_id=fee.student_id,
+            student_name=students.get(fee.student_id, "Unknown"),
+            month=fee.month,
+            year=fee.year,
+            amount=fee.amount,
+            product_amount=fee.product_amount,
+            product_name=fee.product_name,
+            balance_amount=fee.balance_amount,
+            status=fee.status,
+            due_date=fee.due_date,
+            paid_date=fee.paid_date,
+            created_at=fee.created_at,
+        )
+        for fee in fees
     ]
 
 

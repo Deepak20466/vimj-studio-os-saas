@@ -115,6 +115,43 @@ class RequestedChanges(unittest.TestCase):
         detail = self.client.get('/reports', params={'month':9,'year':2026,'day':10,'kind':'classes_detail','fmt':'pdf'})
         self.assertTrue(detail.content.startswith(b'%PDF'), detail.text)
         self.assertIn('2026-09-10', detail.headers['content-disposition'])
+    def test_coach_fee_ledger_is_read_only_and_scoped_to_assigned_students(self):
+        assigned_fee = StudentFee(
+            student_id=self.s1.id,
+            month=9,
+            year=2026,
+            amount=Decimal('100'),
+            product_amount=Decimal('20'),
+            balance_amount=Decimal('40'),
+            status=FeeStatus.UNPAID,
+            due_date=date(2026, 9, 10),
+        )
+        other_activity_fee = StudentFee(
+            student_id=self.s2.id,
+            month=9,
+            year=2026,
+            amount=Decimal('900'),
+            product_amount=Decimal('0'),
+            balance_amount=Decimal('900'),
+            status=FeeStatus.UNPAID,
+            due_date=date(2026, 9, 10),
+        )
+        self.db.add_all([assigned_fee, other_activity_fee])
+        self.db.commit()
+
+        self.app.dependency_overrides[require_coach] = lambda: self.coach
+        response = self.client.get('/fees/my', params={'month': 9, 'year': 2026})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual([row['student_id'] for row in response.json()], [self.s1.id])
+        self.assertEqual(response.json()[0]['student_name'], 'Yoga Student')
+        self.assertEqual(response.json()[0]['balance_amount'], '40.00')
+
+        # The endpoint is coach-only; admins continue using the admin ledger.
+        self.app.dependency_overrides.pop(require_coach)
+        self.app.dependency_overrides[get_current_user] = lambda: self.admin
+        forbidden = self.client.get('/fees/my')
+        self.assertEqual(forbidden.status_code, 403)
+
     def test_coach_attendance_date_filter(self):
         self.db.add_all([
             CoachAttendance(coach_id=self.coach.id, date=date(2026, 9, 10), status=CoachAttendanceStatus.PRESENT),

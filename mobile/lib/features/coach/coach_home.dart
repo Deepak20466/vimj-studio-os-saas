@@ -36,7 +36,7 @@ class _CoachHomeState extends State<CoachHome> {
 
   final _moreItems = const [
     _MoreItem('Leave', Icons.beach_access_outlined, _buildLeave),
-    _MoreItem('Receipts', Icons.receipt_long_outlined, _buildReceipts),
+    _MoreItem('Fees & Receipts', Icons.receipt_long_outlined, _buildReceipts),
     _MoreItem(
         'Fee Reminders', Icons.notifications_active_outlined, _buildReminders),
     _MoreItem('Salary', Icons.account_balance_wallet_outlined, _buildSalary),

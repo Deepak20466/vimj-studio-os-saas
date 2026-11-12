@@ -169,6 +169,21 @@ class _ScreenApi {
         'role': 'COACH',
         'is_active': true,
       };
+    } else if (path == '/fees/my') {
+      body = [
+        {
+          'id': 901,
+          'student_id': 11,
+          'student_name': 'Assigned Student',
+          'month': 11,
+          'year': 2026,
+          'amount': '150.00',
+          'product_amount': '25.00',
+          'balance_amount': '175.00',
+          'status': 'UNPAID',
+          'due_date': '2026-11-10',
+        }
+      ];
     } else if (path == '/notifications') {
       body = {'items': <dynamic>[]};
     }
@@ -359,7 +374,9 @@ void main() {
     expect(find.text('My Attendance Today'), findsOneWidget);
 
     await _tapCoachMore(tester, 'Leave', 'Leave Requests');
-    await _tapCoachMore(tester, 'Receipts', 'Fee Receipts');
+    await _tapCoachMore(tester, 'Fees & Receipts', 'Fees & Receipts');
+    expect(find.text('Fees from Admin'), findsOneWidget);
+    expect(find.textContaining('Assigned Student'), findsOneWidget);
     await _tapCoachMore(tester, 'Fee Reminders', 'Fee Reminders');
     await _tapCoachMore(tester, 'Salary', 'Salary');
     await _tapCoachMore(tester, 'Settings', 'Settings');
@@ -387,6 +404,7 @@ void main() {
       '/coaches/7/activities',
       '/leave/my',
       '/receipts/my',
+      '/fees/my',
       '/fee-reminders/my',
       '/salary/coach/7',
       '/auth/me',
