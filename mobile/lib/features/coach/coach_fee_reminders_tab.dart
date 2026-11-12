@@ -384,11 +384,15 @@ class _ReminderFormState extends State<_ReminderForm> {
   @override
   Widget build(BuildContext context) {
     return Padding(
+      // Keep the Submit button above the system navigation bar: on phones with
+      // 3-button or gesture navigation, the bottom inset would otherwise cover it.
       padding: EdgeInsets.only(
           left: 20,
           right: 20,
           top: 20,
-          bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+          bottom: MediaQuery.of(context).viewInsets.bottom +
+              MediaQuery.of(context).padding.bottom +
+              20),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
