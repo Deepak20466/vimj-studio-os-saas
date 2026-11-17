@@ -316,4 +316,20 @@ class RequestedChanges(unittest.TestCase):
         self.assertEqual(len(coach_search.json()), 1)
         self.assertEqual(coach_search.json()[0]['status'], 'ABSENT')
 
+    def test_updating_unpaid_fee_amount_keeps_outstanding_balance_in_sync(self):
+        created = self.client.post('/fees', json={
+            'student_id': self.s1.id,
+            'month': 10,
+            'year': 2026,
+            'amount': '100',
+            'product_amount': '25',
+            'due_date': '2026-10-31',
+        })
+        self.assertEqual(created.status_code, 201, created.text)
+
+        updated = self.client.put(f"/fees/{created.json()['id']}", json={'amount': '150'})
+
+        self.assertEqual(updated.status_code, 200, updated.text)
+        self.assertEqual(Decimal(updated.json()['balance_amount']), Decimal('175'))
+
 if __name__ == '__main__': unittest.main()
