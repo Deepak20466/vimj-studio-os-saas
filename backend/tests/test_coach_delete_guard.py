@@ -23,8 +23,12 @@ from sqlalchemy.pool import StaticPool
 import app.models  # noqa: F401  - registers every table so foreign keys resolve
 from app.database import Base, get_db
 from app.models.activity import Activity
-from app.models.attendance import AttendanceStatus, StudentAttendance
+from app.models.attendance import AttendanceStatus, CoachAttendance, StudentAttendance
+from app.models.coach_activity import CoachActivity
 from app.models.class_session import ClassSession
+from app.models.fee_receipt import FeeReceipt
+from app.models.fee_reminder_draft import FeeReminderDraft
+from app.models.leave import CoachLeave
 from app.models.salary import CoachSalary
 from app.models.user import User, UserRole
 from app.routers import coaches
@@ -144,20 +148,86 @@ class CoachDeleteGuardTests(unittest.TestCase):
         self.assertEqual(response.status_code, 204, response.text)
         self.assertFalse(self._coach_exists())
 
-    def test_characterization_salary_rows_are_removed_with_a_coach_without_sessions(self):
-        """Characterization only (outside the approved scope). Records salary-ledger cascade
-        behaviour so the owner can decide whether salary, fee receipts and reminder drafts should
-        also block deletion. This test passes on the current code by design and should be
-        changed only if that scope decision is made."""
+    def _assert_blocked(self):
+        with TestClient(self.app) as client:
+            response = client.delete(f"/coaches/{self.coach_id}")
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertIn("deactivate", response.json()["detail"].lower())
+        self.assertTrue(self._coach_exists())
+
+    def test_coach_with_salary_only_cannot_be_deleted(self):
         with self.session_factory() as db:
             db.add(CoachSalary(coach_id=self.coach_id, month=10, year=2026, amount=Decimal("500")))
             db.commit()
+        self._assert_blocked()
+        self.assertEqual(self._count(CoachSalary), 1)
+
+    def test_coach_with_fee_receipt_only_cannot_be_deleted(self):
+        with self.session_factory() as db:
+            db.add(
+                FeeReceipt(
+                    student_id=self.student_id,
+                    coach_id=self.coach_id,
+                    amount=Decimal("1000"),
+                    month=10,
+                    year=2026,
+                )
+            )
+            db.commit()
+        self._assert_blocked()
+        self.assertEqual(self._count(FeeReceipt), 1)
+
+    def test_coach_with_reminder_draft_only_cannot_be_deleted(self):
+        with self.session_factory() as db:
+            db.add(
+                FeeReminderDraft(
+                    student_id=self.student_id,
+                    coach_id=self.coach_id,
+                    month=10,
+                    year=2026,
+                    message="Fee reminder",
+                )
+            )
+            db.commit()
+        self._assert_blocked()
+        self.assertEqual(self._count(FeeReminderDraft), 1)
+
+    def test_coach_with_facility_attendance_only_cannot_be_deleted(self):
+        with self.session_factory() as db:
+            db.add(CoachAttendance(coach_id=self.coach_id, date=datetime.date(2026, 10, 5)))
+            db.commit()
+        self._assert_blocked()
+        self.assertEqual(self._count(CoachAttendance), 1)
+
+    def test_coach_with_leave_only_cannot_be_deleted(self):
+        with self.session_factory() as db:
+            db.add(
+                CoachLeave(
+                    coach_id=self.coach_id,
+                    start_date=datetime.date(2026, 10, 10),
+                    end_date=datetime.date(2026, 10, 12),
+                    reason="Travel",
+                )
+            )
+            db.commit()
+        self._assert_blocked()
+        self.assertEqual(self._count(CoachLeave), 1)
+
+    def test_coach_with_activity_assignment_only_cannot_be_deleted(self):
+        with self.session_factory() as db:
+            db.add(CoachActivity(coach_id=self.coach_id, activity_id=self.activity_id))
+            db.commit()
+        self._assert_blocked()
+        self.assertEqual(self._count(CoachActivity), 1)
+
+    def test_deactivated_coach_keeps_their_records(self):
+        self._add_session_with_attendance()
         with TestClient(self.app) as client:
-            response = client.delete(f"/coaches/{self.coach_id}")
-
-        self.assertEqual(response.status_code, 204, response.text)
-        self.assertEqual(self._count(CoachSalary), 0)
-
+            response = client.put(f"/coaches/{self.coach_id}", json={"is_active": False})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertTrue(self._coach_exists())
+        self.assertEqual(self._count(ClassSession), 1)
+        self.assertEqual(self._count(StudentAttendance), 1)
 
 if __name__ == "__main__":
     unittest.main()
