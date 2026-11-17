@@ -9,8 +9,12 @@ from app.core.login_guard import normalize_login_email
 from app.database import get_db
 from app.models.user import User, UserRole
 from app.models.activity import Activity
-from app.models.attendance import CoachAttendance
+from app.models.attendance import CoachAttendance, StudentAttendance
+from app.models.class_session import ClassSession
 from app.models.coach_activity import CoachActivity
+from app.models.fee_receipt import FeeReceipt
+from app.models.fee_reminder_draft import FeeReminderDraft
+from app.models.leave import CoachLeave
 from app.models.salary import CoachSalary
 from app.schemas.user import UserCreate, UserOut, UserUpdate
 from app.schemas.attendance import CoachAttendanceOut
@@ -20,6 +24,21 @@ from app.security import get_current_user, require_admin, require_coach, hash_pa
 from app.services.audit import log_action
 
 router = APIRouter(prefix="/coaches", tags=["coaches"])
+
+
+def _coach_has_records(db: Session, coach_id: int) -> bool:
+    """True when deleting this coach would cascade to any historical record."""
+    checks = (
+        db.query(ClassSession.id).filter(ClassSession.coach_id == coach_id),
+        db.query(StudentAttendance.id).filter(StudentAttendance.coach_id == coach_id),
+        db.query(CoachAttendance.id).filter(CoachAttendance.coach_id == coach_id),
+        db.query(CoachSalary.id).filter(CoachSalary.coach_id == coach_id),
+        db.query(FeeReceipt.id).filter(FeeReceipt.coach_id == coach_id),
+        db.query(FeeReminderDraft.id).filter(FeeReminderDraft.coach_id == coach_id),
+        db.query(CoachLeave.id).filter(CoachLeave.coach_id == coach_id),
+        db.query(CoachActivity.id).filter(CoachActivity.coach_id == coach_id),
+    )
+    return any(query.first() is not None for query in checks)
 
 
 def _assert_self_or_admin(current_user: User, coach_id: int):
@@ -127,6 +146,16 @@ def delete_coach(
     coach = db.query(User).filter(User.id == coach_id, User.role == UserRole.COACH).first()
     if not coach:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Coach not found")
+    if _coach_has_records(db, coach.id):
+        # Deleting would cascade to sessions, student attendance, salary and fee receipts.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This coach has class sessions, attendance, salary, fee receipts, reminder drafts, "
+                "leave or activity assignments on record, so the coach cannot be permanently deleted. "
+                "Deactivate the coach instead to keep their history."
+            ),
+        )
     log_action(db, current_user.id, "DELETE", "Coach", coach.id)
     db.delete(coach)
     db.commit()
