@@ -143,8 +143,19 @@ def update_fee(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fee record not found")
 
     updates = payload.model_dump(exclude_unset=True)
+    previous_total = (fee.amount or Decimal("0")) + (fee.product_amount or Decimal("0"))
     for field, value in updates.items():
         setattr(fee, field, value)
+
+    if (
+        ("amount" in updates or "product_amount" in updates)
+        and "balance_amount" not in updates
+        and fee.status != FeeStatus.PAID
+    ):
+        # Keep the outstanding balance in step with the new total, preserving any
+        # amount already paid (balance moves by the same difference, never below zero).
+        new_total = (fee.amount or Decimal("0")) + (fee.product_amount or Decimal("0"))
+        fee.balance_amount = max(Decimal("0"), fee.balance_amount + (new_total - previous_total))
 
     if "balance_amount" in updates and "status" not in updates:
         if fee.balance_amount <= 0:
