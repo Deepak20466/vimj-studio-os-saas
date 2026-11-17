@@ -13,7 +13,7 @@ The React dashboard and FastAPI API run as separate Cloud Run services in `asia-
 
 - Web: `https://vimj-frontend-eqwnplgd6q-el.a.run.app`, built into a small Nginx container with SPA route fallback.
 - API: `https://vimj-backend-eqwnplgd6q-el.a.run.app`, built from `backend/Dockerfile` on Python 3.12 so the pinned PostgreSQL driver installs from its binary wheel.
-- Database: Supabase PostgreSQL, provided to the API through Secret Manager. The React image embeds the API origin at build time and does not carry database credentials.
+- Database: Google Cloud SQL PostgreSQL 17 (`vimj-academy:asia-south1:deepak20`, database `vimj_academy`, private to the project: no authorized networks). The API reaches it through Cloud Run's built-in Cloud SQL socket connector; the connection string is provided through Secret Manager (`vimj-cloudsql-database-url`). The React image embeds the API origin at build time and does not carry database credentials. The database moved here from Supabase on 2026-11-17. Backups: Cloud SQL automated backups + 7-day point-in-time recovery, and a nightly logical dump to an offsite bucket in a separate project.
 
 ## Admin AI Command Center
 
@@ -37,24 +37,27 @@ The MCP server exposes five Admin-only tools: `get_todays_absentees`, `get_fee_d
 
 Install `backend/requirements.txt` for FastAPI and `mcp_server/requirements.txt` in the isolated MCP environment. Configure `backend/.env` with a database connection and active Admin email. Use the root `.mcp.json` with Claude Code, or copy its entry with absolute paths into Claude Desktop's config. Setup details are in [mcp_server/README.md](../mcp_server/README.md).
 
-## Free-tier health checks
+## Health checks and scheduling
 
 `GET /health` is a lightweight liveness route and intentionally does not depend
-on PostgreSQL. `GET /health/ready` reads one existing user row without changing data and is used by
-the scheduled [Supabase activity workflow](../.github/workflows/supabase-keepalive.yml)
-every ten minutes. Its readiness probe reads an existing application user row,
-so it produces database activity without modifying studio data. This is a
-best-effort keepalive for Supabase Free, not a guarantee: Supabase's inactivity
-policy can still pause Free projects, and only a paid Supabase plan guarantees
-no inactivity pauses. A paused project must first be restored by its owner in
-the Supabase dashboard.
+on PostgreSQL. `GET /health/ready` reads one existing user row without changing
+data and confirms the API can reach Cloud SQL. The former GitHub Actions
+Supabase keepalive workflow was removed on 2026-11-17: Cloud SQL does not pause
+for inactivity, so no external pinger is needed.
 
-The API defaults to one Gunicorn worker on Cloud Run's 1-vCPU instance. This
-reduces memory pressure and ensures the in-process scheduler is not started
-four times. `WEB_CONCURRENCY` can override the worker count on a larger plan.
-The Cloud Run service still has a zero minimum-instance setting. Periodic
-requests are a no-cost best effort to keep it warm; scale-to-zero can still
-occur during maintenance or delayed workflow runs.
+Scheduled work is driven by Cloud Scheduler (`vimj-minute-dispatch`, every
+minute) which enqueues jobs into the Cloud Tasks queue `vimj-scheduled-jobs`;
+each task calls `POST /internal/scheduler/run` with an OIDC token and is
+recorded in the `scheduler_job_executions` ledger (one row per job and
+scheduled minute, so retries cannot double-send). The in-process scheduler is
+disabled in production, and there must only ever be one active scheduler.
+
+The API defaults to one Gunicorn worker on Cloud Run's 1-vCPU instance and uses
+a bounded SQLAlchemy pool (2 connections per worker) over the Cloud SQL socket;
+Cloud SQL `deepak20` allows 50 connections. `WEB_CONCURRENCY` can override the
+worker count on a larger plan. The Cloud Run service has a zero minimum-instance
+setting, so an occasional cold start (about 10–15 s) can make one request time
+out; Cloud Tasks retries scheduled requests automatically.
 
 ## Mobile push notifications
 

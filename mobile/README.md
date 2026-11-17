@@ -90,7 +90,7 @@ flutter run \
 ## Release process
 
 Production backend: **https://vimj-backend-eqwnplgd6q-el.a.run.app** (Google
-Cloud Run, `asia-south1`; PostgreSQL is hosted by Supabase). The Cloud Run
+Cloud Run, `asia-south1`; PostgreSQL is Google Cloud SQL in the same region). The Cloud Run
 service scales to zero when idle, so a cold start can take longer than a warm
 request. Any APK built for distribution off the office LAN must point at this
 URL, not a LAN IP:

@@ -1,4 +1,15 @@
-## Current Status (2026-11-02): Coach Salary Restored
+## Current Status (2026-11-17): Production database is Google Cloud SQL
+
+Production runs entirely on Google Cloud. The database moved from Supabase to Cloud SQL PostgreSQL 17 (`vimj-academy:asia-south1:deepak20`, database `vimj_academy`, user `vimj_app`) on 2026-11-17 after a write-frozen cutover (all 22 `public` tables, 41,683 rows, enums, constraints, sequences, photo bytes and Alembic 0023 verified identical to Supabase). Cloud Run service `vimj-backend` serves 100% from revision `vimj-backend-cloudsql`, which reaches Cloud SQL over the built-in unix-socket connector (`DATABASE_URL` comes from secret `vimj-cloudsql-database-url` v1: `postgresql+psycopg2://…@/vimj_academy?host=/cloudsql/…`). The app uses its bounded QueuePool (2 per worker) on this URL form, not the Supabase NullPool path. Measured Cloud Run→Cloud SQL round trip ≈3.4 ms (Aiven, a rejected earlier attempt, was ≈61 ms and unusably slow).
+
+- **Rollback revision:** `vimj-backend-00042-mey` (still points at Supabase secret `vimj-prod-database-url` v4) is preserved. Supabase was NOT deleted and holds the pre-cutover data as of the freeze (2026-11-17 ~05:31 UTC). Do not roll traffic back to it without a verified reconciliation plan: every write after the cutover exists only in Cloud SQL.
+- **Backups:** Cloud SQL automated daily backups (7 retained) + point-in-time recovery (7 days) + deletion protection; plus a nightly logical dump via Cloud Run job `vimj-cloudsql-backup` (scheduler `vimj-daily-db-backup`, 02:00 IST) uploaded to the offsite recovery bucket `gs://vimj-academy-recovery-backup-2026/vimj-daily/` (35-day lifecycle). The old `vimj-supabase-backup` job is retained but no longer scheduled.
+- **Scheduler:** only Cloud Scheduler `vimj-minute-dispatch` → Cloud Tasks runs scheduled jobs (in-process scheduler is disabled in production). `vimj-aiven-daily-backup` stays paused. Never run two schedulers.
+- **Instance:** `db-g1-small`, single zone, no HA, maintenance track `stable`. `max_connections` is 50.
+- The `.github/workflows/supabase-keepalive.yml` workflow was removed (it only existed to stop Supabase pausing).
+- Rotating the previously exposed Supabase and Aiven passwords, and deleting the local dumps in `~/vimj-migration-backups/`, are still pending decisions — see `docs/CREDENTIAL_ROTATION_PLAN.md`.
+
+## Previous Status (2026-11-02): Coach Salary Restored
 
 The client explicitly requested the Coach Salary feature back after its 2026-09-12 removal. This newer decision supersedes the earlier statements below that Salary would remain removed. Salary is restored across the admin and coach web/mobile dashboards, API, database model, and monthly notification schedule. Migration 0023 creates coach_salary only when the table is absent and never drops or replaces salary rows. If the table had already been removed, the migration can recreate the schema but cannot recreate deleted rows; production row verification is pending because the Render connection currently requires reauthentication.
 
@@ -434,17 +445,32 @@ AppBar (covers all 14 sections, unlike the coach app's per-tab placement).
 
 ---
 
-## DEPLOYMENT (Google Cloud + Supabase)
+## DEPLOYMENT (Google Cloud + Cloud SQL — Supabase retired 2026-11-17)
 - Local backend: `python -m venv venv && pip install -r requirements.txt`, then
   `uvicorn app.main:app --reload` from `backend/`.
 - Production API: Google Cloud Run service `vimj-backend` in `asia-south1` at
   `https://vimj-backend-eqwnplgd6q-el.a.run.app`.
-- Production database: Supabase PostgreSQL; `DATABASE_URL` is supplied to Cloud Run
-  from Secret Manager. Keep `.env` and service credentials out of source control.
+- Production database: Google Cloud SQL PostgreSQL 17, instance `deepak20`
+  (`vimj-academy:asia-south1:deepak20`), database `vimj_academy`. Cloud Run reaches it
+  through the built-in Cloud SQL unix-socket connector (`--add-cloudsql-instances`);
+  the instance has NO authorized networks and requires SSL for any TCP client.
+  `DATABASE_URL` is supplied to Cloud Run from Secret Manager secret
+  `vimj-cloudsql-database-url` (socket form, `…@/vimj_academy?host=/cloudsql/…`).
+  Keep `.env` and service credentials out of source control. To inspect the data
+  from a laptop use the Cloud SQL Auth Proxy (`cloud-sql-proxy <connection-name>`),
+  never an authorized network.
 - Cloud Run currently uses 1 vCPU, 1 GiB RAM, concurrency 8, and scales from zero
-  to 20 instances. Cold starts remain possible after scale-to-zero. The GitHub
-  Actions Supabase keepalive workflow calls `/health/ready` every 10 minutes to
-  keep database activity recent without a paid minimum Cloud Run instance.
+  to 5 instances (service cap 20). Cold starts (~10–15 s) remain possible after
+  scale-to-zero; the minute scheduler normally keeps one instance warm, and Cloud
+  Tasks retries a request that times out during a cold start. The former GitHub
+  Actions Supabase keepalive workflow was removed on 2026-11-17: it only existed to
+  stop Supabase Free pausing and is not needed for Cloud SQL.
+- Backups: Cloud SQL automated daily backups (7 retained, 21:00 UTC window) with 7-day
+  point-in-time recovery and deletion protection, plus a nightly logical dump by Cloud
+  Run job `vimj-cloudsql-backup` (scheduler `vimj-daily-db-backup`, 02:00 IST) to
+  `gs://vimj-academy-recovery-backup-2026/vimj-daily/` in a separate project (35-day
+  lifecycle). Restore drills: `pg_restore --no-owner --no-acl` into a scratch database
+  over the proxy; a restore is a replace-the-database operation, not a merge.
 - Cloud Run's container filesystem is ephemeral. Persist photos and other durable
   uploads in PostgreSQL or another configured durable store, never in local files.
 - Gunicorn uses one worker by default to reduce per-instance memory and startup

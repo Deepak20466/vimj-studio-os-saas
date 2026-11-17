@@ -2,9 +2,20 @@
 
 ## Project Architecture & Configuration
 This repository implements a production-ready Attendance Management System comprising:
-1. **Backend**: FastAPI (Python) web application with PostgreSQL database managed via Alembic migrations.
+1. **Backend**: FastAPI (Python) web application with PostgreSQL (Google Cloud SQL since 2026-11-17) managed via Alembic migrations.
 2. **Frontend**: React JS admin dashboard and coach web UI.
 3. **Mobile**: Flutter cross-platform mobile application supporting both Admin and Coach roles.
+
+## Current Hosting (2026-11-17)
+
+Supersedes the older Render notes further down this file. Those dated entries are kept as history.
+
+- **API:** Google Cloud Run service `vimj-backend`, region `asia-south1`, URL `https://vimj-backend-eqwnplgd6q-el.a.run.app`. Traffic is 100% on revision `vimj-backend-cloudsql`. Render is no longer used: `vimj-backend.onrender.com` is suspended (HTTP 503).
+- **Database:** Google Cloud SQL PostgreSQL 17, instance `deepak20` (`vimj-academy:asia-south1:deepak20`), database `vimj_academy`. The API connects through the Cloud Run Cloud SQL connector using secret `vimj-cloudsql-database-url`. The instance has no authorized networks. Supabase is no longer serving production. Its copy is kept for rollback only, and rolling back would need a reconciliation plan because of post-cutover writes.
+- **Scheduling:** Cloud Scheduler `vimj-minute-dispatch` enqueues into Cloud Tasks queue `vimj-scheduled-jobs`. The in-process scheduler is disabled in production. Never run two active schedulers.
+- **Backups:** Cloud SQL automated backups (7 retained) and point-in-time recovery (7 days). A nightly offsite logical dump runs as Cloud Run job `vimj-cloudsql-backup` at 02:00 IST into `gs://vimj-academy-recovery-backup-2026/vimj-daily/`.
+- **Cold starts:** the API can scale to zero, so the first request after idle can take roughly 10–15 seconds. The minute scheduler keeps an instance warm most of the time.
+- **Pending:** credential rotation for the previously exposed Supabase and Aiven passwords, and removal of local dumps under `~/vimj-migration-backups/`. See `docs/CREDENTIAL_ROTATION_PLAN.md`.
 
 ---
 
@@ -125,7 +136,7 @@ following additional updates:
 
 ## Login Cold-Start Messaging (2026-10-06)
 
-- The production API remains on Render's free tier, which sleeps after inactivity. The app
+- Historical note: at the time, the production API ran on Render's free tier, which slept after inactivity. Production has since moved to Cloud Run (see Current Hosting). The app
   cannot remove that host startup delay without moving the service to an always-on plan.
 - Web login has a 75-second timeout and displays a wake-up explanation while waiting, then
   an actionable retry message on timeout. Mobile retains its 75-second login timeout and
@@ -371,8 +382,7 @@ following additional updates:
 - Mobile keeps a device-local fallback and queues failed preference writes for
   retry when Attendance is opened again. Visibility preferences do not affect
   coach accounts or attendance records.
-- Backend migration `0019` creates the account-scoped preference table. Render's
-  existing build command applies Alembic migrations before starting the API.
+- Backend migration `0019` creates the account-scoped preference table. (Historical: at the time, Render's build command applied Alembic migrations before starting the API. The current Cloud Run image does not run migrations automatically; apply them deliberately against Cloud SQL.)
 - Release target: mobile version `1.26.15+51`, tag `mobile-v1.26.15`, through
   `.github/workflows/release-mobile.yml`, using the existing persistent Android
   signing key. Never commit or share the signing key.
